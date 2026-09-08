@@ -1,7 +1,7 @@
 <div align="center">
   <h1>ReqGram</h1>
   <p><strong>Привычные чаты. Больше личных настроек.</strong></p>
-  <p>Неофициальный Telegram-клиент для iPhone и iPad на базе Swiftgram и Telegram iOS.</p>
+  <p>Неофициальный iOS-порт AyuGram на базе Swiftgram и Telegram iOS.</p>
   <p>
     <img src="https://img.shields.io/badge/platform-iOS-334155?style=flat-square" alt="Платформа: iOS">
     <img src="https://img.shields.io/badge/language-Swift-F05138?style=flat-square" alt="Язык: Swift">
@@ -12,7 +12,7 @@
 
 ---
 
-ReqGram — моя приватная iOS-сборка для собственных изменений и экспериментов. Обновления я публикую в [канале ReqGram](https://t.me/ReqGram), а сборки — в [ReqGram CI](https://t.me/ReqGramCI).
+ReqGram — мой неофициальный iOS-порт AyuGram с дополнительными настройками и встроенными плагинами ReqGram. Основа проекта — Swiftgram и Telegram iOS. Обновления я публикую в [канале ReqGram](https://t.me/ReqGram), а сборки — в [ReqGram CI](https://t.me/ReqGramCI).
 
 ## Возможности
 
