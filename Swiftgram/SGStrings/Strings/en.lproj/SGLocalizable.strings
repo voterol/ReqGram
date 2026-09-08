@@ -1,0 +1,625 @@
+"Settings.ContentSettings" = "Content Settings";
+
+"Settings.Tabs.Header" = "TABS";
+"Settings.Tabs.HideTabBar" = "Hide Tab bar";
+"Settings.Tabs.ShowContacts" = "Show Contacts Tab";
+"Settings.Tabs.ShowNames" = "Show Tab Names";
+"Settings.Tabs.SearchButton" = "Search Button";
+"Settings.Tabs.WideTabBar" = "Wide Tab bar";
+"Settings.Tabs.WideTabBar.Notice" = "Keeps the full width of Tab bar when some tabs are hidden.";
+
+"Settings.Folders.BottomTab" = "Folders at Bottom";
+"Settings.Folders.BottomTabStyle" = "Bottom Folders Style";
+
+/* Do not translate */
+"Settings.Folders.BottomTabStyle.ios" = "iOS";
+/* Do not translate */
+"Settings.Folders.BottomTabStyle.telegram" = "Telegram";
+/* Example: Hide "All Chats" */
+"Settings.Folders.AllChatsHidden" = "Hide \"%@\"";
+"Settings.Folders.RememberLast" = "Open Last Folder";
+"Settings.Folders.RememberLast.Notice" = "ReqGram will open the last used folder when you restart the app or switch accounts.";
+
+"Settings.Folders.CompactNames" = "Smaller spacing";
+"Settings.Folders.AllChatsTitle" = "\"All Chats\" title";
+"Settings.Folders.AllChatsTitle.short" = "Short";
+"Settings.Folders.AllChatsTitle.long" = "Long";
+/* Default behaviour for All Chats Folder Title. "All Chats" title: Default */
+"Settings.Folders.AllChatsTitle.none" = "Default";
+
+
+"Settings.ChatList.Header" = "CHAT LIST";
+"Settings.CompactChatList" = "Compact Chat List";
+"Settings.CompactMessagePreview" = "Compact Message Preview";
+"Settings.ChatList.Lines" = "Chat List Lines";
+"Settings.ChatList.Lines.1" = "1 line";
+"Settings.ChatList.Lines.2" = "2 lines";
+"Settings.ChatList.Lines.3" = "3 lines (Default)";
+
+"Settings.Profiles.Header" = "PROFILES";
+
+"Settings.Stories.Hide" = "Hide Stories";
+"Settings.Stories.WarnBeforeView" = "Ask Before Viewing";
+"Settings.Stories.DisableSwipeToRecord" = "Disable Swipe to Record";
+
+"Settings.Translation.QuickTranslateButton" = "Quick Translate button";
+"Settings.Translation.Backend" = "Service";
+/* Do not translate */
+"Settings.Translation.Backend.default" = "Telegram";
+/* Do not translate */
+"Settings.Translation.Backend.gtranslate" = "GTranslate";
+"Settings.Translation.Backend.system" = "System";
+"Settings.Translation.Backend.Notice" = "ReqGram will fallback to %@ if selected translation service is not available.";
+
+"Settings.Transcription.Header" = "VOICE-TO-TEXT";
+"Settings.Transcription.Backend" = "Service";
+/* Do not translate */
+"Settings.Transcription.Backend.default" = "Telegram";
+/* Do not translate */
+"Settings.Transcription.Backend.apple" = "Apple";
+"Settings.Transcription.Backend.Notice" = "ReqGram will fallback to %@ if selected transcription service is not available.";
+
+"Stories.Warning.Author" = "Author";
+"Stories.Warning.ViewStory" = "View Story?";
+/* Author will be able to see that you viewed their Story */
+"Stories.Warning.Notice" = "%@ WILL BE ABLE TO SEE that you viewed their Story.";
+"Stories.Warning.NoticeStealth" = "%@ will not be able to see that you viewed their Story.";
+
+"Settings.Photo.Quality.Notice" = "Quality of uploaded photos and stories.";
+"Settings.Photo.SendLarge" = "Send HD Photos";
+"Settings.Photo.SendLarge.Notice" = "Increase the side limit on compressed images to 2560px.";
+
+"Settings.VideoNotes.Header" = "ROUND VIDEOS";
+"Settings.VideoNotes.StartWithRearCam" = "Start with Rear Camera";
+
+"Settings.CustomColors.Header" = "ACCOUNT COLORS";
+"Settings.CustomColors.Saturation" = "SATURATION";
+/* Make sure to escape Percentage sign % */
+"Settings.CustomColors.Saturation.Notice" = "Set to 0%% to disable account colors.";
+
+"Settings.UploadsBoost" = "Upload Boost";
+"Settings.DownloadsBoost" = "Download Boost";
+"Settings.DownloadsBoost.Notice" = "Increases number of parallel connections and size of file chunks. In case your network can't handle the load, try different options that suits your connection.";
+"Settings.DownloadsBoost.none" = "Disabled";
+"Settings.DownloadsBoost.medium" = "Medium";
+"Settings.DownloadsBoost.maximum" = "Maximum";
+
+"Settings.ShowProfileID" = "Show Profile ID";
+"Settings.ShowDC" = "Show Data Center";
+"Settings.ShowCreationDate" = "Show Chat Creation Date";
+"Settings.ShowCreationDate.Notice" = "The creation date may be unknown for some chats.";
+
+"Settings.ShowRegDate" = "Show Registration Date";
+"Settings.ShowRegDate.Notice" = "The registration date is approximate.";
+
+"Settings.SendWithReturnKey" = "Send with \"return\" key";
+"Settings.HidePhoneInSettingsUI" = "Hide Phone in Settings";
+"Settings.HidePhoneInSettingsUI.Notice" = "This will only hide your phone number from the settings interface. To hide it from others, go to Privacy and Security.";
+
+"PasscodeSettings.AutoLock.InFiveSeconds" = "If away for 5 seconds";
+
+"ProxySettings.UseSystemDNS" = "Use system DNS";
+"ProxySettings.UseSystemDNS.Notice" = "Use system DNS to bypass timeout if you don't have access to Google DNS";
+
+/* Preserve markdown asterisks! Example: You **don't** need Telegram Premium! */
+"Common.NoTelegramPremiumNeeded" = "You **don't need** %@!";
+"Common.RestartRequired" = "Restart required";
+"Common.RestartNow" = "Restart Now";
+"Common.OpenTelegram" = "Open Telegram";
+"Common.UseTelegramForPremium" = "Please note that to get Telegram Premium, you must use the official Telegram app. Once you have obtained Telegram Premium, all its features will become available in ReqGram.";
+"Common.UpdateOS" = "iOS update required";
+"Common.KnowWhatYouDo" = "Please, change these settings only if you know what they do.";
+
+"Message.HoldToShowOrReport" = "Hold to Show or Report.";
+
+"Auth.AccountBackupReminder" = "Make sure you have a backup access method. Keep a SIM for SMS or an additional session logged in to avoid being locked out.";
+"Auth.UnofficialAppCodeTitle" = "You can get the code only with official app";
+
+"Settings.SmallReactions" = "Small Reactions";
+"Settings.HideReactions" = "Hide Reactions";
+
+"ContextMenu.SaveToCloud" = "Save to Cloud";
+"ContextMenu.SelectFromUser" = "Select from Author";
+
+"Settings.ContextMenu" = "CONTEXT MENU";
+"Settings.ContextMenu.Notice" = "Disabled entries will be available in \"ReqGram\" sub-menu.";
+
+
+"Settings.ChatSwipeOptions" = "Chat List Swipe Options";
+"Settings.DeleteChatSwipeOption" = "Swipe to Delete Chat";
+/* Re-word like this string on offical app https://translations.telegram.org/en/ios/groups_and_channels/Chat.NextChannelSameLocationSwipeProgress */
+"Settings.PullToNextChannel" = "Pull to Next Unread Channel";
+/* Re-word like this string on offical app https://translations.telegram.org/en/ios/groups_and_channels/Chat.NextUnreadTopicSwipeProgress */
+"Settings.PullToNextTopic" = "Pull to Next Topic";
+"Settings.GalleryCamera" = "Camera in Gallery";
+"Settings.GalleryCameraPreview" = "Camera Preview in Gallery";
+/* "Send Message As..." button */
+"Settings.SendAsButton" = "\"%@\" Button";
+"Settings.SnapDeletionEffect" = "Message Deletion Effects";
+
+"Settings.Stickers.Size" = "SIZE";
+"Settings.Stickers.Timestamp" = "Show Timestamp";
+
+"Settings.RecordingButton" = "Voice Recording Button";
+
+"Settings.DefaultEmojisFirst" = "Standard emojis first";
+"Settings.DefaultEmojisFirst.Notice" = "Show standard emojis before premium in emoji keyboard";
+
+/* Date when chat was created. "created: 24 May 2016" */
+"Chat.Created" = "created: %@";
+
+/* Date when user joined the chat. "Joined ReqGram Chat" */
+"Chat.JoinedDateTitle" = "Joined %@";
+/* Date when user registered in Telegram. Will be shown like "Registered\n24 May 2016" */
+"Chat.RegDate" = "Registered";
+
+"Settings.messageDoubleTapActionOutgoingEdit" = "Double-tap to edit message";
+
+"Settings.wideChannelPosts" = "Wide posts in channels";
+"Settings.ForceEmojiTab" = "Emoji tab first";
+
+"Settings.forceBuiltInMic" = "Force Device Microphone";
+"Settings.forceBuiltInMic.Notice" = "If enabled, app will use only device microphone even if headphones are connected.";
+
+"Settings.showChannelBottomButton" = "Channel Bottom Panel";
+
+"Settings.secondsInMessages" = "Seconds in Messages";
+
+"Settings.CallConfirmation" = "Call Confirmation";
+"Settings.CallConfirmation.Notice" = "ReqGram will ask for your confirmation before making a call.";
+
+/* Confirmation before making a Call */
+"CallConfirmation.Audio.Title" = "Make a Call?";
+
+/* Confirmation before making a Video Call */
+"CallConfirmation.Video.Title" = "Make a Video Call?";
+
+"MutualContact.Label" = "mutual contact";
+
+"Settings.swipeForVideoPIP" = "Video PIP with Swipe";
+"Settings.swipeForVideoPIP.Notice" = "If enabled, swiping video will open it in Picture-in-Picture mode.";
+
+"SessionBackup.Title" = "Accounts Backup";
+"SessionBackup.Sessions.Title" = "Sessions";
+"SessionBackup.Actions.Backup" = "Backup to Keychain";
+"SessionBackup.Actions.Restore" = "Restore from Keychain";
+"SessionBackup.Actions.DeleteAll" = "Delete Keychain Backup";
+"SessionBackup.Actions.DeleteOne" = "Delete from Backup";
+"SessionBackup.Actions.RemoveFromApp" = "Remove from App";
+"SessionBackup.LastBackupAt" = "Last Backup: %@";
+"SessionBackup.RestoreOK" = "OK. Sessions restored: %@";
+"SessionBackup.LoggedIn" = "Logged In";
+"SessionBackup.LoggedOut" = "Logged Out";
+"SessionBackup.DeleteAll.Title" = "Delete All Sessions?";
+"SessionBackup.DeleteAll.Text" = "All sessions will be removed from Keychain.\n\nAccounts will not be logged out from ReqGram.";
+"SessionBackup.DeleteSingle.Title" = "Delete 1 (one) Session?";
+"SessionBackup.DeleteSingle.Text" = "%@ session will be removed from Keychain.\n\nAccount will not be logged out from ReqGram.";
+"SessionBackup.RemoveFromApp.Title" = "Remove account from App?";
+"SessionBackup.RemoveFromApp.Text" = "%@ session WILL BE REMOVED from ReqGram! Session will remain active, so you can restore it later.";
+"SessionBackup.Notice" = "Sessions are encrypted and stored in the device Keychain. Sessions never leave your device.\n\nIMPORTANT: To restore sessions on a new device or after an OS reset, you MUST enable encrypted backups, otherwise Keychain won't be transfered.\n\nNOTE: Sessions may still be revoked by Telegram or from another device.";
+
+"MessageFilter.Title" = "Message Filter";
+"MessageFilter.SubTitle" = "Remove distractions and reduce visibility of messages containing keywords below.\nKeywords are case-sensitive.";
+"MessageFilter.Keywords.Title" = "Keywords";
+"MessageFilter.InputPlaceholder" = "Enter keyword";
+
+"InputToolbar.Title" = "Formatting Panel";
+
+"Notifications.MentionsAndReplies.Title" = "@Mentions and Replies";
+"Notifications.MentionsAndReplies.value.default" = "Default";
+"Notifications.MentionsAndReplies.value.silenced" = "Muted";
+"Notifications.MentionsAndReplies.value.disabled" = "Disabled";
+"Notifications.PinnedMessages.Title" = "Pinned Messages";
+"Notifications.PinnedMessages.value.default" = "Default";
+"Notifications.PinnedMessages.value.silenced" = "Muted";
+"Notifications.PinnedMessages.value.disabled" = "Disabled";
+
+
+"PayWall.Text" = "Supercharged with Pro features";
+
+"PayWall.SessionBackup.Title" = "Accounts Backup";
+"PayWall.SessionBackup.Notice" = "Log-in to accounts without code, even after reinstall. Secure storage with on-device Keychain.";
+"PayWall.SessionBackup.Description" = "Changing device or deleting ReqGram is no longer an issue. Restore all Sessions that are still Active on Telegram servers.";
+
+"PayWall.MessageFilter.Title" = "Message Filter";
+"PayWall.MessageFilter.Notice" = "Reduce visibility of SPAM, promotions and annoying messages.";
+"PayWall.MessageFilter.Description" = "Create a list of keywords you don't want to see often and ReqGram will reduce distractions.";
+
+"PayWall.Notifications.Title" = "Disable @mentions and replies";
+"PayWall.Notifications.Notice" = "Hide or mute non-important notifications.";
+"PayWall.Notifications.Description" = "No more Pinned Messages or @mentions when you need some peace of mind.";
+
+"PayWall.InputToolbar.Title" = "Formatting Panel";
+"PayWall.InputToolbar.Notice" = "Bold, Italic, Links? Formatting with just a single tap.";
+"PayWall.InputToolbar.Description" = "Apply and clear Formatting or insert new lines like a Pro.";
+
+"PayWall.AppIcons.Title" = "Unique App Icons and Badges";
+"PayWall.AppIcons.Notice" = "Customize ReqGram look on your home screen and screenshots.";
+
+"PayWall.About.Title" = "About ReqGram Pro";
+"PayWall.About.Notice" = "Free version of ReqGram provides dozens of features and improvements over Telegram app. Innovating and keeping ReqGram in sync with monthly Telegram updates is a huge effort that requires a lot of time and expensive hardware.\n\nReqGram is an open-source app that respects your privacy and doesn't bother you with ads. Subscribing to ReqGram Pro you get access to exclusive features and support an independent developer.";
+/* DO NOT TRANSLATE */
+"PayWall.About.Signature" = "@Kylmakalle";
+/* DO NOT TRANSLATE */
+"PayWall.About.SignatureURL" = "https://t.me/Kylmakalle";
+
+"PayWall.ProSupport.Title" = "Troubles with payment?";
+"PayWall.ProSupport.Contact" = "No worries!";
+
+"PayWall.RestorePurchases" = "Restore Purchases";
+"PayWall.Terms" = "Terms of Service";
+"PayWall.Privacy" = "Privacy Policy";
+"PayWall.TermsURL" = "https://swiftgram.app/terms";
+"PayWall.PrivacyURL" = "https://swiftgram.app/privacy";
+"PayWall.Notice.Markdown" = "By subscribing to ReqGram Pro you agree to the [ReqGram Terms of Service](%1$@) and [Privacy Policy](%2$@).";
+"PayWall.Notice.Raw" = "By subscribing to ReqGram Pro you agree to the ReqGram Terms of Service and Privacy Policy.";
+
+"PayWall.Button.OpenPro" = "Use Pro features";
+"PayWall.Button.Purchasing" = "Purchasing...";
+"PayWall.Button.Restoring" = "Restoring Purchases...";
+"PayWall.Button.Validating" = "Validating Purchase...";
+"PayWall.Button.PaymentsUnavailable" = "Payments unavailable";
+"PayWall.Button.BuyInAppStore" = "Subscribe in App Store version";
+"PayWall.Button.Subscribe" = "Subscribe for %@ / month";
+"PayWall.Button.ContactingAppStore" = "Contacting App Store...";
+
+"Paywall.Error.Title" = "Error";
+"PayWall.ValidationError" = "Validation Error";
+"PayWall.ValidationError.TryAgain" = "Something went wrong during purchase validation. No worries! Try to Restore Purchases a bit later.";
+"PayWall.ValidationError.Expired" = "Your subscription expired. Subscribe again to regain access to Pro features.";
+
+"AppBadge.Title" = "App Badge";
+"AppBadge.Notice" = "Customize App Badge shown on screenshots";
+
+"Settings.NY.Header" = "HOLIDAY EFFECTS";
+"Settings.NY.Style" = "Style";
+"Settings.NY.Style.default" = "Disabled";
+"Settings.NY.Style.snow" = "Snow";
+"Settings.NY.Style.lightning" = "Lightning";
+"Settings.NY.Notice" = "Available for a limited time only!";
+"AyuGram.Settings.Header" = "AYUGRAM";
+"AyuGram.GhostMode" = "Ghost mode";
+"AyuGram.Ghost.ReadReceipts" = "Hide chat read status";
+"AyuGram.Ghost.Typing" = "Hide typing activity";
+"AyuGram.Ghost.Online" = "Stay offline";
+"AyuGram.Ghost.Stories" = "Hide story views";
+"AyuGram.Ghost.Notice" = "Ghost mode suppresses selected activity packets. Read state remains local and may be synchronized after ghost mode is disabled.";
+"AyuGram.SaveDeleted" = "Save deleted messages";
+"AyuGram.SaveEdits" = "Save edit history";
+"AyuGram.SaveMedia" = "Save media attachments";
+"AyuGram.Save.Notice" = "Snapshots are kept only on this device. Media attachments are saved only when already downloaded, up to 50 MB per file.";
+"AyuGram.SavedDeleted.Title" = "Deleted Messages";
+"AyuGram.SavedDeleted.Empty" = "No saved deleted messages in this chat.";
+"AyuGram.Media.Photo" = "Photo";
+"AyuGram.Media.Video" = "Video";
+"AyuGram.Media.Voice" = "Voice message";
+"AyuGram.Media.File" = "File";
+"AyuGram.EditHistory.Title" = "Edit History";
+"AyuGram.EditHistory.Empty" = "No saved previous versions of this message.";
+"AyuGram.Ghost.ProfileToggle" = "Show Ghost Mode in profiles";
+
+"AyuGram.Save.MediaLimit" = "Media size limit";
+
+"AyuGram.Save.MediaLimit.2MB" = "2 MB";
+
+"AyuGram.Save.MediaLimit.5MB" = "5 MB";
+
+"AyuGram.Save.MediaLimit.10MB" = "10 MB";
+
+"AyuGram.Save.MediaLimit.50MB" = "50 MB";
+
+"AyuGram.Save.MediaLimit.500MB" = "500 MB";
+
+"AyuGram.Save.MediaLimit.1GB" = "1 GB";
+
+"AyuGram.Save.MediaLimit.2GB" = "2 GB";
+
+"AyuGram.Save.MediaLimit.Unlimited" = "Unlimited";
+
+"AyuGram.Save.MediaLimit.Notice" = "Largest preserved attachment. Unlimited removes all size checks and may increase disk usage and delete latency.";
+
+"AyuGram.Export" = "Export database";
+
+"AyuGram.Import" = "Import database";
+
+"AyuGram.Export.Import.Notice" = "Export copies the local AyuGram database (messages and saved attachments) into a shareable folder. Import replaces the current database — all existing saved data will be lost.";
+
+"AyuGram.Import.Confirmed" = "Database imported";
+
+"AyuGram.Import.Failed" = "Import failed: selected item is not an AyuGram database";
+
+"AyuGram.Export.Failed" = "Export failed";
+
+"AyuGram.Icon.Header" = "DELETED MESSAGES APPEARANCE";
+
+"AyuGram.Icon.Style" = "Icon style";
+
+"AyuGram.Icon.Style.trash" = "Trash";
+"AyuGram.Icon.Style.none" = "None";
+"AyuGram.Icon.Style.cross" = "Cross";
+"AyuGram.Icon.Style.crossed-eye" = "Crossed eye";
+
+"AyuGram.Icon.Style.ghost" = "Ghost";
+
+"AyuGram.Icon.Style.eyeoff" = "Eye off";
+
+"AyuGram.Icon.Opacity" = "Opacity";
+
+"AyuGram.Database.Header" = "DATABASE";
+"AyuGram.Deleted.Marker" = "Deleted message";
+"AyuGram.Deleted.PurgeConfirmation" = "Permanently remove this preserved deleted message from this device?";
+"AyuGram.Deleted.ReplyAsQuote" = "Reply as Editable Quote";
+"AyuGram.Deleted.ForwardContent" = "Send a Copy of Content";
+"AyuGram.Deleted.ForwardContentPicker" = "Send Content Copy To";
+"AyuGram.Deleted.ContentUnavailable" = "This preserved message has no content that can be copied safely.";
+"AyuGram.Deleted.UnsupportedMediaOmitted" = "Some attachments cannot be reconstructed safely and will not be sent. Continue with the available content?";
+"AyuGram.Deleted.ContinueContentCopy" = "Continue with Available Content";
+"AyuGram.Deleted.ContentSent" = "A new copy of the available content was queued for sending.";
+
+/* MARK: AyuGram - extended feature set */
+
+"AyuGram.Delete.KeepLocally" = "Keep locally";
+
+"AyuGram.Ghost.Header" = "GHOST MODE";
+"AyuGram.Ghost.OfflineAfterOnline" = "Send offline packet after online";
+"AyuGram.Ghost.OfflineAfterOnline.Notice" = "Periodically forces an offline status update. Useful if another client keeps flipping you online.";
+"AyuGram.Ghost.MarkReadAfterAction" = "Mark read after acting";
+"AyuGram.Ghost.MarkReadAfterAction.Notice" = "When you send a message in a chat, that chat is marked read even though read receipts are blocked. Without this, chats you reply in stay visibly unread.";
+"AyuGram.Ghost.UseScheduledMessages" = "Send via scheduled messages";
+"AyuGram.Ghost.UseScheduledMessages.Notice" = "Sends with a short delay so sending does not reveal that you are online.";
+"AyuGram.Ghost.SendWithoutSound" = "Send without sound";
+"AyuGram.Ghost.SendWithoutSound.never" = "Never";
+"AyuGram.Ghost.SendWithoutSound.ghost" = "In Ghost Mode";
+"AyuGram.Ghost.SendWithoutSound.always" = "Always";
+"AyuGram.Ghost.SuggestBeforeStory" = "Ask before viewing stories";
+"AyuGram.Ghost.Locks.Header" = "LOCKED TOGGLES";
+"AyuGram.Ghost.Locks.Notice" = "A locked toggle keeps its value when you flip the master Ghost Mode switch.";
+"AyuGram.Ghost.Lock.ReadReceipts" = "Lock read receipts";
+"AyuGram.Ghost.Lock.Typing" = "Lock typing";
+"AyuGram.Ghost.Lock.Online" = "Lock online status";
+"AyuGram.Ghost.Lock.Stories" = "Lock story views";
+
+"AyuGram.Save.Header" = "MESSAGE PRESERVATION";
+"AyuGram.Save.ForBots" = "Preserve in bot chats";
+"AyuGram.Save.Reactions" = "Preserve reactions";
+"AyuGram.Save.MediaScope.Header" = "PRESERVE MEDIA IN";
+"AyuGram.Save.MediaScope.PrivateChats" = "Private chats";
+"AyuGram.Save.MediaScope.PublicChannels" = "Public channels";
+"AyuGram.Save.MediaScope.PrivateChannels" = "Private channels";
+"AyuGram.Save.MediaScope.PublicGroups" = "Public groups";
+"AyuGram.Save.MediaScope.PrivateGroups" = "Private groups";
+"AyuGram.Save.MediaScope.Notice" = "Public chats are excluded by default because their media is usually still available elsewhere.";
+
+"AyuGram.Marks.Header" = "MARKS";
+"AyuGram.Marks.Deleted" = "Deleted mark";
+"AyuGram.Marks.Edited" = "Edited mark";
+"AyuGram.Marks.Notice" = "Text appended to preserved deleted messages and to edited messages. Leave the edited mark empty to keep the default label.";
+"AyuGram.Marks.SemiTransparent" = "Fade deleted messages";
+
+"AyuGram.Filters.Header" = "REGEX FILTERS";
+"AyuGram.Filters.Enabled" = "Enable filters";
+"AyuGram.Filters.InChats" = "Apply outside channels";
+"AyuGram.Filters.CaseInsensitive" = "Ignore case";
+"AyuGram.Filters.HideFromBlocked" = "Hide messages from blocked users";
+"AyuGram.Filters.Manage" = "Manage filters";
+"AyuGram.Filters.Notice" = "Messages matching an enabled pattern are hidden. Your own messages are never filtered.";
+"AyuGram.Filters.Empty" = "No filters yet";
+"AyuGram.Filters.Add" = "Add filter";
+"AyuGram.Filters.Edit.Pattern" = "Pattern";
+"AyuGram.Filters.Edit.PatternPlaceholder" = "Regular expression";
+"AyuGram.Filters.Edit.Enabled" = "Enabled";
+"AyuGram.Filters.Edit.Reversed" = "Invert match";
+"AyuGram.Filters.Edit.Reversed.Notice" = "Hide everything that does NOT match the pattern.";
+"AyuGram.Filters.Edit.CaseInsensitive" = "Ignore case";
+"AyuGram.Filters.Edit.Invalid" = "Invalid regular expression";
+"AyuGram.Filters.Edit.Delete" = "Delete filter";
+"AyuGram.Filters.Edit.Title" = "Filter";
+
+"AyuGram.Appearance.Header" = "APPEARANCE";
+"AyuGram.Appearance.DisableAds" = "Disable sponsored messages";
+"AyuGram.Appearance.DisableAds.Notice" = "Sponsored messages are never requested from the server.";
+"AyuGram.Appearance.HidePremiumStatuses" = "Hide premium statuses";
+"AyuGram.Appearance.OnlyAddedEmojis" = "Only installed emoji and stickers";
+"AyuGram.Appearance.CollapseSimilarChannels" = "Collapse similar channels";
+"AyuGram.Appearance.HideSimilarChannels" = "Hide similar channels";
+"AyuGram.Appearance.BubbleRadius" = "Bubble corner radius";
+"AyuGram.Appearance.BubbleRadius.Default" = "Default";
+"AyuGram.Appearance.AvatarCorners" = "Avatar rounding";
+"AyuGram.Appearance.RemoveMessageTail" = "Remove bubble tail";
+"AyuGram.Appearance.SimpleQuotes" = "Simple quotes and replies";
+"AyuGram.Appearance.HideFastShare" = "Hide fast share button";
+"AyuGram.Appearance.ShowMessageSeconds" = "Show seconds in timestamps";
+"AyuGram.Appearance.PeerId" = "Show peer ID";
+"AyuGram.Appearance.PeerId.hidden" = "Hidden";
+"AyuGram.Appearance.PeerId.telegram" = "Telegram API";
+"AyuGram.Appearance.PeerId.bot" = "Bot API";
+"AyuGram.Appearance.HideAllChatsFolder" = "Hide \"All Chats\" folder";
+"AyuGram.Appearance.HideNotificationCounters" = "Hide unread counters";
+"AyuGram.Appearance.HideNotificationBadge" = "Hide app badge";
+
+"AyuGram.Chats.Header" = "CHATS";
+"AyuGram.Chats.LocalPremium" = "Local Premium";
+"AyuGram.Chats.LocalPremium.Notice" = "Unlocks Premium-gated UI on this device only. The server still rejects Premium-only actions.";
+"AyuGram.Chats.DisableOpenLinkWarning" = "Skip external link warning";
+"AyuGram.Chats.DisableGreetingSticker" = "Disable greeting sticker";
+"AyuGram.Chats.UnlimitedRecentStickers" = "Unlimited recent stickers";
+"AyuGram.Chats.FilterZalgo" = "Filter Zalgo text";
+"AyuGram.Chats.SpoofWebviewAsAndroid" = "Spoof Mini Apps as Android";
+"AyuGram.Chats.BottomButton" = "Channel bottom button";
+"AyuGram.Chats.BottomButton.hidden" = "Hidden";
+"AyuGram.Chats.BottomButton.mute" = "Mute / Unmute";
+"AyuGram.Chats.BottomButton.discuss" = "Discussion";
+
+"AyuGram.Reactions.Header" = "REACTIONS";
+"AyuGram.Reactions.Channels" = "Show in channels";
+"AyuGram.Reactions.Groups" = "Show in groups";
+"AyuGram.Reactions.PrivateChats" = "Show in private chats";
+
+"AyuGram.Confirmations.Header" = "SEND CONFIRMATIONS";
+"AyuGram.Confirmations.Sticker" = "Confirm stickers";
+"AyuGram.Confirmations.Gif" = "Confirm GIFs";
+"AyuGram.Confirmations.Voice" = "Confirm voice messages";
+"AyuGram.Confirmations.Round" = "Confirm video messages";
+
+"AyuGram.ContextMenu.Header" = "CONTEXT MENU";
+"AyuGram.ContextMenu.MessageDetails" = "Message details";
+"AyuGram.ContextMenu.HideMessage" = "Hide message";
+"AyuGram.ContextMenu.UserMessages" = "User messages";
+"AyuGram.ContextMenu.RepeatMessage" = "Repeat message";
+"AyuGram.ContextMenu.AddFilter" = "Add filter";
+"AyuGram.ContextMenu.SaveMessage" = "Save message";
+"AyuGram.ContextMenu.Visibility.hidden" = "Hidden";
+"AyuGram.ContextMenu.Visibility.visible" = "Visible";
+
+"AyuGram.MessageDetails.Title" = "Message details";
+"AyuGram.MessageDetails.MessageId" = "Message ID";
+"AyuGram.MessageDetails.PeerId" = "Chat ID";
+"AyuGram.MessageDetails.SenderId" = "Sender ID";
+"AyuGram.MessageDetails.Date" = "Date";
+"AyuGram.MessageDetails.EditDate" = "Edited";
+"AyuGram.MessageDetails.FileSize" = "File size";
+"AyuGram.MessageDetails.MimeType" = "MIME type";
+"AyuGram.MessageDetails.FileName" = "File name";
+"AyuGram.MessageDetails.Resolution" = "Resolution";
+"AyuGram.MessageDetails.Duration" = "Duration";
+"AyuGram.MessageDetails.Copied" = "Copied";
+
+"AyuGram.RemoteConfig.Header" = "BADGES";
+"AyuGram.RemoteConfig.Enabled" = "ReqGram badges";
+"AyuGram.RemoteConfig.Notice" = "Fetches the public ReqGram badge list so project developers and supporters are marked. Sends no data about you, but does contact an external server.";
+"AyuGram.RemoteConfig.Badge.Developer" = "ReqGram team";
+"AyuGram.RemoteConfig.Badge.Supporter" = "ReqGram supporter";
+"AyuGram.RemoteConfig.Badge.Custom" = "Custom ReqGram badge";
+"AyuGram.RemoteConfig.Badge.Developer.Info" = "%@ develops ReqGram or represents an official ReqGram resource.";
+"AyuGram.RemoteConfig.Badge.Supporter.Info" = "%@ supported ReqGram development.";
+"AyuGram.RemoteConfig.Badge.Custom.Info" = "%@ received this custom ReqGram badge.";
+"AyuGram.RemoteConfig.Badge.Owner" = "ReqGram owner";
+"AyuGram.RemoteConfig.Badge.Owner.Info" = "%@ owns ReqGram.";
+"AyuGram.RemoteConfig.Badge.Official" = "Official ReqGram resource";
+"AyuGram.RemoteConfig.Badge.Official.Info" = "%@ is an official ReqGram resource.";
+"AyuGram.RemoteConfig.Badge.Team" = "ReqGram team";
+"AyuGram.RemoteConfig.Badge.Team.Info" = "%@ is a member of the ReqGram team.";
+"AyuGram.RemoteConfig.Badge.Sponsor" = "ReqGram sponsor";
+"AyuGram.RemoteConfig.Badge.Sponsor.Info" = "%@ sponsored ReqGram development.";
+"AyuGram.RemoteConfig.Badge.PeerFallback" = "This peer";
+"AyuGram.RemoteConfig.Badge.CompatibleFamily" = "Compatible project";
+"AyuGram.RemoteConfig.Badge.CompatibleDeveloper" = "ReqGram-compatible project team";
+"AyuGram.RemoteConfig.Badge.CompatibleSupporter" = "ReqGram-compatible project supporter";
+"AyuGram.RemoteConfig.Badge.AyuGram.Supporter" = "AyuGram sponsor";
+"AyuGram.RemoteConfig.Badge.AyuGram.Supporter.Info" = "%@ supported AyuGram development.";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Supporter" = "exteraGram sponsor";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Supporter.Info" = "%@ supported exteraGram development.";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Custom" = "Custom exteraGram badge";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Custom.Info" = "%@ received this custom exteraGram badge.";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Developer" = "exteraGram team";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Developer.Info" = "%@ develops exteraGram or represents an official exteraGram resource.";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Owner" = "exteraGram owner";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Owner.Info" = "%@ owns exteraGram.";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Official" = "Official exteraGram resource";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Official.Info" = "%@ is an official exteraGram resource.";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Team" = "exteraGram team";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Team.Info" = "%@ is a member of the exteraGram team.";
+"AyuGram.RemoteConfig.Badge.CompatibleOwner" = "ReqGram-compatible project owner";
+"AyuGram.RemoteConfig.Badge.CompatibleOfficial" = "Official ReqGram-compatible project resource";
+"AyuGram.RemoteConfig.Badge.HeroAccessibility" = "%@ badge";
+"AyuGram.RemoteConfig.Badge.Project" = "ReqGram badge";
+"AyuGram.RemoteConfig.Badge.Project.Info" = "This badge was issued by ReqGram.";
+"AyuGram.RemoteConfig.Badges.ShowAll" = "Show all %d ReqGram badges";
+"AyuGram.RemoteConfig.Badges.More" = "%d more";
+"AyuGram.RemoteConfig.Badges.Title" = "ReqGram badges";
+
+"AyuGram.StreamerMode.Header" = "STREAMER MODE";
+"AyuGram.StreamerMode.Enabled" = "Streamer mode";
+"AyuGram.StreamerMode.Notice" = "Hides sensitive content while the screen is being recorded or mirrored. iOS cannot block screen capture outright, so this reacts to capture rather than preventing it.";
+"AyuGram.StreamerMode.ScreenshotWarning" = "Screenshot taken while Streamer Mode is on";
+
+"AyuGram.Url.PeerNotFound" = "Chat not found";
+"AyuGram.Url.UserNotFound" = "User not found";
+
+"ReqGram.Other" = "Other";
+"ReqGram.Support" = "Support";
+"ReqGram.Support.Title" = "Support ReqGram";
+"ReqGram.Support.MenuTitle" = "Support the project";
+"ReqGram.Plugins.Title" = "Plugins";
+"ReqGram.Support.Section" = "Support";
+"ReqGram.Plugin.GiftId" = "gift_id";
+"ReqGram.Plugin.DeletedGiftSender" = "deleted_gift_sender";
+"ReqGram.Plugin.ZwyLib" = "zwylib";
+"ReqGram.Plugin.LocalEdictor" = "LocalEdictor";
+"ReqGram.Plugin.ZwyNoForwardLimit" = "zwyNoForwardLimit";
+"ReqGram.Plugin.TextAnimationPrivateLet" = "text_animation_private_let";
+"ReqGram.Plugin.LocalEdictorZwyLib" = "LocalEdictor + ZwyLib";
+"ReqGram.Plugin.Enable" = "Enable plugin";
+"ReqGram.Plugin.Information" = "Information";
+"ReqGram.Plugin.GiftId.Description" = "Shows the numeric gift ID in supported gift details and lets you copy it.";
+"ReqGram.Plugin.DeletedGiftSender.Description" = "Makes supported legacy gift information available without changing Telegram’s server data.";
+"ReqGram.Plugin.LocalEdictorZwyLib.Description" = "Edit message text locally and keep those presentation-only changes between launches. ZwyLib is enabled together because LocalEdictor depends on it.";
+"ReqGram.Plugin.ZwyNoForwardLimit.Description" = "Splits ordinary allowed forwarding into Telegram-compatible batches. It does not bypass protected-content restrictions.";
+"ReqGram.Plugin.TextAnimationPrivateLet.Description" = "Native iOS text animation preview and sending. Android-only animation hooks are not reused.";
+"ReqGram.Animation.Blur" = "Blur-style approximation";
+"ReqGram.Animation.Slide" = "Slide";
+"ReqGram.Animation.Scale" = "Scale";
+"ReqGram.Animation.Rotate" = "Rotate";
+"ReqGram.Animation.IgnoreSpaces" = "Ignore spaces";
+"ReqGram.Animation.AllLines" = "Animate all lines";
+"ReqGram.Animation.Duration" = "Duration";
+"ReqGram.Animation.Preview.Title" = "Preview";
+"ReqGram.Animation.Preview.Sample" = "Animated text";
+"ReqGram.Animation.Preview.AccessibilityHint" = "Shows the current text insertion animation. The preview repeats automatically.";
+"ReqGram.Animation.BlurDuration" = "Blur-style approximation duration";
+"ReqGram.Animation.BlurRadius" = "Blur-style approximation radius";
+"ReqGram.Animation.BlurDelay" = "Pause before sharp text";
+"ReqGram.Animation.SlideDistance" = "Slide distance";
+"ReqGram.Animation.ScaleStart" = "Scale start";
+"ReqGram.Animation.Rotation" = "Rotation";
+"ReqGram.Animation.DeleteParticles" = "Deletion particles";
+"ReqGram.Animation.ParticleCount" = "Particle count";
+"ReqGram.Animation.ParticleSpeed" = "Particle speed";
+"ReqGram.Animation.ParticleSpread" = "Particle spread";
+"ReqGram.Animation.ParticleSize" = "Particle size";
+"ReqGram.Animation.Cursor" = "Custom cursor";
+"ReqGram.Animation.CursorWidth" = "Cursor width";
+"ReqGram.Animation.CursorSpeed" = "Cursor movement speed";
+"ReqGram.Animation.LiquidCursor" = "Liquid cursor movement";
+"ReqGram.Animation.LiquidScale" = "Liquid cursor stretch";
+"ReqGram.Animation.SelectionEffect" = "Selection effect (0 off, 1 outline, 2 liquid)";
+"ReqGram.Animation.SelectionStretch" = "Selection vertical stretch";
+"ReqGram.Animation.SelectionSide" = "Selection side expansion";
+"ReqGram.Support.HeroAccessibility" = "ReqGram logo";
+"ReqGram.Support.Explanation" = "Your support helps ReqGram continue development and maintenance.";
+"ReqGram.Support.DonationStep.Title" = "Donate";
+"ReqGram.Support.DonationStep.Body" = "Use the official payment option.";
+"ReqGram.Support.ProofStep.Title" = "Send your receipt";
+"ReqGram.Support.ProofStep.Body" = "Keep and send your transaction receipt.";
+"ReqGram.Support.BadgeStep.Title" = "Receive a badge";
+"ReqGram.Support.BadgeStep.Body" = "Eligible supporters receive it after review.";
+"ReqGram.Support.DonationStep" = "1. Donate\nUse the configured official payment option. If no payment button is shown, payment details are not available yet.";
+"ReqGram.Support.ProofStep" = "2. Send proof of payment\nKeep your transaction receipt and send it through the configured official contact. If no contact button is shown, verification is not available yet.";
+"ReqGram.Support.BadgeStep" = "3. Badge review\nAfter the payment is verified, eligible supporters can receive a ReqGram supporter badge. Verification and badge assignment are not automatic.";
+"ReqGram.Support.Action.Donate" = "Support";
+"ReqGram.Support.Action.SendProof" = "Send Proof of Payment";
+"ReqGram.Support.Action.LearnMore" = "Learn More";
+"ReqGram.Support.Action.OfficialResource" = "Official ReqGram Resource";
+"ProjectSupport.Section" = "PROJECT SUPPORT";
+"ProjectSupport.Title" = "Support %@";
+"ProjectSupport.Description" = "Support %@ development using one of the official options below.";
+"ProjectSupport.Boosty" = "Support on Boosty";
+"ProjectSupport.Contact" = "Proof of payment / Contact %@";
+"ProjectSupport.PaymentDetails" = "PAYMENT DETAILS — TAP TO COPY";
+"ProjectSupport.CopyHint" = "Payment details are copied only. They are never opened as links.";
+"ProjectSupport.Copied" = "Copied to clipboard";
+"AyuGram.Icon.Color" = "Marker color";
+"AyuGram.Icon.Color.theme" = "Theme default";
+"AyuGram.Icon.Color.red" = "Red";
+"AyuGram.Icon.Color.orange" = "Orange";
+"AyuGram.Icon.Color.green" = "Green";
+"AyuGram.Icon.Color.blue" = "Blue";
+"AyuGram.Icon.Color.purple" = "Purple";
+
+"ReqGram.Plugin.SendGiftById" = "Send Gift by ID";
+"ReqGram.Plugin.SendGiftById.Description" = "Send a catalog gift by its exact ID using the standard gift composer and payment flow.";
+"ReqGram.Plugin.SendGiftById.Action" = "Enter Gift ID";
+"ReqGram.Plugin.SendGiftById.IdTitle" = "Gift ID";
+"ReqGram.Plugin.SendGiftById.IdPlaceholder" = "Enter gift ID";
+"ReqGram.Plugin.SendGiftById.InvalidId" = "Enter a valid gift ID.";
+"ReqGram.Plugin.SendGiftById.NotFound" = "That gift is not available in the current catalog.";

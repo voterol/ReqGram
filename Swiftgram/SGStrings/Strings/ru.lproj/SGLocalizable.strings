@@ -1,0 +1,620 @@
+"Settings.ContentSettings" = "Настройки контента";
+
+"Settings.Tabs.Header" = "ВКЛАДКИ";
+"Settings.Tabs.HideTabBar" = "Скрыть панель вкладок";
+"Settings.Tabs.ShowContacts" = "Вкладка «Контакты»";
+"Settings.Tabs.ShowNames" = "Имена вкладок";
+"Settings.Tabs.SearchButton" = "Кнопка поиска";
+"Settings.Tabs.WideTabBar" = "Широкая панель";
+"Settings.Tabs.WideTabBar.Notice" = "Сохраняет полную ширину панели вкладок, когда некоторые вкладки скрыты.";
+
+"Settings.Folders.BottomTab" = "Папки снизу";
+"Settings.Folders.BottomTabStyle" = "Стиль папок внизу";
+
+/* Do not translate */
+"Settings.Folders.BottomTabStyle.ios" = "iOS";
+/* Do not translate */
+"Settings.Folders.BottomTabStyle.telegram" = "Telegram";
+/* Example: Hide "All Chats" */
+"Settings.Folders.AllChatsHidden" = "Скрыть \"%@\"";
+"Settings.Folders.RememberLast" = "Открывать последнюю папку";
+"Settings.Folders.RememberLast.Notice" = "ReqGram откроет последнюю использованную папку после перезапуска или переключения учетной записи";
+
+"Settings.Folders.CompactNames" = "Уменьшенные расстояния";
+"Settings.Folders.AllChatsTitle" = "Название \"Все чаты\"";
+"Settings.Folders.AllChatsTitle.short" = "Короткое";
+"Settings.Folders.AllChatsTitle.long" = "Длинное";
+/* Default behaviour for All Chats Folder Title. "All Chats" title: Default */
+"Settings.Folders.AllChatsTitle.none" = "По умолчанию";
+
+
+"Settings.ChatList.Header" = "СПИСОК ЧАТОВ";
+"Settings.CompactChatList" = "Компактный список чатов";
+"Settings.CompactMessagePreview" = "Компактное превью сообщений";
+"Settings.Profiles.Header" = "ПРОФИЛИ";
+
+"Settings.Stories.Hide" = "Скрыть истории";
+"Settings.Stories.WarnBeforeView" = "Спросить перед просмотром";
+"Settings.Stories.DisableSwipeToRecord" = "Отключить свайп для записи";
+
+"Settings.Translation.QuickTranslateButton" = "Кнопка быстрого перевода";
+"Settings.Translation.Backend" = "Сервис";
+/* Do not translate */
+"Settings.Translation.Backend.default" = "Telegram";
+/* Do not translate */
+"Settings.Translation.Backend.gtranslate" = "GTranslate";
+"Settings.Translation.Backend.system" = "Система";
+"Settings.Translation.Backend.Notice" = "ReqGram будет использовать %@, если выбранный сервис перевода недоступен.";
+
+"Settings.Transcription.Header" = "ГОЛОС В ТЕКСТ";
+"Settings.Transcription.Backend" = "Сервис";
+/* Do not translate */
+"Settings.Transcription.Backend.default" = "Telegram";
+/* Do not translate */
+"Settings.Transcription.Backend.apple" = "Apple";
+"Settings.Transcription.Backend.Notice" = "ReqGram будет использовать %@, если выбранный сервис транскрипции недоступен.";
+
+"Stories.Warning.Author" = "Автор";
+"Stories.Warning.ViewStory" = "Просмотреть историю?";
+/* Author will be able to see that you viewed their Story */
+"Stories.Warning.Notice" = "%@ СМОЖЕТ УВИДЕТЬ, что вы просмотрели историю.";
+"Stories.Warning.NoticeStealth" = "%@ не сможет увидеть, что вы просмотрели историю.";
+
+"Settings.Photo.Quality.Notice" = "Качество исходящих фото и фото-историй";
+"Settings.Photo.SendLarge" = "Отправлять большие фото";
+"Settings.Photo.SendLarge.Notice" = "Увеличить лимит сторон для сжатых фото до 2560пкс";
+
+"Settings.VideoNotes.Header" = "КРУГЛЫЕ ВИДЕО";
+"Settings.VideoNotes.StartWithRearCam" = "На заднюю камеру";
+
+"Settings.CustomColors.Header" = "ПЕРСОНАЛЬНЫЕ ЦВЕТА";
+"Settings.CustomColors.Saturation" = "НАСЫЩЕННОСТЬ";
+/* Make sure to escape Percentage sign % */
+"Settings.CustomColors.Saturation.Notice" = "Установите насыщенность на 0%%, чтобы отключить персональные цвета";
+
+"Settings.UploadsBoost" = "Ускорение загрузки";
+"Settings.DownloadsBoost" = "Ускорение скачивания";
+"Settings.DownloadsBoost.Notice" = "Увеличивает количество параллельных соединений и размер частей файлов. Если ваша сеть не может справиться с нагрузкой, попробуйте разные опции, которые подойдут для вашего соединения.";
+"Settings.DownloadsBoost.none" = "Выключено";
+"Settings.DownloadsBoost.medium" = "Средне";
+"Settings.DownloadsBoost.maximum" = "Максимум";
+
+"Settings.ShowProfileID" = "ID профилей";
+"Settings.ShowDC" = "Показать дата-центр (DC)";
+"Settings.ShowCreationDate" = "Показать дату создания чата";
+"Settings.ShowCreationDate.Notice" = "Дата создания может быть неизвестна для некоторых чатов.";
+
+"Settings.ShowRegDate" = "Показать дату регистрации";
+"Settings.ShowRegDate.Notice" = "Дата регистрации приблизительная.";
+
+"Settings.SendWithReturnKey" = "Отправка кнопкой \"Ввод\"";
+"Settings.HidePhoneInSettingsUI" = "Скрыть номер";
+"Settings.HidePhoneInSettingsUI.Notice" = "Ваш номер будет скрыт только в интерфейсе настроек. Используйте настройки Конфиденциальности, чтобы скрыть его от других.";
+
+"PasscodeSettings.AutoLock.InFiveSeconds" = "Через 5 секунд";
+
+"ProxySettings.UseSystemDNS" = "Системный DNS";
+"ProxySettings.UseSystemDNS.Notice" = "Используйте системный DNS, чтобы избежать задержки, если у вас нет доступа к DNS Google";
+
+/* Preserve markdown asterisks! Example: You **don't** need Telegram Premium! */
+"Common.NoTelegramPremiumNeeded" = "Вам **не нужен** %@!";
+"Common.RestartRequired" = "Необходим перезапуск";
+"Common.RestartNow" = "Перезапустить Сейчас";
+"Common.OpenTelegram" = "Открыть Telegram";
+"Common.UseTelegramForPremium" = "Обратите внимание, что для получения Telegram Premium, вы должны использовать официальное приложение Telegram. Как только вы получите Telegram Premium, все его функции станут доступны в ReqGram.";
+"Common.UpdateOS" = "Требуется обновление iOS";
+"Common.KnowWhatYouDo" = "Пожалуйста, меняйте эти настройки только если вы знаете, что они делают.";
+
+"Message.HoldToShowOrReport" = "Удерживайте для Показа или Жалобы.";
+
+"Auth.AccountBackupReminder" = "Убедитесь, что у вас есть запасной вариант входа: Активная SIM-карта или дополнительная сессия, чтобы не потерять доступ к аккаунту.";
+"Auth.UnofficialAppCodeTitle" = "Вы можете получить код только в официальном приложении";
+
+"Settings.SmallReactions" = "Маленькие реакции";
+"Settings.HideReactions" = "Скрыть реакции";
+
+"ContextMenu.SaveToCloud" = "Сохранить в Избранное";
+"ContextMenu.SelectFromUser" = "Выбрать от Автора";
+
+"Settings.ContextMenu" = "КОНТЕКСТНОЕ МЕНЮ";
+"Settings.ContextMenu.Notice" = "Выключенные пункты будут доступны в подменю «ReqGram».";
+
+
+"Settings.ChatSwipeOptions" = "Опции чатов при свайпе";
+"Settings.DeleteChatSwipeOption" = "Свайп для удаления чата";
+/* Re-word like this string on offical app https://translations.telegram.org/en/ios/groups_and_channels/Chat.NextChannelSameLocationSwipeProgress */
+"Settings.PullToNextChannel" = "Свайп между каналами";
+/* Re-word like this string on offical app https://translations.telegram.org/en/ios/groups_and_channels/Chat.NextUnreadTopicSwipeProgress */
+"Settings.PullToNextTopic" = "Свайп между топиками";
+"Settings.GalleryCamera" = "Камера в галерее";
+"Settings.GalleryCameraPreview" = "Превью камеры в галерее";
+/* "Send Message As..." button */
+"Settings.SendAsButton" = "Кнопка \"%@\"";
+"Settings.SnapDeletionEffect" = "Эффекты удаления сообщений";
+
+"Settings.Stickers.Size" = "РАЗМЕР";
+"Settings.Stickers.Timestamp" = "Показывать время";
+
+"Settings.RecordingButton" = "Кнопка записи голоса";
+
+"Settings.DefaultEmojisFirst" = "Сначала стандартные смайлы";
+"Settings.DefaultEmojisFirst.Notice" = "Показывать стандартные эмодзи перед Premium в эмодзи-клавиатуре";
+
+/* Date when chat was created. "created: 24 May 2016" */
+"Chat.Created" = "создан: %@";
+
+/* Date when user joined the chat. "Joined ReqGram Chat" */
+"Chat.JoinedDateTitle" = "Присоединился к %@";
+/* Date when user registered in Telegram. Will be shown like "Registered\n24 May 2016" */
+"Chat.RegDate" = "Дата регистрации";
+
+"Settings.messageDoubleTapActionOutgoingEdit" = "Редактирование двойным тапом";
+
+"Settings.wideChannelPosts" = "Широкие посты в каналах";
+"Settings.ForceEmojiTab" = "Сначала вкладка смайлов";
+
+"Settings.forceBuiltInMic" = "Микрофон устройства";
+"Settings.forceBuiltInMic.Notice" = "Если включено, то приложение будет использовать только встроенный микрофон устройства, даже если подключены наушники.";
+
+"Settings.showChannelBottomButton" = "Нижняя панель канала";
+
+"Settings.secondsInMessages" = "Секунды в Сообщениях";
+
+"Settings.CallConfirmation" = "Подтверждение вызова";
+"Settings.CallConfirmation.Notice" = "ReqGram запросит подтверждение перед совершением звонка.";
+
+/* Confirmation before making a Call */
+"CallConfirmation.Audio.Title" = "Позвонить?";
+
+/* Confirmation before making a Video Call */
+"CallConfirmation.Video.Title" = "Позвонить с видео?";
+
+"MutualContact.Label" = "взаимный контакт";
+
+"Settings.swipeForVideoPIP" = "Видео PIP свайпом";
+"Settings.swipeForVideoPIP.Notice" = "Если включено, свайп видео откроет его в режиме «Картинка в картинке».";
+
+"SessionBackup.Title" = "Бэкап аккаунтов";
+"SessionBackup.Sessions.Title" = "Сессии";
+"SessionBackup.Actions.Backup" = "Бэкап в Keychain";
+"SessionBackup.Actions.Restore" = "Восстановить из Keychain";
+"SessionBackup.Actions.DeleteAll" = "Удалить Бэкап из Keychain";
+"SessionBackup.Actions.DeleteOne" = "Удалить из Бэкапа";
+"SessionBackup.Actions.RemoveFromApp" = "Удалить из приложения";
+"SessionBackup.LastBackupAt" = "Последний бэкап: %@";
+"SessionBackup.RestoreOK" = "ОК. Восстановлено: %@";
+"SessionBackup.LoggedIn" = "Залогинен";
+"SessionBackup.LoggedOut" = "Разлогинен";
+"SessionBackup.DeleteAll.Title" = "Удалить все сессии?";
+"SessionBackup.DeleteAll.Text" = "Все сессии будут удалены из Keychain.\n\nАккаунты не будут разлогинены из ReqGram.";
+"SessionBackup.DeleteSingle.Title" = "Удалить 1 (одну) сессию?";
+"SessionBackup.DeleteSingle.Text" = "%@ сессия будет удалена из Keychain.\n\nАккаунт не будет разлогинен из ReqGram.";
+"SessionBackup.RemoveFromApp.Title" = "Удалить аккаунт из приложения?";
+"SessionBackup.RemoveFromApp.Text" = "%@ сессия БУДЕТ УДАЛЕНА из ReqGram! Сессия останется активной, чтобы вы могли восстановить ее позже.";
+"SessionBackup.Notice" = "Сессии шифруются и хранятся в Keychain устройства. Сессии никогда не покидают ваше устройство.\n\nВАЖНО: Чтобы восстановить сессии на новом устройстве или после сброса системы, ОБЯЗАТЕЛЬНО включите шифрование резервных копий ОС, иначе Keychain будет утерян при восстановлении.\n\nПРИМЕЧАНИЕ: Сессии всё ещё могут быть разлогинены самим Telegram или с другого устройства.";
+
+"MessageFilter.Title" = "Фильтр сообщений";
+"MessageFilter.SubTitle" = "Убирает отвлекающие факторы и уменьшает видимость сообщений, содержащих ключевые слова ниже.\nКлючевые слова чувствительны к регистру.";
+"MessageFilter.Keywords.Title" = "Ключевые слова";
+"MessageFilter.InputPlaceholder" = "Введите слово";
+
+"InputToolbar.Title" = "Панель форматирования";
+
+"Notifications.MentionsAndReplies.Title" = "@Упоминания и ответы";
+"Notifications.MentionsAndReplies.value.default" = "По умолчанию";
+"Notifications.MentionsAndReplies.value.silenced" = "Без звука";
+"Notifications.MentionsAndReplies.value.disabled" = "Выключено";
+"Notifications.PinnedMessages.Title" = "Сообщение закреплено";
+"Notifications.PinnedMessages.value.default" = "По умолчанию";
+"Notifications.PinnedMessages.value.silenced" = "Без звука";
+"Notifications.PinnedMessages.value.disabled" = "Выключено";
+
+
+"PayWall.Text" = "Заряжен Pro функциями";
+
+"PayWall.SessionBackup.Title" = "Бэкап Аккаунтов";
+"PayWall.SessionBackup.Notice" = "Вход в аккаунты без кода, даже после переустановки. Безопасное хранение в Keychain на устройстве.";
+"PayWall.SessionBackup.Description" = "Смена устройства или удаление ReqGram больше не проблема. Восстановите все ваши Сессии, которые активны на серверах Telegram.";
+
+"PayWall.MessageFilter.Title" = "Фильтр сообщений";
+"PayWall.MessageFilter.Notice" = "Уменьшает видимость навязчивых сообщений со СПАМом или рекламой.";
+"PayWall.MessageFilter.Description" = "Создайте список ключевых слов, которые вы не хотите встречать, и ReqGram снизит их видимость.";
+
+"PayWall.Notifications.Title" = "Отключение @тэгов и ответов";
+"PayWall.Notifications.Notice" = "Скрывает или приглушает неважные уведомления.";
+"PayWall.Notifications.Description" = "Никаких больше Закрепов или @тэгов, когда нужно побыть в тишине.";
+
+"PayWall.InputToolbar.Title" = "Панель форматирования";
+"PayWall.InputToolbar.Notice" = "Экономит время, форматируя сообщения всего одним касанием.";
+"PayWall.InputToolbar.Description" = "Применяйте и очищайте форматирование, переносите абзацы как Pro.";
+
+"PayWall.AppIcons.Title" = "Уникальные иконки приложения";
+"PayWall.AppIcons.Notice" = "Настройка внешнего вида ReqGram на главном экране.";
+
+"PayWall.About.Title" = "О ReqGram Pro";
+"PayWall.About.Notice" = "Бесплатная версия ReqGram предлагает десятки функций и улучшений по сравнению с приложением Telegram. Новые функции и синхронизация ReqGram с ежемесячными обновлениями Telegram — это огромные усилия, требующие много времени и дорогой техники.\n\nReqGram — это приложение с открытым исходным кодом, которое уважает вашу конфиденциальность и не беспокоит вас рекламой. Подписываясь на ReqGram Pro, вы получаете доступ к эксклюзивным функциям и поддерживаете независимого разработчика.";
+/* DO NOT TRANSLATE */
+"PayWall.About.Signature" = "@Kylmakalle";
+/* DO NOT TRANSLATE */
+"PayWall.About.SignatureURL" = "https://t.me/Kylmakalle";
+
+"PayWall.ProSupport.Title" = "Проблемы с оплатой?";
+"PayWall.ProSupport.Contact" = "Не беда!";
+
+"PayWall.RestorePurchases" = "Восстановить покупки";
+"PayWall.Terms" = "Условия использования";
+"PayWall.Privacy" = "Политика конфиденциальности";
+"PayWall.TermsURL" = "https://swiftgram.app/terms";
+"PayWall.PrivacyURL" = "https://swiftgram.app/privacy";
+"PayWall.Notice.Markdown" = "Подписываясь на ReqGram Pro, вы соглашаетесь с [Условиями использования ReqGram](%1$@) и [Политикой конфиденциальности](%2$@).";
+"PayWall.Notice.Raw" = "Подписываясь на ReqGram Pro, вы соглашаетесь с Условиями использования и Политикой конфиденциальности ReqGram.";
+
+"PayWall.Button.OpenPro" = "Pro функции";
+"PayWall.Button.Purchasing" = "Покупка...";
+"PayWall.Button.Restoring" = "Восстановление покупок...";
+"PayWall.Button.Validating" = "Проверка покупки...";
+"PayWall.Button.PaymentsUnavailable" = "Платежи недоступны";
+"PayWall.Button.BuyInAppStore" = "Подписаться в App Store версии";
+"PayWall.Button.Subscribe" = "Подписаться за %@ / месяц";
+"PayWall.Button.ContactingAppStore" = "Подключение к App Store...";
+
+"Paywall.Error.Title" = "Ошибка";
+"PayWall.ValidationError" = "Ошибка проверки";
+"PayWall.ValidationError.TryAgain" = "Что-то пошло не так во время проверки оплаты. Не волнуйтесь! Попробуйте Восстановить Покупки чуть позже.";
+"PayWall.ValidationError.Expired" = "Ваша подписка истекла. Подпишитесь снова, чтобы восстановить доступ к Pro функциям.";
+
+"AppBadge.Title" = "Бэйдж приложения";
+"AppBadge.Notice" = "Настройка Бэйджа приложения на скриншотах";
+
+"Settings.NY.Header" = "НОВОГОДНИЕ ЭФФЕКТЫ";
+"Settings.NY.Style" = "Стиль";
+"Settings.NY.Style.default" = "Выключено";
+"Settings.NY.Style.snow" = "Снег";
+"Settings.NY.Style.lightning" = "Молнии";
+"Settings.NY.Notice" = "Доступны только на ограниченное время!";
+"AyuGram.Settings.Header" = "AYUGRAM";
+"AyuGram.GhostMode" = "Режим призрака";
+"AyuGram.Ghost.ReadReceipts" = "Скрывать статус прочтения чата";
+"AyuGram.Ghost.Typing" = "Скрывать набор текста";
+"AyuGram.Ghost.Online" = "Оставаться офлайн";
+"AyuGram.Ghost.Stories" = "Скрывать просмотры историй";
+"AyuGram.Ghost.Notice" = "Режим призрака блокирует выбранные пакеты активности. Локальное состояние прочтения может синхронизироваться после отключения режима.";
+"AyuGram.SaveDeleted" = "Сохранять удалённые сообщения";
+"AyuGram.SaveEdits" = "Сохранять историю изменений";
+"AyuGram.SaveMedia" = "Сохранять медиавложения";
+"AyuGram.Save.Notice" = "Копии хранятся только на этом устройстве. Медиавложения сохраняются, только если уже загружены, до 50 МБ на файл.";
+"AyuGram.SavedDeleted.Title" = "Удалённые сообщения";
+"AyuGram.SavedDeleted.Empty" = "В этом чате нет сохранённых удалённых сообщений.";
+"AyuGram.Media.Photo" = "Фото";
+"AyuGram.Media.Video" = "Видео";
+"AyuGram.Media.Voice" = "Голосовое сообщение";
+"AyuGram.Media.File" = "Файл";
+"AyuGram.EditHistory.Title" = "История изменений";
+"AyuGram.EditHistory.Empty" = "Нет сохранённых предыдущих версий этого сообщения.";
+"AyuGram.Ghost.ProfileToggle" = "Показывать Ghost Mode в профилях";
+
+"AyuGram.Save.MediaLimit" = "Лимит размера медиа";
+
+"AyuGram.Save.MediaLimit.2MB" = "2 МБ";
+
+"AyuGram.Save.MediaLimit.5MB" = "5 МБ";
+
+"AyuGram.Save.MediaLimit.10MB" = "10 МБ";
+
+"AyuGram.Save.MediaLimit.50MB" = "50 МБ";
+
+"AyuGram.Save.MediaLimit.500MB" = "500 МБ";
+
+"AyuGram.Save.MediaLimit.1GB" = "1 ГБ";
+
+"AyuGram.Save.MediaLimit.2GB" = "2 ГБ";
+
+"AyuGram.Save.MediaLimit.Unlimited" = "Без лимита";
+
+"AyuGram.Save.MediaLimit.Notice" = "Максимальный размер сохраняемого вложения. «Без лимита» отключает проверку размера и может увеличить расход места и время удаления.";
+
+"AyuGram.Export" = "Экспорт базы";
+
+"AyuGram.Import" = "Импорт базы";
+
+"AyuGram.Export.Import.Notice" = "Экспорт копирует локальную базу AyuGram (сообщения и сохранённые вложения) в папку для передачи. Импорт заменяет текущую базу — все сохранённые данные будут потеряны.";
+
+"AyuGram.Import.Confirmed" = "База импортирована";
+
+"AyuGram.Import.Failed" = "Ошибка импорта: выбранный элемент не является базой AyuGram";
+
+"AyuGram.Export.Failed" = "Ошибка экспорта";
+
+"AyuGram.Icon.Header" = "ВИД УДАЛЁННЫХ СООБЩЕНИЙ";
+
+"AyuGram.Icon.Style" = "Стиль значка";
+
+"AyuGram.Icon.Style.trash" = "Корзина";
+"AyuGram.Icon.Style.none" = "Нет";
+"AyuGram.Icon.Style.cross" = "Крест";
+"AyuGram.Icon.Style.crossed-eye" = "Перечёркнутый глаз";
+
+"AyuGram.Icon.Style.ghost" = "Призрак";
+
+"AyuGram.Icon.Style.eyeoff" = "Перечёркнутый глаз";
+
+"AyuGram.Icon.Opacity" = "Прозрачность";
+
+"AyuGram.Database.Header" = "БАЗА ДАННЫХ";
+"AyuGram.Deleted.Marker" = "Удалённое сообщение";
+"AyuGram.Deleted.PurgeConfirmation" = "Навсегда удалить сохранённое сообщение с этого устройства?";
+"AyuGram.Deleted.ReplyAsQuote" = "Ответить редактируемой цитатой";
+"AyuGram.Deleted.ForwardContent" = "Отправить копию содержимого";
+"AyuGram.Deleted.ForwardContentPicker" = "Куда отправить копию содержимого";
+"AyuGram.Deleted.ContentUnavailable" = "В сохранённом сообщении нет содержимого, которое можно безопасно скопировать.";
+"AyuGram.Deleted.UnsupportedMediaOmitted" = "Некоторые вложения нельзя безопасно восстановить, поэтому они не будут отправлены. Продолжить с доступным содержимым?";
+"AyuGram.Deleted.ContinueContentCopy" = "Продолжить с доступным содержимым";
+"AyuGram.Deleted.ContentSent" = "Новая копия доступного содержимого добавлена в очередь отправки.";
+
+/* MARK: AyuGram - extended feature set */
+
+"AyuGram.Delete.KeepLocally" = "Сохранить локально";
+
+"AyuGram.Ghost.Header" = "РЕЖИМ ПРИЗРАКА";
+"AyuGram.Ghost.OfflineAfterOnline" = "Отправлять офлайн после онлайна";
+"AyuGram.Ghost.OfflineAfterOnline.Notice" = "Периодически принудительно отправляет статус «не в сети». Полезно, если другой клиент возвращает вас в онлайн.";
+"AyuGram.Ghost.MarkReadAfterAction" = "Отмечать прочитанным после действия";
+"AyuGram.Ghost.MarkReadAfterAction.Notice" = "Когда вы отправляете сообщение в чат, чат отмечается прочитанным, несмотря на блокировку галочек. Без этого чаты, где вы отвечаете, остаются заметно непрочитанными.";
+"AyuGram.Ghost.UseScheduledMessages" = "Отправлять через отложенные";
+"AyuGram.Ghost.UseScheduledMessages.Notice" = "Отправляет с небольшой задержкой, чтобы отправка не выдавала ваш онлайн.";
+"AyuGram.Ghost.SendWithoutSound" = "Отправлять без звука";
+"AyuGram.Ghost.SendWithoutSound.never" = "Никогда";
+"AyuGram.Ghost.SendWithoutSound.ghost" = "В режиме призрака";
+"AyuGram.Ghost.SendWithoutSound.always" = "Всегда";
+"AyuGram.Ghost.SuggestBeforeStory" = "Спрашивать перед просмотром историй";
+"AyuGram.Ghost.Locks.Header" = "ЗАФИКСИРОВАННЫЕ ПЕРЕКЛЮЧАТЕЛИ";
+"AyuGram.Ghost.Locks.Notice" = "Зафиксированный переключатель сохраняет своё значение при переключении главного тумблера режима призрака.";
+"AyuGram.Ghost.Lock.ReadReceipts" = "Зафиксировать галочки прочтения";
+"AyuGram.Ghost.Lock.Typing" = "Зафиксировать набор текста";
+"AyuGram.Ghost.Lock.Online" = "Зафиксировать статус онлайн";
+"AyuGram.Ghost.Lock.Stories" = "Зафиксировать просмотры историй";
+
+"AyuGram.Save.Header" = "СОХРАНЕНИЕ СООБЩЕНИЙ";
+"AyuGram.Save.ForBots" = "Сохранять в чатах с ботами";
+"AyuGram.Save.Reactions" = "Сохранять реакции";
+"AyuGram.Save.MediaScope.Header" = "СОХРАНЯТЬ МЕДИА В";
+"AyuGram.Save.MediaScope.PrivateChats" = "Личных чатах";
+"AyuGram.Save.MediaScope.PublicChannels" = "Публичных каналах";
+"AyuGram.Save.MediaScope.PrivateChannels" = "Приватных каналах";
+"AyuGram.Save.MediaScope.PublicGroups" = "Публичных группах";
+"AyuGram.Save.MediaScope.PrivateGroups" = "Приватных группах";
+"AyuGram.Save.MediaScope.Notice" = "Публичные чаты исключены по умолчанию: их медиа обычно доступно и в другом месте.";
+
+"AyuGram.Marks.Header" = "МЕТКИ";
+"AyuGram.Marks.Deleted" = "Метка удалённого";
+"AyuGram.Marks.Edited" = "Метка изменённого";
+"AyuGram.Marks.Notice" = "Текст, добавляемый к сохранённым удалённым и к изменённым сообщениям. Оставьте метку изменённого пустой, чтобы сохранить стандартную подпись.";
+"AyuGram.Marks.SemiTransparent" = "Затемнять удалённые сообщения";
+
+"AyuGram.Filters.Header" = "REGEX-ФИЛЬТРЫ";
+"AyuGram.Filters.Enabled" = "Включить фильтры";
+"AyuGram.Filters.InChats" = "Применять вне каналов";
+"AyuGram.Filters.CaseInsensitive" = "Игнорировать регистр";
+"AyuGram.Filters.HideFromBlocked" = "Скрывать сообщения заблокированных";
+"AyuGram.Filters.Manage" = "Управление фильтрами";
+"AyuGram.Filters.Notice" = "Сообщения, подходящие под включённый шаблон, скрываются. Ваши собственные сообщения не фильтруются.";
+"AyuGram.Filters.Empty" = "Фильтров пока нет";
+"AyuGram.Filters.Add" = "Добавить фильтр";
+"AyuGram.Filters.Edit.Pattern" = "Шаблон";
+"AyuGram.Filters.Edit.PatternPlaceholder" = "Регулярное выражение";
+"AyuGram.Filters.Edit.Enabled" = "Включён";
+"AyuGram.Filters.Edit.Reversed" = "Инвертировать";
+"AyuGram.Filters.Edit.Reversed.Notice" = "Скрывать всё, что НЕ подходит под шаблон.";
+"AyuGram.Filters.Edit.CaseInsensitive" = "Игнорировать регистр";
+"AyuGram.Filters.Edit.Invalid" = "Некорректное регулярное выражение";
+"AyuGram.Filters.Edit.Delete" = "Удалить фильтр";
+"AyuGram.Filters.Edit.Title" = "Фильтр";
+
+"AyuGram.Appearance.Header" = "ВНЕШНИЙ ВИД";
+"AyuGram.Appearance.DisableAds" = "Отключить рекламу";
+"AyuGram.Appearance.DisableAds.Notice" = "Спонсорские сообщения не запрашиваются с сервера.";
+"AyuGram.Appearance.HidePremiumStatuses" = "Скрывать премиум-статусы";
+"AyuGram.Appearance.OnlyAddedEmojis" = "Только установленные эмодзи и стикеры";
+"AyuGram.Appearance.CollapseSimilarChannels" = "Сворачивать похожие каналы";
+"AyuGram.Appearance.HideSimilarChannels" = "Скрывать похожие каналы";
+"AyuGram.Appearance.BubbleRadius" = "Скругление пузырей";
+"AyuGram.Appearance.BubbleRadius.Default" = "По умолчанию";
+"AyuGram.Appearance.AvatarCorners" = "Скругление аватаров";
+"AyuGram.Appearance.RemoveMessageTail" = "Убрать хвостик пузыря";
+"AyuGram.Appearance.SimpleQuotes" = "Простые цитаты и ответы";
+"AyuGram.Appearance.HideFastShare" = "Скрыть кнопку быстрого репоста";
+"AyuGram.Appearance.ShowMessageSeconds" = "Показывать секунды во времени";
+"AyuGram.Appearance.PeerId" = "Показывать ID";
+"AyuGram.Appearance.PeerId.hidden" = "Скрыт";
+"AyuGram.Appearance.PeerId.telegram" = "Telegram API";
+"AyuGram.Appearance.PeerId.bot" = "Bot API";
+"AyuGram.Appearance.HideAllChatsFolder" = "Скрыть папку «Все чаты»";
+"AyuGram.Appearance.HideNotificationCounters" = "Скрыть счётчики непрочитанного";
+"AyuGram.Appearance.HideNotificationBadge" = "Скрыть бейдж приложения";
+
+"AyuGram.Chats.Header" = "ЧАТЫ";
+"AyuGram.Chats.LocalPremium" = "Локальный Premium";
+"AyuGram.Chats.LocalPremium.Notice" = "Разблокирует premium-интерфейс только на этом устройстве. Сервер по-прежнему отклоняет premium-действия.";
+"AyuGram.Chats.DisableOpenLinkWarning" = "Не предупреждать о внешних ссылках";
+"AyuGram.Chats.DisableGreetingSticker" = "Отключить приветственный стикер";
+"AyuGram.Chats.UnlimitedRecentStickers" = "Безлимитные недавние стикеры";
+"AyuGram.Chats.FilterZalgo" = "Фильтровать Zalgo-текст";
+"AyuGram.Chats.SpoofWebviewAsAndroid" = "Выдавать Mini Apps за Android";
+"AyuGram.Chats.BottomButton" = "Нижняя кнопка в каналах";
+"AyuGram.Chats.BottomButton.hidden" = "Скрыта";
+"AyuGram.Chats.BottomButton.mute" = "Вкл./выкл. звук";
+"AyuGram.Chats.BottomButton.discuss" = "Обсуждение";
+
+"AyuGram.Reactions.Header" = "РЕАКЦИИ";
+"AyuGram.Reactions.Channels" = "Показывать в каналах";
+"AyuGram.Reactions.Groups" = "Показывать в группах";
+"AyuGram.Reactions.PrivateChats" = "Показывать в личных чатах";
+
+"AyuGram.Confirmations.Header" = "ПОДТВЕРЖДЕНИЯ ОТПРАВКИ";
+"AyuGram.Confirmations.Sticker" = "Подтверждать стикеры";
+"AyuGram.Confirmations.Gif" = "Подтверждать GIF";
+"AyuGram.Confirmations.Voice" = "Подтверждать голосовые";
+"AyuGram.Confirmations.Round" = "Подтверждать видеосообщения";
+
+"AyuGram.ContextMenu.Header" = "КОНТЕКСТНОЕ МЕНЮ";
+"AyuGram.ContextMenu.MessageDetails" = "Детали сообщения";
+"AyuGram.ContextMenu.HideMessage" = "Скрыть сообщение";
+"AyuGram.ContextMenu.UserMessages" = "Сообщения пользователя";
+"AyuGram.ContextMenu.RepeatMessage" = "Повторить сообщение";
+"AyuGram.ContextMenu.AddFilter" = "Добавить фильтр";
+"AyuGram.ContextMenu.SaveMessage" = "Сохранить сообщение";
+"AyuGram.ContextMenu.Visibility.hidden" = "Скрыто";
+"AyuGram.ContextMenu.Visibility.visible" = "Показывать";
+
+"AyuGram.MessageDetails.Title" = "Детали сообщения";
+"AyuGram.MessageDetails.MessageId" = "ID сообщения";
+"AyuGram.MessageDetails.PeerId" = "ID чата";
+"AyuGram.MessageDetails.SenderId" = "ID отправителя";
+"AyuGram.MessageDetails.Date" = "Дата";
+"AyuGram.MessageDetails.EditDate" = "Изменено";
+"AyuGram.MessageDetails.FileSize" = "Размер файла";
+"AyuGram.MessageDetails.MimeType" = "MIME-тип";
+"AyuGram.MessageDetails.FileName" = "Имя файла";
+"AyuGram.MessageDetails.Resolution" = "Разрешение";
+"AyuGram.MessageDetails.Duration" = "Длительность";
+"AyuGram.MessageDetails.Copied" = "Скопировано";
+
+"AyuGram.RemoteConfig.Header" = "ЗНАЧКИ";
+"AyuGram.RemoteConfig.Enabled" = "Значки ReqGram";
+"AyuGram.RemoteConfig.Notice" = "Загружает публичный список значков ReqGram, чтобы отмечать разработчиков и спонсоров проекта. Данные о вас не отправляются, но выполняется обращение к внешнему серверу.";
+"AyuGram.RemoteConfig.Badge.Developer" = "Команда ReqGram";
+"AyuGram.RemoteConfig.Badge.Supporter" = "Спонсор ReqGram";
+"AyuGram.RemoteConfig.Badge.Custom" = "Особый значок ReqGram";
+"AyuGram.RemoteConfig.Badge.Developer.Info" = "%@ разрабатывает ReqGram или представляет официальный ресурс ReqGram.";
+"AyuGram.RemoteConfig.Badge.Supporter.Info" = "%@ поддержал(а) разработку ReqGram.";
+"AyuGram.RemoteConfig.Badge.Custom.Info" = "%@ получил(а) этот особый значок ReqGram.";
+"AyuGram.RemoteConfig.Badge.Owner" = "Владелец ReqGram";
+"AyuGram.RemoteConfig.Badge.Owner.Info" = "%@ владеет ReqGram.";
+"AyuGram.RemoteConfig.Badge.Official" = "Официальный ресурс ReqGram";
+"AyuGram.RemoteConfig.Badge.Official.Info" = "%@ — официальный ресурс ReqGram.";
+"AyuGram.RemoteConfig.Badge.Team" = "Команда ReqGram";
+"AyuGram.RemoteConfig.Badge.Team.Info" = "%@ входит в команду ReqGram.";
+"AyuGram.RemoteConfig.Badge.Sponsor" = "Спонсор ReqGram";
+"AyuGram.RemoteConfig.Badge.Sponsor.Info" = "%@ поддержал(а) разработку ReqGram.";
+"AyuGram.RemoteConfig.Badge.PeerFallback" = "Этот пользователь";
+"AyuGram.RemoteConfig.Badge.CompatibleFamily" = "Совместимый проект";
+"AyuGram.RemoteConfig.Badge.CompatibleDeveloper" = "Команда совместимого с ReqGram проекта";
+"AyuGram.RemoteConfig.Badge.CompatibleSupporter" = "Спонсор совместимого с ReqGram проекта";
+"AyuGram.RemoteConfig.Badge.AyuGram.Supporter" = "Спонсор AyuGram";
+"AyuGram.RemoteConfig.Badge.AyuGram.Supporter.Info" = "%@ поддержал(а) разработку AyuGram.";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Supporter" = "Спонсор exteraGram";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Supporter.Info" = "%@ поддержал(а) разработку exteraGram.";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Custom" = "Особый значок exteraGram";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Custom.Info" = "%@ получил(а) этот особый значок exteraGram.";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Developer" = "Команда exteraGram";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Developer.Info" = "%@ разрабатывает exteraGram или представляет официальный ресурс exteraGram.";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Owner" = "Владелец exteraGram";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Owner.Info" = "%@ владеет exteraGram.";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Official" = "Официальный ресурс exteraGram";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Official.Info" = "%@ — официальный ресурс exteraGram.";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Team" = "Команда exteraGram";
+"AyuGram.RemoteConfig.Badge.ExteraGram.Team.Info" = "%@ входит в команду exteraGram.";
+"AyuGram.RemoteConfig.Badge.CompatibleOwner" = "Владелец совместимого с ReqGram проекта";
+"AyuGram.RemoteConfig.Badge.CompatibleOfficial" = "Официальный ресурс совместимого с ReqGram проекта";
+"AyuGram.RemoteConfig.Badge.HeroAccessibility" = "Значок: %@";
+"AyuGram.RemoteConfig.Badge.Project" = "Значок ReqGram";
+"AyuGram.RemoteConfig.Badge.Project.Info" = "Этот значок выдан ReqGram.";
+"AyuGram.RemoteConfig.Badges.ShowAll" = "Показать все значки ReqGram: %d";
+"AyuGram.RemoteConfig.Badges.More" = "Ещё: %d";
+"AyuGram.RemoteConfig.Badges.Title" = "Значки ReqGram";
+
+"AyuGram.StreamerMode.Header" = "РЕЖИМ СТРИМЕРА";
+"AyuGram.StreamerMode.Enabled" = "Режим стримера";
+"AyuGram.StreamerMode.Notice" = "Скрывает чувствительный контент во время записи или трансляции экрана. iOS не умеет полностью блокировать захват экрана, поэтому режим реагирует на захват, а не предотвращает его.";
+"AyuGram.StreamerMode.ScreenshotWarning" = "Сделан скриншот при включённом режиме стримера";
+
+"AyuGram.Url.PeerNotFound" = "Чат не найден";
+"AyuGram.Url.UserNotFound" = "Пользователь не найден";
+
+"ReqGram.Other" = "Другое";
+"ReqGram.Support" = "Поддержка";
+"ReqGram.Support.Title" = "Поддержать ReqGram";
+"ReqGram.Support.MenuTitle" = "Поддержать проект";
+"ReqGram.Plugins.Title" = "Плагины";
+"ReqGram.Support.Section" = "Поддержка";
+"ReqGram.Plugin.GiftId" = "gift_id";
+"ReqGram.Plugin.DeletedGiftSender" = "deleted_gift_sender";
+"ReqGram.Plugin.ZwyLib" = "zwylib";
+"ReqGram.Plugin.LocalEdictor" = "LocalEdictor";
+"ReqGram.Plugin.ZwyNoForwardLimit" = "zwyNoForwardLimit";
+"ReqGram.Plugin.TextAnimationPrivateLet" = "text_animation_private_let";
+"ReqGram.Plugin.LocalEdictorZwyLib" = "LocalEdictor + ZwyLib";
+"ReqGram.Plugin.Enable" = "Включить плагин";
+"ReqGram.Plugin.Information" = "Информация";
+"ReqGram.Plugin.GiftId.Description" = "Показывает числовой ID подарка в поддерживаемой информации о подарке и позволяет скопировать его.";
+"ReqGram.Plugin.DeletedGiftSender.Description" = "Возвращает поддерживаемую информацию об удалённых подарках без изменения данных Telegram на сервере.";
+"ReqGram.Plugin.LocalEdictorZwyLib.Description" = "Позволяет локально изменять текст сообщений и сохранять эти изменения между запусками. ZwyLib включается вместе с LocalEdictor, потому что он ему необходим.";
+"ReqGram.Plugin.ZwyNoForwardLimit.Description" = "Разбивает обычную разрешённую пересылку на совместимые с Telegram пакеты. Ограничения защищённого контента не обходятся.";
+"ReqGram.Plugin.TextAnimationPrivateLet.Description" = "Нативный preview и отправка анимированного текста на iOS. Android-хуки напрямую не переносятся.";
+"ReqGram.Animation.Blur" = "Имитация размытия";
+"ReqGram.Animation.Slide" = "Скольжение";
+"ReqGram.Animation.Scale" = "Масштаб";
+"ReqGram.Animation.Rotate" = "Поворот";
+"ReqGram.Animation.IgnoreSpaces" = "Не анимировать пробелы";
+"ReqGram.Animation.AllLines" = "Анимировать все строки";
+"ReqGram.Animation.Duration" = "Длительность";
+"ReqGram.Animation.Preview.Title" = "Предпросмотр";
+"ReqGram.Animation.Preview.Sample" = "Анимированный текст";
+"ReqGram.Animation.Preview.AccessibilityHint" = "Показывает текущую анимацию вставки текста. Предпросмотр повторяется автоматически.";
+"ReqGram.Animation.BlurDuration" = "Длительность имитации размытия";
+"ReqGram.Animation.BlurRadius" = "Радиус имитации размытия";
+"ReqGram.Animation.BlurDelay" = "Пауза перед чётким текстом";
+"ReqGram.Animation.SlideDistance" = "Расстояние скольжения";
+"ReqGram.Animation.ScaleStart" = "Начальный масштаб";
+"ReqGram.Animation.Rotation" = "Поворот";
+"ReqGram.Animation.DeleteParticles" = "Частицы при удалении";
+"ReqGram.Animation.ParticleCount" = "Количество частиц";
+"ReqGram.Animation.ParticleSpeed" = "Скорость частиц";
+"ReqGram.Animation.ParticleSpread" = "Разброс частиц";
+"ReqGram.Animation.ParticleSize" = "Размер частиц";
+"ReqGram.Animation.Cursor" = "Свой курсор";
+"ReqGram.Animation.CursorWidth" = "Ширина курсора";
+"ReqGram.Animation.CursorSpeed" = "Скорость движения курсора";
+"ReqGram.Animation.LiquidCursor" = "Плавное движение курсора";
+"ReqGram.Animation.LiquidScale" = "Растяжение плавного курсора";
+"ReqGram.Animation.SelectionEffect" = "Эффект выделения (0 выкл., 1 контур, 2 жидкий)";
+"ReqGram.Animation.SelectionStretch" = "Вертикальное растяжение выделения";
+"ReqGram.Animation.SelectionSide" = "Боковое расширение выделения";
+"ReqGram.Support.HeroAccessibility" = "Логотип ReqGram";
+"ReqGram.Support.Explanation" = "Ваша поддержка помогает продолжать разработку и сопровождение ReqGram.";
+"ReqGram.Support.DonationStep.Title" = "Пожертвуйте";
+"ReqGram.Support.DonationStep.Body" = "Используйте официальный способ оплаты.";
+"ReqGram.Support.ProofStep.Title" = "Отправьте чек";
+"ReqGram.Support.ProofStep.Body" = "Сохраните и отправьте квитанцию об оплате.";
+"ReqGram.Support.BadgeStep.Title" = "Получите значок";
+"ReqGram.Support.BadgeStep.Body" = "Он выдаётся подходящим пользователям после проверки.";
+"ReqGram.Support.DonationStep" = "1. Сделайте пожертвование\nИспользуйте настроенный официальный способ оплаты. Если кнопка оплаты не показана, платёжные данные пока недоступны.";
+"ReqGram.Support.ProofStep" = "2. Отправьте подтверждение оплаты\nСохраните квитанцию о транзакции и отправьте её через настроенный официальный контакт. Если кнопка контакта не показана, проверка пока недоступна.";
+"ReqGram.Support.BadgeStep" = "3. Проверка значка\nПосле подтверждения оплаты пользователи, соответствующие условиям, могут получить значок сторонника ReqGram. Проверка и выдача значка не выполняются автоматически.";
+"ReqGram.Support.Action.Donate" = "Поддержать";
+"ReqGram.Support.Action.SendProof" = "Отправить подтверждение";
+"ReqGram.Support.Action.LearnMore" = "Подробнее";
+"ReqGram.Support.Action.OfficialResource" = "Официальный ресурс ReqGram";
+"ProjectSupport.Section" = "ПОДДЕРЖКА ПРОЕКТА";
+"ProjectSupport.Title" = "Поддержать %@";
+"ProjectSupport.Description" = "Поддержите разработку %@ одним из официальных способов ниже.";
+"ProjectSupport.Boosty" = "Поддержать на Boosty";
+"ProjectSupport.Contact" = "Чек об оплате / Связаться %@";
+"ProjectSupport.PaymentDetails" = "РЕКВИЗИТЫ — НАЖМИТЕ, ЧТОБЫ СКОПИРОВАТЬ";
+"ProjectSupport.CopyHint" = "Реквизиты только копируются и никогда не открываются как ссылки.";
+"ProjectSupport.Copied" = "Скопировано в буфер обмена";
+"AyuGram.Icon.Color" = "Цвет отметки";
+"AyuGram.Icon.Color.theme" = "Цвет темы";
+"AyuGram.Icon.Color.red" = "Красный";
+"AyuGram.Icon.Color.orange" = "Оранжевый";
+"AyuGram.Icon.Color.green" = "Зелёный";
+"AyuGram.Icon.Color.blue" = "Синий";
+"AyuGram.Icon.Color.purple" = "Фиолетовый";
+
+"ReqGram.Plugin.SendGiftById" = "Отправить подарок по ID";
+"ReqGram.Plugin.SendGiftById.Description" = "Отправляет подарок каталога по точному ID через стандартный композер и оплату.";
+"ReqGram.Plugin.SendGiftById.Action" = "Ввести ID подарка";
+"ReqGram.Plugin.SendGiftById.IdTitle" = "ID подарка";
+"ReqGram.Plugin.SendGiftById.IdPlaceholder" = "Введите ID подарка";
+"ReqGram.Plugin.SendGiftById.InvalidId" = "Введите корректный ID подарка.";
+"ReqGram.Plugin.SendGiftById.NotFound" = "Этого подарка нет в текущем каталоге.";
