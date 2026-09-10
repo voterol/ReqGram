@@ -551,6 +551,8 @@
 "ReqGram.Plugin.LocalEdictorZwyLib" = "LocalEdictor + ZwyLib";
 "ReqGram.Plugin.Enable" = "Enable plugin";
 "ReqGram.Plugin.Information" = "Information";
+"ReqGram.Plugin.Author" = "Author";
+"ReqGram.Plugin.TextAnimationAuthor" = "TextAnimation author";
 "ReqGram.Plugin.GiftId.Description" = "Shows the numeric gift ID in supported gift details and lets you copy it.";
 "ReqGram.Plugin.DeletedGiftSender.Description" = "Makes supported legacy gift information available without changing Telegram’s server data.";
 "ReqGram.Plugin.LocalEdictorZwyLib.Description" = "Edit message text locally and keep those presentation-only changes between launches. ZwyLib is enabled together because LocalEdictor depends on it.";

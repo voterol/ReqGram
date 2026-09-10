@@ -546,6 +546,8 @@
 "ReqGram.Plugin.LocalEdictorZwyLib" = "LocalEdictor + ZwyLib";
 "ReqGram.Plugin.Enable" = "Включить плагин";
 "ReqGram.Plugin.Information" = "Информация";
+"ReqGram.Plugin.Author" = "Автор";
+"ReqGram.Plugin.TextAnimationAuthor" = "Автор TextAnimation";
 "ReqGram.Plugin.GiftId.Description" = "Показывает числовой ID подарка в поддерживаемой информации о подарке и позволяет скопировать его.";
 "ReqGram.Plugin.DeletedGiftSender.Description" = "Возвращает поддерживаемую информацию об удалённых подарках без изменения данных Telegram на сервере.";
 "ReqGram.Plugin.LocalEdictorZwyLib.Description" = "Позволяет локально изменять текст сообщений и сохранять эти изменения между запусками. ZwyLib включается вместе с LocalEdictor, потому что он ему необходим.";

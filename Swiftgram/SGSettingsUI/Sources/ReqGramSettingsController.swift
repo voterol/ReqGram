@@ -73,6 +73,7 @@ private enum ReqGramPluginUnused: Hashable {
 
 private enum ReqGramPluginAction: Hashable {
     case sendGiftById
+    case author(String)
 }
 
 private typealias ReqGramPluginEntry = SGItemListUIEntry<ReqGramPluginSection, ReqGramPluginBoolSetting, ReqGramSliderSetting, ReqGramPluginUnused, ReqGramPluginUnused, ReqGramPluginAction>
@@ -290,6 +291,9 @@ private func reqGramPluginController(context: AccountContext, plugin: ReqGramPlu
                     }), nil)
                 return
             }
+            if case let .author(handle) = action {
+                context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: "tg://resolve?domain=\(handle)", forceExternal: false, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: nil, dismissInput: {})
+            }
         }
     )
     let pluginSettingsChanges = Signal<Void, NoError> { subscriber in
@@ -392,6 +396,18 @@ private func reqGramPluginController(context: AccountContext, plugin: ReqGramPlu
         }
         if case .sendGiftById = plugin {
             entries.append(.action(id: counter.count, section: .information, actionType: .sendGiftById, text: i18n("ReqGram.Plugin.SendGiftById.Action", lang), kind: .generic))
+        }
+        let authors: [(labelKey: String, handle: String)]
+        switch plugin {
+        case .giftId: authors = [("ReqGram.Plugin.Author", "PESSDES_Plugins")]
+        case .sendGiftById: authors = [("ReqGram.Plugin.Author", "voterol")]
+        case .deletedGiftSender: authors = [("ReqGram.Plugin.Author", "binbash_0")]
+        case .localEdictorAndZwyLib: authors = [("ReqGram.Plugin.Author", "Nikita218000"), ("ReqGram.Plugin.Author", "zwylair")]
+        case .zwyNoForwardLimit: authors = [("ReqGram.Plugin.Author", "zwylair")]
+        case .textAnimationPrivateLet: authors = [("ReqGram.Plugin.Author", "private_let"), ("ReqGram.Plugin.TextAnimationAuthor", "mihailkotovski"), ("ReqGram.Plugin.TextAnimationAuthor", "mishabotov")]
+        }
+        for author in authors {
+            entries.append(.action(id: counter.count, section: .information, actionType: .author(author.handle), text: "\(i18n(author.labelKey, lang)): @\(author.handle)", kind: .generic))
         }
         entries.append(.header(id: counter.count, section: .information, text: i18n("ReqGram.Plugin.Information", lang), badge: nil))
         entries.append(.notice(id: counter.count, section: .information, text: description))
