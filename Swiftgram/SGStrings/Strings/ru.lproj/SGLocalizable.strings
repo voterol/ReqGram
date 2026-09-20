@@ -481,7 +481,7 @@
 
 "AyuGram.RemoteConfig.Header" = "ЗНАЧКИ";
 "AyuGram.RemoteConfig.Enabled" = "Значки ReqGram";
-"AyuGram.RemoteConfig.Notice" = "Загружает публичный список значков ReqGram, чтобы отмечать разработчиков и спонсоров проекта. Данные о вас не отправляются, но выполняется обращение к внешнему серверу.";
+"AyuGram.RemoteConfig.Notice" = "Загружает публичный список значков ReqGram, чтобы отмечать разработчиков и спонсоров проекта. При обращении внешний сервер получает IP-адрес устройства.";
 "AyuGram.RemoteConfig.Badge.Developer" = "Команда ReqGram";
 "AyuGram.RemoteConfig.Badge.Supporter" = "Спонсор ReqGram";
 "AyuGram.RemoteConfig.Badge.Custom" = "Особый значок ReqGram";
@@ -497,9 +497,9 @@
 "AyuGram.RemoteConfig.Badge.Sponsor" = "Спонсор ReqGram";
 "AyuGram.RemoteConfig.Badge.Sponsor.Info" = "%@ поддержал(а) разработку ReqGram.";
 "AyuGram.RemoteConfig.Badge.PeerFallback" = "Этот пользователь";
-"AyuGram.RemoteConfig.Badge.CompatibleFamily" = "Совместимый проект";
-"AyuGram.RemoteConfig.Badge.CompatibleDeveloper" = "Команда совместимого с ReqGram проекта";
-"AyuGram.RemoteConfig.Badge.CompatibleSupporter" = "Спонсор совместимого с ReqGram проекта";
+"AyuGram.RemoteConfig.Badge.CompatibleFamily" = "Проект, совместимый с ReqGram";
+"AyuGram.RemoteConfig.Badge.CompatibleDeveloper" = "Команда проекта, совместимого с ReqGram";
+"AyuGram.RemoteConfig.Badge.CompatibleSupporter" = "Спонсор проекта, совместимого с ReqGram";
 "AyuGram.RemoteConfig.Badge.AyuGram.Supporter" = "Спонсор AyuGram";
 "AyuGram.RemoteConfig.Badge.AyuGram.Supporter.Info" = "%@ поддержал(а) разработку AyuGram.";
 "AyuGram.RemoteConfig.Badge.ExteraGram.Supporter" = "Спонсор exteraGram";
@@ -514,8 +514,8 @@
 "AyuGram.RemoteConfig.Badge.ExteraGram.Official.Info" = "%@ — официальный ресурс exteraGram.";
 "AyuGram.RemoteConfig.Badge.ExteraGram.Team" = "Команда exteraGram";
 "AyuGram.RemoteConfig.Badge.ExteraGram.Team.Info" = "%@ входит в команду exteraGram.";
-"AyuGram.RemoteConfig.Badge.CompatibleOwner" = "Владелец совместимого с ReqGram проекта";
-"AyuGram.RemoteConfig.Badge.CompatibleOfficial" = "Официальный ресурс совместимого с ReqGram проекта";
+"AyuGram.RemoteConfig.Badge.CompatibleOwner" = "Владелец проекта, совместимого с ReqGram";
+"AyuGram.RemoteConfig.Badge.CompatibleOfficial" = "Официальный ресурс проекта, совместимого с ReqGram";
 "AyuGram.RemoteConfig.Badge.HeroAccessibility" = "Значок: %@";
 "AyuGram.RemoteConfig.Badge.Project" = "Значок ReqGram";
 "AyuGram.RemoteConfig.Badge.Project.Info" = "Этот значок выдан ReqGram.";
@@ -589,7 +589,7 @@
 "ReqGram.Support.ProofStep.Title" = "Отправьте чек";
 "ReqGram.Support.ProofStep.Body" = "Сохраните и отправьте квитанцию об оплате.";
 "ReqGram.Support.BadgeStep.Title" = "Получите значок";
-"ReqGram.Support.BadgeStep.Body" = "Он выдаётся подходящим пользователям после проверки.";
+"ReqGram.Support.BadgeStep.Body" = "Значок выдаётся после проверки оплаты.";
 "ReqGram.Support.DonationStep" = "1. Сделайте пожертвование\nИспользуйте настроенный официальный способ оплаты. Если кнопка оплаты не показана, платёжные данные пока недоступны.";
 "ReqGram.Support.ProofStep" = "2. Отправьте подтверждение оплаты\nСохраните квитанцию о транзакции и отправьте её через настроенный официальный контакт. Если кнопка контакта не показана, проверка пока недоступна.";
 "ReqGram.Support.BadgeStep" = "3. Проверка значка\nПосле подтверждения оплаты пользователи, соответствующие условиям, могут получить значок сторонника ReqGram. Проверка и выдача значка не выполняются автоматически.";
@@ -603,7 +603,7 @@
 "ProjectSupport.Boosty" = "Поддержать на Boosty";
 "ProjectSupport.Contact" = "Чек об оплате / Связаться %@";
 "ProjectSupport.PaymentDetails" = "РЕКВИЗИТЫ — НАЖМИТЕ, ЧТОБЫ СКОПИРОВАТЬ";
-"ProjectSupport.CopyHint" = "Реквизиты только копируются и никогда не открываются как ссылки.";
+"ProjectSupport.CopyHint" = "Нажмите на реквизиты, чтобы скопировать их.";
 "ProjectSupport.Copied" = "Скопировано в буфер обмена";
 "AyuGram.Icon.Color" = "Цвет отметки";
 "AyuGram.Icon.Color.theme" = "Цвет темы";
