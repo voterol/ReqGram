@@ -548,13 +548,11 @@
 "ReqGram.Plugin.Information" = "Информация";
 "ReqGram.Plugin.Author" = "Автор";
 "ReqGram.Plugin.TextAnimationAuthor" = "Автор TextAnimation";
-"ReqGram.Plugin.GiftId.Description" = "Показывает ID подарка и позволяет скопировать его.";
-"ReqGram.Plugin.DeletedGiftSender.Description" = "Показывает сведения об отправителях удалённых подарков без изменения данных Telegram на сервере.";
-"ReqGram.Plugin.DeletedGiftSending.Notice" = "**Отправка удалённых подарков больше не работает.** Telegram устранил эту возможность 15 сентября 2026 года. Плагин сохранён вместе с настройками и действиями. Это уведомление касается только способа отправки удалённых подарков, а не обычной отправки подарков.";
-"ReqGram.Plugin.DeletedGiftSender.DisplayNotice" = "**Внимание:** Отображение подарков может быть неверным. Всегда сравнивайте подарки по ID.";
+"ReqGram.Plugin.GiftId.Description" = "Показывает числовой ID подарка в поддерживаемой информации о подарке и позволяет скопировать его.";
+"ReqGram.Plugin.DeletedGiftSender.Description" = "Возвращает поддерживаемую информацию об удалённых подарках без изменения данных Telegram на сервере.";
 "ReqGram.Plugin.LocalEdictorZwyLib.Description" = "Позволяет локально изменять текст сообщений и сохранять эти изменения между запусками. ZwyLib включается вместе с LocalEdictor, потому что он ему необходим.";
-"ReqGram.Plugin.ZwyNoForwardLimit.Description" = "Пересылает сообщения несколькими партиями в пределах лимитов Telegram. Ограничения защищённого контента сохраняются.";
-"ReqGram.Plugin.TextAnimationPrivateLet.Description" = "Предпросмотр и отправка анимированного текста на iOS.";
+"ReqGram.Plugin.ZwyNoForwardLimit.Description" = "Разбивает обычную разрешённую пересылку на совместимые с Telegram пакеты. Ограничения защищённого контента не обходятся.";
+"ReqGram.Plugin.TextAnimationPrivateLet.Description" = "Нативный preview и отправка анимированного текста на iOS. Android-хуки напрямую не переносятся.";
 "ReqGram.Animation.Blur" = "Имитация размытия";
 "ReqGram.Animation.Slide" = "Скольжение";
 "ReqGram.Animation.Scale" = "Масштаб";
@@ -616,7 +614,7 @@
 "AyuGram.Icon.Color.purple" = "Фиолетовый";
 
 "ReqGram.Plugin.SendGiftById" = "Отправить подарок по ID";
-"ReqGram.Plugin.SendGiftById.Description" = "Открывает отправку и оплату подарка из каталога по его ID.";
+"ReqGram.Plugin.SendGiftById.Description" = "Отправляет подарок каталога по точному ID через стандартный композер и оплату.";
 "ReqGram.Plugin.SendGiftById.Action" = "Ввести ID подарка";
 "ReqGram.Plugin.SendGiftById.IdTitle" = "ID подарка";
 "ReqGram.Plugin.SendGiftById.IdPlaceholder" = "Введите ID подарка";

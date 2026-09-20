@@ -12,7 +12,7 @@
 
 ---
 
-ReqGram — неофициальный iOS-порт AyuGram с дополнительными настройками и встроенными плагинами ReqGram. Проект основан на Swiftgram и Telegram iOS. Новости публикуются в [канале ReqGram](https://t.me/ReqGram), а сборки — в [ReqGram CI](https://t.me/ReqGramCI).
+ReqGram — мой неофициальный iOS-порт AyuGram с дополнительными настройками и встроенными плагинами ReqGram. Основа проекта — Swiftgram и Telegram iOS. Обновления я публикую в [канале ReqGram](https://t.me/ReqGram), а сборки — в [ReqGram CI](https://t.me/ReqGramCI).
 
 ## Возможности
 
@@ -33,7 +33,7 @@ ReqGram — неофициальный iOS-порт AyuGram с дополнит�
 - **Приватность:** режим призрака влияет только на поддерживаемые клиентом действия и не меняет поведение Telegram во всех сценариях. Локальный Premium не предоставляет подписку Telegram Premium и серверные функции этой подписки.
 - **Внешние серверы:** подсистема бейджей обращается к источникам ReqGram, AyuGram и exteraGram отдельно от Telegram. Доступность и содержимое этих источников могут меняться, а локальный кэш — устаревать. При обращении сервер получает как минимум IP-адрес устройства. Источники описаны в [`AyuRemoteConfig.swift`](Swiftgram/AyuGram/Sources/AyuRemoteConfig.swift).
 - **Хранилище App Group:** если общий контейнер недоступен из-за подписи или entitlements, основное приложение использует отдельный каталог `Application Support/TelegramContainer`, а настройки сохраняются в стандартном `UserDefaults`. Автоматического переноса данных между хранилищами нет, поэтому после смены подписи или entitlements ранее сохранённые данные могут перестать отображаться. Системные расширения `.appex` этот резервный вариант не используют. См. [`SGAppGroupIdentifier.swift`](Swiftgram/SGAppGroupIdentifier/Sources/SGAppGroupIdentifier.swift).
-- **Системные расширения и плагины ReqGram:** `--xcodeManagedCodesigning` при генерации проекта отключает системные расширения Share, уведомления, Siri/Intents, виджеты и Broadcast Upload. Внутренние плагины ReqGram при этом не отключаются. Apple Watch по умолчанию не встраивается в сборку.
+- **iOS extensions и плагины не одно и то же:** `--xcodeManagedCodesigning` при генерации проекта отключает системные расширения (Share, уведомления, Siri/Intents, виджеты, Broadcast Upload). Это не отключение внутренних плагинов ReqGram. Apple Watch по умолчанию не встраивается.
 - **IPA без подписи:** наличие архива не означает, что его можно установить на устройство. Для установки нужны подходящие сертификат, provisioning profile и entitlements. Повторная подпись может ограничить работу системных функций.
 
 ## Мои каналы
