@@ -46,6 +46,7 @@ import AvatarComponent
 import GlassControls
 import GlassBarButtonComponent
 import GlassBackgroundComponent
+import SGSimpleSettings
 
 private final class GiftViewSheetContent: CombinedComponent {
     typealias EnvironmentType = ViewControllerComponentContainer.Environment
@@ -1539,6 +1540,16 @@ private final class GiftViewSheetContent: CombinedComponent {
                 }
                 var items: [ContextMenuItem] = []
                 let strings = presentationData.strings
+
+                if SGSimpleSettings.shared.reqGramGiftIdEnabled {
+                    items.append(.action(ContextMenuActionItem(text: "Gift ID", icon: { theme in
+                        return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Copy"), color: theme.contextMenu.primaryColor)
+                    }, action: { [weak controller] c, _ in
+                        c?.dismiss(completion: nil)
+                        UIPasteboard.general.string = String(gift.id)
+                        controller?.present(UndoOverlayController(presentationData: presentationData, content: .copy(text: "Gift ID copied"), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .current)
+                    })))
+                }
                 
                 if let reference = arguments.reference, case .unique = arguments.gift, let togglePinnedToTop = controller.togglePinnedToTop, let pinnedToTop = arguments.pinnedToTop {
                     items.append(.action(ContextMenuActionItem(text: pinnedToTop ? strings.PeerInfo_Gifts_Context_Unpin : strings.PeerInfo_Gifts_Context_Pin , icon: { theme in generateTintedImage(image: UIImage(bundleImageName: pinnedToTop ? "Chat/Context Menu/Unpin" : "Chat/Context Menu/Pin"), color: theme.contextMenu.primaryColor) }, action: { [weak self] c, f in

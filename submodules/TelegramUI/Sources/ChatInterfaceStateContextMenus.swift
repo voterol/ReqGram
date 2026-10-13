@@ -1,5 +1,6 @@
 import SGStrings
 import SGSimpleSettings
+import AyuGram
 import PeerInfoUI
 import Foundation
 import UIKit
@@ -41,6 +42,9 @@ import ChatMessageItemCommon
 import ChatMessageItemView
 import ChatMessageBubbleItemNode
 import AdsInfoScreen
+import AlertComponent
+import AlertInputFieldComponent
+import ComponentFlow
 import AdsReportScreen
  
 private struct MessageContextMenuData {
@@ -2216,6 +2220,39 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             sgActionsIndex = actions.count
             var didAddSeparator = false
             // MARK: Swiftgram
+            let localEditPeerId = message.id.peerId.toInt64()
+            let localEditAccountId = context.account.peerId.toInt64()
+            let localOverride = AyuMessageStore.shared.localTextOverride(peerId: localEditPeerId, accountId: localEditAccountId, messageId: message.id.id)
+            if SGSimpleSettings.shared.reqGramLocalEdictorEnabled, !message.text.isEmpty {
+                let editLocally = ContextMenuItem.action(ContextMenuActionItem(text: "Edit locally", icon: { theme in
+                    generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Edit"), color: theme.actionSheet.primaryTextColor)
+                }, action: { controller, _ in
+                    controller?.dismiss(completion: {
+                        let inputState = AlertInputFieldComponent.ExternalState()
+                        let content: [AnyComponentWithIdentity<AlertComponentEnvironment>] = [
+                            AnyComponentWithIdentity(id: "text", component: AnyComponent(AlertTextComponent(content: .plain("Only this device will see the replacement.")))),
+                             AnyComponentWithIdentity(id: "input", component: AnyComponent(AlertInputFieldComponent(context: context, initialValue: localOverride ?? message.text, placeholder: "Message text", characterLimit: 16_384, hasClearButton: true, keyboardType: .default, autocapitalizationType: .sentences, autocorrectionType: .default, isInitiallyFocused: true, externalState: inputState, shouldChangeText: { _ in true }, returnKeyAction: nil)))
+                        ]
+                        let alert = AlertScreen(context: context, configuration: .init(allowInputInset: true), content: content, actions: [
+                            .init(title: chatPresentationInterfaceState.strings.Common_Cancel),
+                            .init(title: "Save", type: .default, action: {
+                                AyuMessageStore.shared.saveLocalTextOverride(peerId: message.id.peerId.toInt64(), accountId: context.account.peerId.toInt64(), messageId: message.id.id, text: inputState.value)
+                            })
+                        ])
+                        controllerInteraction.presentController(alert, nil)
+                    })
+                }))
+                sgActions.append(editLocally)
+            }
+            if SGSimpleSettings.shared.reqGramLocalEdictorEnabled, localOverride != nil {
+                sgActions.append(.action(ContextMenuActionItem(text: "Reset local edit", icon: { theme in
+                    generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Undo"), color: theme.actionSheet.primaryTextColor)
+                }, action: { controller, f in
+                    AyuMessageStore.shared.removeLocalTextOverride(peerId: localEditPeerId, accountId: localEditAccountId, messageId: message.id.id)
+                    f(.default)
+                    controller?.dismiss()
+                })))
+            }
             if let authorId = message.author?.id {
                 let action: ContextMenuItem = .action(ContextMenuActionItem(text: i18n("ContextMenu.SelectFromUser", chatPresentationInterfaceState.strings.baseLanguageCode), icon: { theme in
                     return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/SelectAll"), color: theme.actionSheet.primaryTextColor)
@@ -2355,7 +2392,7 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             })), at: 0)
             sgActions.insert(.separator, at: 1)
             
-            let swiftgramSubMenu: ContextMenuItem = .action(ContextMenuActionItem(text: "Swiftgram", icon: { theme in
+            let swiftgramSubMenu: ContextMenuItem = .action(ContextMenuActionItem(text: "ReqGram", icon: { theme in
                 return generateTintedImage(image: UIImage(bundleImageName: "SwiftgramContextMenu"), color: theme.actionSheet.primaryTextColor)
             }, action: { c, f in
                 popSGItems = { [weak c] in
@@ -2387,6 +2424,26 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             }
             return false
         })
+
+        let ayuRevisions = AyuMessageStore.shared.revisions(
+            peerId: message.id.peerId.toInt64(),
+            accountId: context.account.peerId.toInt64(),
+            messageId: message.id.id
+        ).filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        if !ayuRevisions.isEmpty {
+            actions.append(.separator)
+            actions.append(.action(ContextMenuActionItem(text: "AyuGram.EditHistory.Title".i18n(chatPresentationInterfaceState.strings.baseLanguageCode), icon: { theme in
+                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Edit"), color: theme.actionSheet.primaryTextColor)
+            }, action: { c, _ in
+                c?.dismiss(completion: {
+                    let captureProtected = chatPresentationInterfaceState.copyProtectionEnabled
+                        || chatPresentationInterfaceState.myCopyProtectionEnabled
+                        || message.isCopyProtected()
+                        || message.id.peerId.namespace == Namespaces.Peer.SecretChat
+                    controllerInteraction.navigationController()?.pushViewController(ayuMessageEditHistoryController(context: context, messageId: message.id, captureProtected: captureProtected))
+                })
+            })))
+        }
 
         if canViewAuthor {
             actions.insert(.custom(ChatMessageAuthorContextItem(context: context, message: message, action: { c, f, peer in

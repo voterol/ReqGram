@@ -1,3 +1,4 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 headers = [
     "vp8.h",
@@ -56,8 +57,13 @@ genrule(
         BUILD_ARCH="linux_x86_64"
         PLATFORM_HEADER_DIR="x86_64-linux-gcc"
     elif [ "$(TARGET_CPU)" == "aarch64" ] || [ "$(TARGET_CPU)" == "arm64" ]; then
-        BUILD_ARCH="linux_arm64"
-        PLATFORM_HEADER_DIR="arm64-linux-gcc"
+        if [ "$$(uname -s)" == "Darwin" ]; then
+            BUILD_ARCH="sim_arm64"
+            PLATFORM_HEADER_DIR="arm64-iphonesimulator-gcc"
+        else
+            BUILD_ARCH="linux_arm64"
+            PLATFORM_HEADER_DIR="arm64-linux-gcc"
+        fi
     else
         echo "Unsupported architecture $(TARGET_CPU)"
     fi

@@ -1,3 +1,4 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 absl_headers = [
     "absl/container/internal/layout.h",

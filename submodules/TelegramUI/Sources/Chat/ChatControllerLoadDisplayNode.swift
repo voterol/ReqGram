@@ -129,6 +129,240 @@ import ComponentFlow
 import ComponentDisplayAdapters
 
 extension ChatControllerImpl {
+    private func ayuBeginMessageSelection(messageIds: [MessageId], completion: @escaping (ContainedViewLayoutTransition) -> Void) {
+        guard self.isNodeLoaded else {
+            completion(.immediate)
+            return
+        }
+        let selectedIds = Set<MessageId>(messageIds)
+        let action: () -> Void = { [weak self] in
+            guard let self else {
+                return
+            }
+            self.ayuBeginSelectionClassification(selectedIds)
+            self.updateChatPresentationInterfaceState(animated: true, interactive: true, { state in
+                state.updatedInterfaceState { interfaceState in
+                    interfaceState.withUpdatedSelectedMessages(messageIds)
+                }.updatedShowCommands(false)
+            }, completion: completion)
+
+            if let selectionState = self.presentationInterfaceState.interfaceState.selectionState {
+                let count = Int32(selectionState.selectedIds.count)
+                let text = self.presentationData.strings.VoiceOver_Chat_MessagesSelected(count)
+                UIAccessibility.post(notification: .announcement, argument: text)
+            }
+        }
+        let alertAction: () -> Void = {
+            completion(.immediate)
+        }
+        let _ = self.presentVoiceMessageDiscardAlert(action: action, alertAction: alertAction, delay: true)
+    }
+
+    private func ayuCancelMessageSelection(transition: ContainedViewLayoutTransition) {
+        self.ayuSelectedSyntheticAttributes.removeAll()
+        self.updateChatPresentationInterfaceState(transition: transition, interactive: true, { state in
+            state.updatedInterfaceState { $0.withoutSelectionState() }
+        })
+    }
+
+    private func ayuDeleteSelectedMessages(sourceView: UIView?) {
+        guard let selectedIds = self.presentationInterfaceState.interfaceState.selectionState?.selectedIds, !selectedIds.isEmpty else {
+            return
+        }
+        let partition: (realIds: Set<MessageId>, syntheticAttributes: [AyuSyntheticMessageAttribute], unresolvedIds: Set<MessageId>) = self.ayuPartitionMessageIds(selectedIds)
+        guard partition.unresolvedIds.isEmpty else {
+            return
+        }
+        guard !partition.realIds.isEmpty else {
+            self.presentAyuSyntheticDeleteConfirmation(attributes: partition.syntheticAttributes, contextController: nil, completion: { _ in })
+            return
+        }
+
+        let realIds = partition.realIds
+        let syntheticAttributes = partition.syntheticAttributes
+        let actionsSignal: Signal<ChatAvailableMessageActions, NoError> = self.context.sharedContext.chatAvailableMessageActions(engine: self.context.engine, accountPeerId: self.context.account.peerId, messageIds: realIds, keepUpdated: false)
+        self.messageContextDisposable.set((actionsSignal
+        |> deliverOnMainQueue).startStrict(next: { [weak self] actions in
+            guard let self, !actions.options.isEmpty else {
+                return
+            }
+            if let banAuthor = actions.banAuthor {
+                self.presentBanMessageOptions(accountPeerId: self.context.account.peerId, author: banAuthor, messageIds: realIds, options: actions.options)
+            } else if !actions.banAuthors.isEmpty {
+                self.presentMultiBanMessageOptions(accountPeerId: self.context.account.peerId, authors: actions.banAuthors, messageIds: realIds, options: actions.options)
+            } else if actions.options.intersection([.deleteLocally, .deleteGlobally]).isEmpty {
+                self.presentClearCacheSuggestion()
+            } else {
+                self.presentDeleteMessageOptions(messageIds: realIds, options: actions.options, contextController: nil, sourceView: sourceView, ayuSyntheticAttributes: syntheticAttributes, completion: { _ in })
+            }
+        }))
+    }
+
+    private func ayuReportSelectedMessages() {
+        guard let messageIds = self.presentationInterfaceState.interfaceState.selectionState?.selectedIds, !messageIds.isEmpty else {
+            return
+        }
+        guard !self.ayuSelectionContainsSynthetic(messageIds) else {
+            return
+        }
+        if let reportReason = self.presentationInterfaceState.reportReason {
+            let presentationData = self.presentationData
+            self.updateChatPresentationInterfaceState(animated: true, interactive: true, { state in
+                state.updatedInterfaceState { $0.withoutSelectionState() }
+            }, completion: { [weak self] _ in
+                guard let self else { return }
+                let _ = (self.context.engine.messages.reportContent(subject: .messages(Array(messageIds)), option: reportReason.option, message: reportReason.message)
+                |> deliverOnMainQueue).startStandalone(completed: { [weak self] in
+                    self?.present(UndoOverlayController(presentationData: presentationData, content: .emoji(name: "PoliceCar", text: presentationData.strings.Report_Succeed), elevatedLayout: false, action: { _ in false }), in: .current)
+                })
+            })
+        } else {
+            self.context.sharedContext.makeContentReportScreen(
+                context: self.context,
+                subject: .messages(Array(messageIds).sorted()),
+                forceDark: false,
+                present: { [weak self] controller in self?.push(controller) },
+                completion: { [weak self] in
+                    self?.updateChatPresentationInterfaceState(animated: true, interactive: true, { state in
+                        state.updatedInterfaceState { $0.withoutSelectionState() }
+                    })
+                },
+                requestSelectMessages: nil
+            )
+        }
+    }
+
+    private func ayuForwardSelectedMessages(mode: String?) {
+        self.commitPurposefulAction()
+        guard let selectedIds = self.presentationInterfaceState.interfaceState.selectionState?.selectedIds else {
+            return
+        }
+        guard !self.ayuSelectionContainsSynthetic(selectedIds) else {
+            return
+        }
+        let messageIds: [MessageId] = Array(selectedIds).sorted()
+        switch mode {
+        case "toCloud":
+            self.forwardMessagesToCloud(messageIds: messageIds, removeNames: false, openCloud: false, resetCurrent: true)
+        case "hideNames":
+            let options = ChatInterfaceForwardOptionsState(hideNames: true, hideCaptions: false, unhideNamesOnCaptionChange: false)
+            self.forwardMessages(forceHideNames: true, messageIds: messageIds, options: options)
+        default:
+            self.forwardMessages(messageIds: messageIds)
+        }
+    }
+
+    private func setupEditMessageFromPanel(messageId: MessageId?, completion: @escaping (ContainedViewLayoutTransition) -> Void) {
+        guard self.isNodeLoaded else {
+            return
+        }
+        guard let messageId else {
+            self.updateChatPresentationInterfaceState(animated: true, interactive: true, { state in
+                var state = state
+                state = state.updatedInterfaceState { $0.withUpdatedEditMessage(nil) }
+                return state.updatedEditMessageState(nil)
+            }, completion: completion)
+            return
+        }
+
+        let action: () -> Void = { [weak self] in
+            guard let self, let message = self.chatDisplayNode.historyNode.messageInCurrentHistoryView(messageId)?._asMessage() else {
+                return
+            }
+            self.updateChatPresentationInterfaceState(animated: true, interactive: true, { state in
+                var entities: [MessageTextEntity] = []
+                for attribute in message.attributes {
+                    if let attribute = attribute as? TextEntitiesMessageAttribute {
+                        entities = attribute.entities
+                        break
+                    }
+                }
+                var inputTextMaxLength: Int32 = 4096
+                var webpageUrl: String?
+                for media in message.media {
+                    if media is TelegramMediaImage || media is TelegramMediaFile {
+                        inputTextMaxLength = self.context.userLimits.maxCaptionLength
+                    } else if let webpage = media as? TelegramMediaWebpage, case let .Loaded(content) = webpage.content {
+                        webpageUrl = content.url
+                    }
+                }
+
+                let editInputState: ChatTextInputState
+                if let richTextAttribute = message.attributes.first(where: { $0 is RichTextMessageAttribute }) as? RichTextMessageAttribute {
+                    let content = chatInputContent(fromInstantPage: richTextAttribute.instantPage)
+                    editInputState = ChatTextInputState(content: content, selectionRange: content.length ..< content.length)
+                } else {
+                    editInputState = ChatTextInputState(inputText: chatInputStateStringWithAppliedEntities(message.text, entities: entities))
+                }
+                let disableUrlPreviews: [String] = webpageUrl == nil ? detectUrls(editInputState.inputText) : []
+                let editState = ChatEditMessageState(messageId: messageId, inputState: editInputState, disableUrlPreviews: disableUrlPreviews, inputTextMaxLength: inputTextMaxLength, mediaCaptionIsAbove: nil)
+                var updated = state.updatedInterfaceState { $0.withUpdatedEditMessage(editState) }
+                let previewUpdate = updatedChatEditInterfaceMessageState(context: self.context, state: updated, message: message)
+                updated = previewUpdate.0
+                self.editingUrlPreviewQueryState?.1.dispose()
+                self.editingUrlPreviewQueryState = previewUpdate.1
+                updated = updated.updatedInputMode({ _ in .text })
+                return updated.updatedShowCommands(false)
+            }, completion: completion)
+
+            if !self.chatDisplayNode.ensureInputViewFocused() {
+                DispatchQueue.main.async { [weak self] in
+                    let _ = self?.chatDisplayNode.ensureInputViewFocused()
+                }
+            }
+        }
+        let alertAction: () -> Void = { completion(.immediate) }
+        let _ = self.presentVoiceMessageDiscardAlert(action: action, alertAction: alertAction, delay: true)
+    }
+
+    private func ayuReportMessages(_ messages: [EngineRawMessage], contextController: ContextControllerProtocol?) {
+        guard !messages.isEmpty else {
+            return
+        }
+        for message in messages {
+            if message.isAyuSyntheticDeletedMessage {
+                return
+            }
+        }
+        let messageIds: [MessageId] = messages.map { $0.id }.sorted()
+        contextController?.dismiss()
+        self.context.sharedContext.makeContentReportScreen(
+            context: self.context,
+            subject: .messages(messageIds),
+            forceDark: false,
+            present: { [weak self] controller in self?.push(controller) },
+            completion: {},
+            requestSelectMessages: nil
+        )
+    }
+
+    private func ayuForwardMessages(_ messages: [EngineRawMessage], mode: String?) {
+        guard !messages.isEmpty else {
+            return
+        }
+        for message in messages {
+            if message.isAyuSyntheticDeletedMessage {
+                return
+            }
+        }
+        guard !self.presentAccountFrozenInfoIfNeeded(delay: true) else {
+            return
+        }
+        self.commitPurposefulAction()
+        let messageIds: [MessageId] = messages.map { $0.id }.sorted()
+        switch mode {
+        case "forwardMessagesToCloudWithNoNamesAndOpen":
+            self.forwardMessagesToCloud(messageIds: messageIds, removeNames: true, openCloud: true)
+        case "forwardMessagesToCloud":
+            self.forwardMessagesToCloud(messageIds: messageIds, removeNames: false, openCloud: false)
+        case "forwardMessagesWithNoNames":
+            let options = ChatInterfaceForwardOptionsState(hideNames: true, hideCaptions: false, unhideNamesOnCaptionChange: false)
+            self.forwardMessages(forceHideNames: true, messageIds: messageIds, options: options)
+        default:
+            self.forwardMessages(messageIds: messageIds)
+        }
+    }
+
     func reloadChatLocation(chatLocation: ChatLocation, chatLocationContextHolder: Atomic<ChatLocationContextHolder?>, historyNode: ChatHistoryListNodeImpl, apply: @escaping ((ContainedViewLayoutTransition?) -> Void) -> Void) {
         self.contentDataReady.set(false)
         
@@ -1073,7 +1307,7 @@ extension ChatControllerImpl {
                                     return message.withUpdatedAttributes { attributes in
                                         var attributes = attributes
                                         attributes.removeAll(where: { $0 is OutgoingScheduleInfoMessageAttribute })
-                                        attributes.append(OutgoingScheduleInfoMessageAttribute(scheduleTime: Int32(Date().timeIntervalSince1970) + 10 * 24 * 60 * 60, repeatPeriod: nil))
+                                        attributes.append(OutgoingScheduleInfoMessageAttribute(scheduleTime: Int32(Date().timeIntervalSince1970) + 12, repeatPeriod: nil))
                                         return attributes
                                     }
                                 }
@@ -1100,7 +1334,7 @@ extension ChatControllerImpl {
                                 return message.withUpdatedAttributes { attributes in
                                     var attributes = attributes
                                     attributes.removeAll(where: { $0 is OutgoingScheduleInfoMessageAttribute })
-                                    attributes.append(OutgoingScheduleInfoMessageAttribute(scheduleTime: Int32(Date().timeIntervalSince1970) + 10 * 24 * 60 * 60, repeatPeriod: nil))
+                                    attributes.append(OutgoingScheduleInfoMessageAttribute(scheduleTime: Int32(Date().timeIntervalSince1970) + 12, repeatPeriod: nil))
                                     return attributes
                                 }
                             }
@@ -1747,167 +1981,17 @@ extension ChatControllerImpl {
                 })
             }
         }, setupEditMessage: { [weak self] messageId, completion in
-            if let strongSelf = self, strongSelf.isNodeLoaded {
-                guard let messageId = messageId else {
-                    strongSelf.updateChatPresentationInterfaceState(animated: true, interactive: true, { state in
-                        var state = state
-                        state = state.updatedInterfaceState {
-                            $0.withUpdatedEditMessage(nil)
-                        }
-                        state = state.updatedEditMessageState(nil)
-                        return state
-                    }, completion: completion)
-                    
-                    return
-                }
-                let _ = strongSelf.presentVoiceMessageDiscardAlert(action: {
-                    if let message = strongSelf.chatDisplayNode.historyNode.messageInCurrentHistoryView(messageId)?._asMessage() {
-                        strongSelf.updateChatPresentationInterfaceState(animated: true, interactive: true, { state in
-                            var entities: [MessageTextEntity] = []
-                            for attribute in message.attributes {
-                                if let attribute = attribute as? TextEntitiesMessageAttribute {
-                                    entities = attribute.entities
-                                    break
-                                }
-                            }
-                            var inputTextMaxLength: Int32 = 4096
-                            var webpageUrl: String?
-                            for media in message.media {
-                                if media is TelegramMediaImage || media is TelegramMediaFile {
-                                    inputTextMaxLength = strongSelf.context.userLimits.maxCaptionLength
-                                } else if let webpage = media as? TelegramMediaWebpage, case let .Loaded(content) = webpage.content {
-                                    webpageUrl = content.url
-                                }
-                            }
-                            
-                            let editInputState: ChatTextInputState
-                            if let richTextAttribute = message.attributes.first(where: { $0 is RichTextMessageAttribute }) as? RichTextMessageAttribute {
-                                let content = chatInputContent(fromInstantPage: richTextAttribute.instantPage)
-                                editInputState = ChatTextInputState(content: content, selectionRange: content.length ..< content.length)
-                            } else {
-                                let inputText = chatInputStateStringWithAppliedEntities(message.text, entities: entities)
-                                editInputState = ChatTextInputState(inputText: inputText)
-                            }
-                            var disableUrlPreviews: [String] = []
-                            if webpageUrl == nil {
-                                disableUrlPreviews = detectUrls(editInputState.inputText)
-                            }
-
-                            var updated = state.updatedInterfaceState { interfaceState in
-                                return interfaceState.withUpdatedEditMessage(ChatEditMessageState(messageId: messageId, inputState: editInputState, disableUrlPreviews: disableUrlPreviews, inputTextMaxLength: inputTextMaxLength, mediaCaptionIsAbove: nil))
-                            }
-                            
-                            let (updatedState, updatedPreviewQueryState) = updatedChatEditInterfaceMessageState(context: strongSelf.context, state: updated, message: message)
-                            updated = updatedState
-                            strongSelf.editingUrlPreviewQueryState?.1.dispose()
-                            strongSelf.editingUrlPreviewQueryState = updatedPreviewQueryState
-                            
-                            updated = updated.updatedInputMode({ _ in
-                                return .text
-                            })
-                            updated = updated.updatedShowCommands(false)
-                            
-                            return updated
-                        }, completion: completion)
-                        
-                        if !strongSelf.chatDisplayNode.ensureInputViewFocused() {
-                            DispatchQueue.main.async { [weak self] in
-                                guard let self else {
-                                    return
-                                }
-                                self.chatDisplayNode.ensureInputViewFocused()
-                            }
-                        }
-                    }
-                }, alertAction: {
-                    completion(.immediate)
-                }, delay: true)
-            }
+            self?.setupEditMessageFromPanel(messageId: messageId, completion: completion)
         }, beginMessageSelection: { [weak self] messageIds, completion in
-            if let strongSelf = self, strongSelf.isNodeLoaded {
-                let _ = strongSelf.presentVoiceMessageDiscardAlert(action: {
-                    strongSelf.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState { $0.withUpdatedSelectedMessages(messageIds) }.updatedShowCommands(false) }, completion: completion)
-                    
-                    if let selectionState = strongSelf.presentationInterfaceState.interfaceState.selectionState {
-                        let count = selectionState.selectedIds.count
-                        let text = strongSelf.presentationData.strings.VoiceOver_Chat_MessagesSelected(Int32(count))
-                        UIAccessibility.post(notification: UIAccessibility.Notification.announcement, argument: text)
-                    }
-                }, alertAction: {
-                    completion(.immediate)
-                }, delay: true)
-            } else {
-                completion(.immediate)
-            }
+            self?.ayuBeginMessageSelection(messageIds: messageIds, completion: completion)
         }, cancelMessageSelection: { [weak self] transition in
-            guard let self else {
-                return
-            }
-            self.updateChatPresentationInterfaceState(transition: transition, interactive: true, { $0.updatedInterfaceState { $0.withoutSelectionState() } })
+            self?.ayuCancelMessageSelection(transition: transition)
         }, deleteSelectedMessages: { [weak self] sourceView in
-            if let strongSelf = self {
-                if let messageIds = strongSelf.presentationInterfaceState.interfaceState.selectionState?.selectedIds, !messageIds.isEmpty {
-                    strongSelf.messageContextDisposable.set((strongSelf.context.sharedContext.chatAvailableMessageActions(engine: strongSelf.context.engine, accountPeerId: strongSelf.context.account.peerId, messageIds: messageIds, keepUpdated: false)
-                    |> deliverOnMainQueue).startStrict(next: { actions in
-                        if let strongSelf = self, !actions.options.isEmpty {
-                            if let banAuthor = actions.banAuthor {
-                                strongSelf.presentBanMessageOptions(accountPeerId: strongSelf.context.account.peerId, author: banAuthor, messageIds: messageIds, options: actions.options)
-                            } else if !actions.banAuthors.isEmpty {
-                                strongSelf.presentMultiBanMessageOptions(accountPeerId: strongSelf.context.account.peerId, authors: actions.banAuthors, messageIds: messageIds, options: actions.options)
-                            } else {
-                                if actions.options.intersection([.deleteLocally, .deleteGlobally]).isEmpty {
-                                    strongSelf.presentClearCacheSuggestion()
-                                } else {
-                                    strongSelf.presentDeleteMessageOptions(messageIds: messageIds, options: actions.options, contextController: nil, sourceView: sourceView, completion: { _ in })
-                                }
-                            }
-                        }
-                    }))
-                }
-            }
+            self?.ayuDeleteSelectedMessages(sourceView: sourceView)
         }, reportSelectedMessages: { [weak self] in
-            if let strongSelf = self, let messageIds = strongSelf.presentationInterfaceState.interfaceState.selectionState?.selectedIds, !messageIds.isEmpty {
-                if let reportReason = strongSelf.presentationInterfaceState.reportReason {
-                    let presentationData = strongSelf.presentationData
-                    strongSelf.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState { $0.withoutSelectionState() } }, completion: { _ in
-                        let _ = (strongSelf.context.engine.messages.reportContent(subject: .messages(Array(messageIds)), option: reportReason.option, message: reportReason.message)
-                        |> deliverOnMainQueue).startStandalone(completed: {
-                            strongSelf.present(UndoOverlayController(presentationData: presentationData, content: .emoji(name: "PoliceCar", text: presentationData.strings.Report_Succeed), elevatedLayout: false, action: { _ in return false }), in: .current)
-                        })
-                    })
-                } else {
-                    strongSelf.context.sharedContext.makeContentReportScreen(
-                        context: strongSelf.context,
-                        subject: .messages(Array(messageIds).sorted()),
-                        forceDark: false,
-                        present: { [weak self] controller in
-                            self?.push(controller)
-                        },
-                        completion: { [weak self] in
-                            self?.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState { $0.withoutSelectionState() } })
-                        },
-                        requestSelectMessages: nil
-                    )
-                }
-            }
+            self?.ayuReportSelectedMessages()
         }, reportMessages: { [weak self] messages, contextController in
-            guard let self, !messages.isEmpty else {
-                return
-            }
-            contextController?.dismiss()
-            self.context.sharedContext.makeContentReportScreen(
-                context: self.context,
-                subject: .messages(messages.map({ $0.id }).sorted()),
-                forceDark: false,
-                present: { [weak self] controller in
-                    guard let self else {
-                        return
-                    }
-                    self.push(controller)
-                },
-                completion: {},
-                requestSelectMessages: nil
-            )
+            self?.ayuReportMessages(messages, contextController: contextController)
         }, blockMessageAuthor: { [weak self] message, contextController in
             contextController?.dismiss(completion: {
                 guard let strongSelf = self else {
@@ -1968,7 +2052,12 @@ extension ChatControllerImpl {
                 return
             }
             
-            let messageIds = Set(messages.map { $0.id })
+            let syntheticAttributes = messages.compactMap(\.ayuSyntheticDeletedMessageAttribute)
+            let messageIds = Set(messages.filter { !$0.isAyuSyntheticDeletedMessage }.map { $0.id })
+            if messageIds.isEmpty {
+                self.presentAyuSyntheticDeleteConfirmation(attributes: syntheticAttributes, contextController: contextController, completion: completion)
+                return
+            }
             self.messageContextDisposable.set((self.context.sharedContext.chatAvailableMessageActions(engine: self.context.engine, accountPeerId: self.context.account.peerId, messageIds: messageIds, keepUpdated: false)
             |> deliverOnMainQueue).startStrict(next: { [weak self] actions in
                 guard let self, !actions.options.isEmpty else {
@@ -2000,7 +2089,7 @@ extension ChatControllerImpl {
                                     guard let self else {
                                         return
                                     }
-                                    self.beginDeleteMessagesWithUndo(messageIds: Set(messages.map({ $0.id })), type: .forEveryone)
+                                    self.beginDeleteMessagesWithUndo(messageIds: messageIds, type: .forEveryone, ayuSyntheticAttributes: syntheticAttributes)
                                 }),
                                 TextAlertAction(type: .genericAction, title: self.presentationData.strings.Common_Cancel, action: {})
                             ],
@@ -2038,10 +2127,12 @@ extension ChatControllerImpl {
                         }
                     }
                     if isAction && (actions.options == .deleteGlobally || actions.options == .deleteLocally) {
-                        let _ = self.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: actions.options == .deleteLocally ? .forLocalPeer : .forEveryone).startStandalone()
+                        self.beginDeleteMessagesWithUndo(messageIds: messageIds, type: actions.options == .deleteLocally ? .forLocalPeer : .forEveryone, ayuSyntheticAttributes: syntheticAttributes)
                         completion(.dismissWithoutContent)
                     } else if (messages.first?.flags.isSending ?? false) {
-                        let _ = self.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: .forEveryone, deleteAllInGroup: true).startStandalone()
+                        // A synthetic entry can never be sending; mixed selections
+                        // must still partition before any engine call.
+                        self.beginDeleteMessagesWithUndo(messageIds: messageIds, type: .forEveryone, ayuSyntheticAttributes: syntheticAttributes)
                         completion(.dismissWithoutContent)
                     } else {
                         if actions.options.intersection([.deleteLocally, .deleteGlobally]).isEmpty {
@@ -2055,31 +2146,13 @@ extension ChatControllerImpl {
                                     break
                                 }
                             }
-                            self.presentDeleteMessageOptions(messageIds: messageIds, options: isScheduled ? [.deleteLocally] : actions.options, contextController: contextController, completion: completion)
+                            self.presentDeleteMessageOptions(messageIds: messageIds, options: isScheduled ? [.deleteLocally] : actions.options, contextController: contextController, ayuSyntheticAttributes: syntheticAttributes, completion: completion)
                         }
                     }
                 }
             }))
         }, forwardSelectedMessages: { [weak self] mode in
-            if let strongSelf = self {
-                strongSelf.commitPurposefulAction()
-                if let forwardMessageIdsSet = strongSelf.presentationInterfaceState.interfaceState.selectionState?.selectedIds {
-                    let forwardMessageIds = Array(forwardMessageIdsSet).sorted()
-                    // MARK: Swiftgram
-                    if let mode = mode {
-                        switch (mode) {
-                        case "toCloud":
-                            strongSelf.forwardMessagesToCloud(messageIds: forwardMessageIds, removeNames: false, openCloud: false, resetCurrent: true)
-                        case "hideNames":
-                            strongSelf.forwardMessages(forceHideNames: true, messageIds: forwardMessageIds, options: ChatInterfaceForwardOptionsState(hideNames: true, hideCaptions: false, unhideNamesOnCaptionChange: false))
-                        default:
-                            strongSelf.forwardMessages(messageIds: forwardMessageIds)
-                        }
-                    } else {
-                        strongSelf.forwardMessages(messageIds: forwardMessageIds)
-                    }
-                }
-            }
+            self?.ayuForwardSelectedMessages(mode: mode)
         }, forwardCurrentForwardMessages: { [weak self] in
             if let strongSelf = self {
                 strongSelf.commitPurposefulAction()
@@ -2088,30 +2161,7 @@ extension ChatControllerImpl {
                 }
             }
         }, forwardMessages: { [weak self] messages, mode in
-            if let strongSelf = self, !messages.isEmpty {
-                guard !strongSelf.presentAccountFrozenInfoIfNeeded(delay: true) else {
-                    return
-                }
-                
-                strongSelf.commitPurposefulAction()
-                let forwardMessageIds = messages.map { $0.id }.sorted()
-                // MARK: Swiftgram
-                if let mode = mode {
-                    switch (mode) {
-                        case "forwardMessagesToCloudWithNoNamesAndOpen":
-                            strongSelf.forwardMessagesToCloud(messageIds: forwardMessageIds, removeNames: true, openCloud: true)
-                        case "forwardMessagesToCloud":
-                            strongSelf.forwardMessagesToCloud(messageIds: forwardMessageIds, removeNames: false, openCloud: false)
-                        case "forwardMessagesWithNoNames":
-                            strongSelf.forwardMessages(forceHideNames: true, messageIds: forwardMessageIds, options: ChatInterfaceForwardOptionsState(hideNames: true, hideCaptions: false, unhideNamesOnCaptionChange: false))
-                        default:
-                            strongSelf.forwardMessages(messageIds: forwardMessageIds)
-                    }
-                } else {
-                    strongSelf.forwardMessages(messageIds: forwardMessageIds)
-                }
-
-            }
+            self?.ayuForwardMessages(messages, mode: mode)
         }, updateForwardOptionsState: { [weak self] f in
             if let strongSelf = self {
                 strongSelf.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState({ $0.withUpdatedForwardOptionsState(f($0.forwardOptionsState ?? ChatInterfaceForwardOptionsState(hideNames: false, hideCaptions: false, unhideNamesOnCaptionChange: false))) }) })
@@ -2138,6 +2188,7 @@ extension ChatControllerImpl {
             self.presentSuggestPostOptions()
         }, shareSelectedMessages: { [weak self] in
             if let strongSelf = self, let selectedIds = strongSelf.presentationInterfaceState.interfaceState.selectionState?.selectedIds, !selectedIds.isEmpty {
+                guard !strongSelf.ayuSelectionContainsSynthetic(selectedIds) else { return }
                 strongSelf.commitPurposefulAction()
                 let _ = (strongSelf.context.engine.data.get(EngineDataMap(
                     selectedIds.map(TelegramEngine.EngineData.Item.Messages.Message.init)

@@ -7,7 +7,10 @@
 @interface TGVideoCameraGLRenderer : NSObject
 
 @property (nonatomic, readonly) __attribute__((NSObject)) CMFormatDescriptionRef outputFormatDescription;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 @property (nonatomic, assign) AVCaptureVideoOrientation orientation;
+#pragma clang diagnostic pop
 @property (nonatomic, assign) bool mirror;
 @property (nonatomic, assign) CGFloat opacity;
 @property (nonatomic, readonly) bool hasPreviousPixelbuffer;

@@ -97,10 +97,11 @@ func chatHistoryViewForLocation(
             case let .Initial(count):
                 var preloaded = false
                 var fadeIn = false
-                let signal: Signal<(MessageHistoryView, ViewUpdateType, InitialMessageHistoryData?), NoError>
+                var signal: Signal<(MessageHistoryView, ViewUpdateType, InitialMessageHistoryData?), NoError>
             
                 var requestAroundId = false
                 var preFixedReadState: MessageHistoryViewReadState?
+                let interfaceStateThreadId = useRootInterfaceStateForThread ? nil : chatLocation.threadId
                 if tag != nil {
                     requestAroundId = true
                 }
@@ -112,6 +113,11 @@ func chatHistoryViewForLocation(
                     signal = account.viewTracker.aroundMessageHistoryViewForLocation(context.chatLocationInput(for: chatLocation, contextHolder: chatLocationContextHolder), ignoreMessagesInTimestampRange: ignoreMessagesInTimestampRange, ignoreMessageIds: ignoreMessageIds, index: .upperBound, anchorIndex: .upperBound, count: count, trackHoles: trackHoles, ignoreRelatedChats: ignoreRelatedChats, fixedCombinedReadStates: preFixedReadState, tag: tag, appendMessagesFromTheSameGroup: appendMessagesFromTheSameGroup, orderStatistics: orderStatistics, useRootInterfaceStateForThread: useRootInterfaceStateForThread)
                 } else {
                     signal = account.viewTracker.aroundMessageOfInterestHistoryViewForLocation(context.chatLocationInput(for: chatLocation, contextHolder: chatLocationContextHolder), ignoreMessagesInTimestampRange: ignoreMessagesInTimestampRange, ignoreMessageIds: ignoreMessageIds, count: count, trackHoles: trackHoles, tag: tag, appendMessagesFromTheSameGroup: appendMessagesFromTheSameGroup, orderStatistics: orderStatistics, additionalData: additionalData, useRootInterfaceStateForThread: useRootInterfaceStateForThread)
+                }
+                if tag == nil, let peerId = chatLocation.peerId {
+                    let historySignal = signal
+                    signal = AyuHooks.repairLegacySyntheticScrollState(postbox: account.postbox, accountPeerId: account.peerId, peerId: peerId, threadId: interfaceStateThreadId)
+                    |> mapToSignal { _ in historySignal }
                 }
             
                 let isPossibleIntroLoaded: Signal<Bool, NoError>
@@ -218,7 +224,7 @@ func chatHistoryViewForLocation(
                                     }
                                 }
                             }
-                        } else if effectiveIsAddedToChatList, tag == nil, let historyScrollState = (initialData?.storedInterfaceState).flatMap(_internal_decodeStoredChatInterfaceState).flatMap(ChatInterfaceState.parse)?.historyScrollState {
+                        } else if effectiveIsAddedToChatList, tag == nil, let historyScrollState = (initialData?.storedInterfaceState).flatMap(_internal_decodeStoredChatInterfaceState).flatMap(ChatInterfaceState.parse)?.historyScrollState, !AyuHooks.isLegacySyntheticScrollIndex(historyScrollState.messageIndex, accountPeerId: context.account.peerId, threadId: interfaceStateThreadId) {
                             scrollPosition = .positionRestoration(index: historyScrollState.messageIndex, relativeOffset: CGFloat(historyScrollState.relativeOffset))
                         } else {
                             if let _ = chatLocation.peerId, !effectiveIsAddedToChatList {

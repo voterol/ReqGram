@@ -4,6 +4,8 @@ import SwiftSignalKit
 import TelegramApi
 import MtProtoKit
 import EncryptionProvider
+// MARK: AyuGram
+import AyuGram
 
 private func reactionGeneratedEvent(_ previousReactions: ReactionsMessageAttribute?, _ updatedReactions: ReactionsMessageAttribute?, message: Message, transaction: Transaction) -> (reactionAuthor: Peer, reaction: MessageReaction.Reaction, message: Message, timestamp: Int32)? {
     if let updatedReactions = updatedReactions, !message.flags.contains(.Incoming), message.id.peerId.namespace == Namespaces.Peer.CloudUser {
@@ -4258,6 +4260,15 @@ func replayFinalState(
                 }
             
                 let _ = transaction.addMessages(messages, location: location)
+                AyuHooks.didInsertIncomingMessages(
+                    transaction: transaction,
+                    ids: messages.compactMap { message in
+                        if case let .Id(id) = message.id { return id }
+                        return nil
+                    },
+                    accountPeerId: accountPeerId,
+                    mediaBox: mediaBox
+                )
                 if case .UpperHistoryBlock = location {
                     for message in messages {
                         let chatPeerId = message.id.peerId
@@ -4440,6 +4451,8 @@ func replayFinalState(
                     }
                 }
             case let .DeleteMessagesWithGlobalIds(ids):
+                // MARK: AyuGram - preserve deleted message snapshot before removal
+                AyuHooks.willDeleteMessagesWithGlobalIds(transaction: transaction, globalIds: ids, accountPeerId: accountPeerId, postbox: postbox)
                 var resourceIds: [MediaResourceId] = []
                 transaction.deleteMessagesWithGlobalIds(ids, forEachMedia: { media in
                     addMessageMediaResourceIdsToRemove(media: media, resourceIds: &resourceIds)
@@ -4449,6 +4462,8 @@ func replayFinalState(
                 }
                 deletedMessageIds.append(contentsOf: ids.map { .global($0) })
             case let .DeleteMessages(ids):
+                // MARK: AyuGram - preserve deleted message snapshot before removal
+                AyuHooks.willDeleteMessages(transaction: transaction, ids: ids, accountPeerId: accountPeerId, postbox: postbox)
                 _internal_deleteMessages(transaction: transaction, mediaBox: mediaBox, ids: ids, manualAddMessageThreadStatsDifference: { id, add, remove in
                     addMessageThreadStatsDifference(threadKey: id, remove: remove, addedMessagePeer: nil, addedMessageId: nil, isOutgoing: false)
                 })
@@ -4457,6 +4472,8 @@ func replayFinalState(
                 if let message = transaction.getMessage(id) {
                     updatePeerChatInclusionWithMinTimestamp(transaction: transaction, id: id.peerId, minTimestamp: message.timestamp, forceRootGroupIfNotExists: false)
                 }
+                // MARK: AyuGram - preserve range-deleted message snapshots before removal
+                AyuHooks.willDeleteMessagesInRange(transaction: transaction, peerId: id.peerId, namespace: id.namespace, minId: 1, maxId: id.id, accountPeerId: accountPeerId, postbox: postbox)
                 var resourceIds: [MediaResourceId] = []
                 transaction.deleteMessagesInRange(peerId: id.peerId, namespace: id.namespace, minId: 1, maxId: id.id, forEachMedia: { media in
                     addMessageMediaResourceIdsToRemove(media: media, resourceIds: &resourceIds)
@@ -4486,6 +4503,8 @@ func replayFinalState(
                     invalidateGroupStats.insert(Namespaces.PeerGroup.archive)
                 }
             case let .EditMessage(id, message):
+                // MARK: AyuGram - preserve the previous revision before it's overwritten
+                AyuHooks.willReplaceMessage(transaction: transaction, id: id, accountPeerId: accountPeerId)
                 var generatedEvent: (reactionAuthor: Peer, reaction: MessageReaction.Reaction, message: Message, timestamp: Int32)?
                 transaction.updateMessage(id, update: { previousMessage in
                     var updatedFlags = message.flags
@@ -5077,11 +5096,11 @@ func replayFinalState(
 
                 if let peerId = peerId {
                     for id in messageIds {
-                        markMessageContentAsConsumedRemotely(transaction: transaction, messageId: MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: id), consumeDate: date)
+                        markMessageContentAsConsumedRemotely(transaction: transaction, mediaBox: mediaBox, accountPeerId: accountPeerId, messageId: MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: id), consumeDate: date)
                     }
                 } else {
                     for messageId in transaction.messageIdsForGlobalIds(messageIds) {
-                        markMessageContentAsConsumedRemotely(transaction: transaction, messageId: messageId, consumeDate: date)
+                        markMessageContentAsConsumedRemotely(transaction: transaction, mediaBox: mediaBox, accountPeerId: accountPeerId, messageId: messageId, consumeDate: date)
                     }
                 }
             case let .UpdateMessageImpressionCount(id, count):
@@ -6080,7 +6099,7 @@ func replayFinalState(
     for (uniqueId, messageIdValue) in finalState.state.updatedOutgoingUniqueMessageIds {
         if let peerId = removePossiblyDeliveredMessagesUniqueIds[uniqueId] {
             let messageId = MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: messageIdValue)
-            deleteMessagesInteractively(transaction: transaction, stateManager: nil, postbox: postbox, messageIds: [messageId], type: .forEveryone, deleteAllInGroup: false, removeIfPossiblyDelivered: false)
+            deleteMessagesInteractively(transaction: transaction, accountPeerId: accountPeerId, stateManager: nil, postbox: postbox, messageIds: [messageId], type: .forEveryone, deleteAllInGroup: false, removeIfPossiblyDelivered: false)
         }
     }
     

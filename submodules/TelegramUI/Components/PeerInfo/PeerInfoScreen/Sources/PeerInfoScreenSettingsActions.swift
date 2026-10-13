@@ -48,6 +48,12 @@ extension PeerInfoScreenNode {
         switch section {
         case .swiftgram:
             self.controller?.push(sgSettingsController(context: self.context))
+        case .ayugram: // MARK: AyuGram
+            self.controller?.push(ayuSettingsController(context: self.context))
+        case .exteragramSupport:
+            self.controller?.push(projectSupportController(context: self.context, kind: .exteraGram))
+        case .reqgram:
+            self.controller?.push(reqGramSettingsController(context: self.context))
         case .swiftgramPro:
             if self.context.sharedContext.immediateSGStatus.status > 1 {
                 self.controller?.push(self.context.sharedContext.makeSGProController(context: self.context))

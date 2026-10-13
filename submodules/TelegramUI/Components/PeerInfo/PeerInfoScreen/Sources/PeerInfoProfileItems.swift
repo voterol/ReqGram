@@ -21,6 +21,7 @@ import WebUI
 import AvatarNode
 import PeerNameColorItem
 import BoostLevelIconComponent
+import SGScamRegistry
 
 private let enabledPublicBioEntities: EnabledEntityTypes = [.allUrl, .mention, .hashtag]
 private let enabledPrivateBioEntities: EnabledEntityTypes = [.allUrl, .mention, .hashtag] // MARK: Swiftgram
@@ -941,6 +942,21 @@ func infoItems(
             interaction.openPeerInfoContextMenu(.copy(idText), sourceNode, nil)
         }, requestLayout: { _ in
             interaction.requestLayout(false)
+        }))
+        sgItemId += 1
+    }
+
+    // This is intentionally separate from Telegram's own scam label: it is a
+    // local, user-enabled match against the external GiD registry.
+    if case let .user(user) = data.peer,
+       user.id.namespace == Namespaces.Peer.CloudUser,
+       SGScamRegistryService.shared.currentSettings().enabled,
+       SGScamRegistryService.shared.contains(user.id.id._internalGetInt64Value()) {
+        let warningText = "SG.ScamWarning.Profile".i18n(presentationData.strings.baseLanguageCode)
+        items[.swiftgram]!.append(PeerInfoScreenCommentItem(id: "sgScamRegistryWarning", icon: .warning, text: warningText, isWarning: true, linkAction: { action in
+            if case let .tap(url) = action {
+                context.sharedContext.applicationBindings.openUrl(url)
+            }
         }))
         sgItemId += 1
     }

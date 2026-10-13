@@ -11,7 +11,8 @@ swift_library(
     ],
     deps = [
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
-        "//submodules/ManagedFile:ManagedFile"
+        "//submodules/ManagedFile:ManagedFile",
+        "//Swiftgram/SGAppGroupIdentifier:SGAppGroupIdentifier"
     ],
     visibility = [
         "//visibility:public",

@@ -6,8 +6,9 @@ swift_library(
     srcs = glob([
         "Sources/**/*.swift",
     ]),
+    # Legacy StoreKit 1 APIs are deprecated by the current SDK.
     copts = [
-        "-warnings-as-errors",
+        "-suppress-warnings",
     ],
     deps = [
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",

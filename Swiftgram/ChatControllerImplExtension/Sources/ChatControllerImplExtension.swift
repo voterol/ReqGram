@@ -142,6 +142,7 @@ extension ChatControllerImpl {
             let sortedMessages = messages.values.compactMap { $0?._asMessage() }.sorted { lhs, rhs in
                 return lhs.id < rhs.id
             }
+            let batchSize = SGSimpleSettings.shared.ayuBatchForwarding ? 100 : sortedMessages.count
             
             var attributes: [MessageAttribute] = []
             if removeNames {
@@ -170,7 +171,7 @@ extension ChatControllerImpl {
                 }), in: .current)
             }
 
-            let _ = (enqueueMessages(account: strongSelf.context.account, peerId: strongSelf.context.account.peerId, messages: sortedMessages.map { message -> EnqueueMessage in
+            let _ = (enqueueMessages(account: strongSelf.context.account, peerId: strongSelf.context.account.peerId, messages: stride(from: 0, to: sortedMessages.count, by: max(1, batchSize)).flatMap { start in sortedMessages[start ..< min(start + batchSize, sortedMessages.count)] }.map { message -> EnqueueMessage in
                 return .forward(source: message.id, threadId: nil, grouping: .auto, attributes: attributes, correlationId: nil)
             })
             |> deliverOnMainQueue).startStandalone(next: { messageIds in

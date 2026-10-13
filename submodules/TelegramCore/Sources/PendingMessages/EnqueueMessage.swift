@@ -3,6 +3,8 @@ import Postbox
 import TelegramApi
 import SwiftSignalKit
 import Emoji
+// MARK: AyuGram
+import SGSimpleSettings
 
 public enum EnqueueMessageGrouping {
     case none
@@ -610,9 +612,37 @@ public func enqueueMessages(account: Account, peerId: PeerId, messages: [Enqueue
             for messageId in ephemeralMessageIds {
                 let _ = _internal_sendEphemeralOutgoingMessage(account: account, messageId: messageId).startStandalone()
             }
+            // MARK: AyuGram - "mark read after action": when read receipts are
+            // suppressed, sending a message in a chat is an explicit action, so
+            // flush the pending read state for that peer once.
+            ayuMarkReadAfterActionIfNeeded(account: account, peerId: peerId)
             return resultIds
         }
     }
+}
+
+/// MARK: AyuGram
+/// Pushes the pending read state for `peerId` when the user acted in the chat
+/// while ghost mode was suppressing read receipts.
+///
+/// Without this, a chat the user actively replies in would stay unread for the
+/// other side indefinitely, which is a visible tell rather than stealth.
+func ayuMarkReadAfterActionIfNeeded(account: Account, peerId: PeerId) {
+    guard SGSimpleSettings.shared.isAyuBlockReadReceipts else { return }
+    guard SGSimpleSettings.shared.ayuGhostMarkReadAfterAction else { return }
+    guard peerId.namespace != Namespaces.Peer.SecretChat else { return }
+
+    let _ = (account.postbox.transaction { transaction -> MessageIndex? in
+        return transaction.getTopPeerMessageIndex(peerId: peerId)
+    }
+    |> deliverOnMainQueue).startStandalone(next: { index in
+        guard let index = index else { return }
+        // Bypasses the ghost gate deliberately: this is a user-initiated read.
+        let _ = account.postbox.transaction { transaction -> Void in
+            let _ = transaction.applyInteractiveReadMaxIndex(index)
+        }.startStandalone()
+        account.viewTracker.updateMarkAllMentionsSeen(peerId: peerId, threadId: nil)
+    })
 }
 
 public func resendMessages(account: Account, messageIds: [MessageId]) -> Signal<Void, NoError> {

@@ -18,9 +18,11 @@ extension Array: AllowedUserDefaultTypes where Element: AllowedUserDefaultTypes 
 // Does not support Optional types due to caching
 @propertyWrapper
 public class UserDefault<T> /*where T: AllowedUserDefaultTypes*/ {
+    public static var didChangeNotification: Notification.Name { Notification.Name("SGSimpleSettings.didChange") }
     public let key: String
     public let userDefaults: UserDefaults
     private var cachedValue: T?
+    private let cacheLock = NSLock()
     
     public init(key: String, userDefaults: UserDefaults = .standard) {
         self.key = key
@@ -29,6 +31,8 @@ public class UserDefault<T> /*where T: AllowedUserDefaultTypes*/ {
     
     public var wrappedValue: T {
         get {
+            self.cacheLock.lock()
+            defer { self.cacheLock.unlock() }
             #if DEBUG && false
             SGtrace("UD.\(key)", what: "GET")
             #endif
@@ -48,11 +52,18 @@ public class UserDefault<T> /*where T: AllowedUserDefaultTypes*/ {
             return cachedValue!
         }
         set {
+            self.cacheLock.lock()
             cachedValue = newValue
+            self.cacheLock.unlock()
+
             #if DEBUG
-            SGtrace("UD.\(key)", what: "CACHE UPDATED \(cachedValue!)")
+            SGtrace("UD.\(key)", what: "CACHE UPDATED \(newValue)")
             #endif
+            // UserDefaults posts didChangeNotification synchronously. Never
+            // hold the non-recursive cache lock while observers can re-enter a
+            // setting getter on the same thread.
             userDefaults.set(newValue, forKey: key)
+            NotificationCenter.default.post(name: UserDefault<T>.didChangeNotification, object: key)
         }
     }
     

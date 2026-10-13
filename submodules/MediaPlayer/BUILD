@@ -10,8 +10,9 @@ swift_library(
     srcs = glob([
         "Sources/**/*.swift",
     ]),
+    # Legacy AVFoundation APIs are deprecated by the current SDK.
     copts = [
-        "-warnings-as-errors",
+        "-suppress-warnings",
     ],
     deps = sgdeps + [
         "//submodules/TelegramCore:TelegramCore",

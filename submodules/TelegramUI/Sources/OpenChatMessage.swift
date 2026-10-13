@@ -257,7 +257,7 @@ func openChatMessageImpl(_ params: OpenChatMessageParams) -> Bool {
                                 }
                             }
                             
-                            let fileReference: FileMediaReference = .message(message: MessageReference(params.message), media: file)
+                            let fileReference: FileMediaReference = params.message.isAyuSyntheticDeletedMessage ? .standalone(media: file) : .message(message: MessageReference(params.message), media: file)
                             let subject: BrowserScreen.Subject
                             if file.mimeType.contains("markdown") {
                                 subject = .markdownDocument(file: fileReference, canShare: canShare)
@@ -296,7 +296,9 @@ func openChatMessageImpl(_ params: OpenChatMessageParams) -> Bool {
                     control = .seek(time)
                 }
                 if (file.isVoice || file.isInstantVideo) && params.message.tags.contains(.voiceOrInstantVideo) {
-                    if let playlistLocation = params.playlistLocation {
+                    if params.message.isAyuSyntheticDeletedMessage {
+                        location = .recentActions(params.message)
+                    } else if let playlistLocation = params.playlistLocation {
                         location = playlistLocation
                     } else if params.standalone {
                         location = .recentActions(params.message)
@@ -305,7 +307,9 @@ func openChatMessageImpl(_ params: OpenChatMessageParams) -> Bool {
                     }
                     playerType = .voice
                 } else if file.isMusic && params.message.tags.contains(.music) {
-                    if let playlistLocation = params.playlistLocation {
+                    if params.message.isAyuSyntheticDeletedMessage {
+                        location = .recentActions(params.message)
+                    } else if let playlistLocation = params.playlistLocation {
                         location = playlistLocation
                     } else if params.standalone {
                         location = .recentActions(params.message)
@@ -314,7 +318,9 @@ func openChatMessageImpl(_ params: OpenChatMessageParams) -> Bool {
                     }
                     playerType = .music
                 } else {
-                    if let playlistLocation = params.playlistLocation {
+                    if params.message.isAyuSyntheticDeletedMessage {
+                        location = .recentActions(params.message)
+                    } else if let playlistLocation = params.playlistLocation {
                         location = playlistLocation
                     } else if params.standalone {
                         location = .recentActions(params.message)

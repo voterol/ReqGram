@@ -346,6 +346,61 @@ public final class MediaBox {
             let _ = try? FileManager.default.copyItem(at: URL(fileURLWithPath: fromTempPath), to: URL(fileURLWithPath: paths.complete))
         }
     }
+
+    /// Publishes an already complete file without loading it into memory. The
+    /// caller can construct media only after this returns true, avoiding the
+    /// asynchronous copy/publication race of `copyResourceData`.
+    public func materializeResourceByLinkSynchronously(_ id: MediaResourceId, fromCompletePath: String, expectedSize: Int64) -> Bool {
+        guard expectedSize > 0, fileSize(fromCompletePath) == expectedSize else {
+            return false
+        }
+        var result = false
+        self.dataQueue.sync {
+            let paths = self.storePathsForId(id)
+            var sourceStat = stat()
+            var destinationStat = stat()
+            guard lstat(fromCompletePath, &sourceStat) == 0,
+                  (sourceStat.st_mode & S_IFMT) == S_IFREG,
+                  sourceStat.st_size == expectedSize else {
+                return
+            }
+            if
+               lstat(paths.complete, &destinationStat) == 0,
+               sourceStat.st_dev == destinationStat.st_dev,
+               sourceStat.st_ino == destinationStat.st_ino,
+               sourceStat.st_size == expectedSize {
+                result = true
+                return
+            }
+            let stagingPath = paths.complete + ".ayu-\(UUID().uuidString)"
+            defer {
+                let _ = try? FileManager.default.removeItem(atPath: stagingPath)
+            }
+            do {
+                // Preserved attachments and MediaBox live in the same app
+                // container/filesystem. A hard link is bounded; deliberately
+                // do not copy an unbounded file on the history/UI caller.
+                try FileManager.default.linkItem(atPath: fromCompletePath, toPath: stagingPath)
+                var stagingStat = stat()
+                guard lstat(stagingPath, &stagingStat) == 0,
+                      (stagingStat.st_mode & S_IFMT) == S_IFREG,
+                      stagingStat.st_dev == sourceStat.st_dev,
+                      stagingStat.st_ino == sourceStat.st_ino,
+                      stagingStat.st_size == expectedSize else {
+                    return
+                }
+                // A same-filesystem rename atomically replaces stale complete
+                // bytes without exposing a remove/move publication gap.
+                guard rename(stagingPath, paths.complete) == 0 else {
+                    return
+                }
+                result = fileSize(paths.complete) == expectedSize
+            } catch {
+                result = false
+            }
+        }
+        return result
+    }
     
     public func moveResourceData(from: MediaResourceId, to: MediaResourceId, synchronous: Bool = false) {
         if from == to {

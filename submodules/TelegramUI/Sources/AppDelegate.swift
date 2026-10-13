@@ -9,8 +9,11 @@ import SGActionRequestHandlerSanitizer
 import SGGHSettings
 import SGAPIWebSettings
 import SGLogging
+import SGAppGroupIdentifier
 import SGStrings
 import SGSimpleSettings
+import SGSettingsUI
+import AyuGram
 import UIKit
 import SwiftSignalKit
 import Display
@@ -241,6 +244,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     private var isInForegroundValue = false
     private let isActivePromise = ValuePromise<Bool>(false, ignoreRepeated: true)
     private var isActiveValue = false
+    private var ayuRemoteConfigRefreshTimer: SwiftSignalKit.Timer?
     let hasActiveAudioSession = Promise<Bool>(false)
     
     private let sharedContextPromise = Promise<SharedApplicationContext>()
@@ -303,7 +307,12 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         let appGroupName = "group.\(baseAppBundleId)"
 
         let configuration = URLSessionConfiguration.background(withIdentifier: identifier)
-        configuration.sharedContainerIdentifier = appGroupName
+        // MARK: Swiftgram
+        // Pointing a background session at a container the app is not entitled
+        // to use is rejected at runtime, so only set it when it is reachable.
+        if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName) != nil {
+            configuration.sharedContainerIdentifier = appGroupName
+        }
         configuration.isDiscretionary = false
         let session = URLSession(configuration: configuration, delegate: self, delegateQueue: .main)
         self.urlSessions.append(session)
@@ -546,8 +555,10 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
         
         let baseAppBundleId = Bundle.main.bundleIdentifier!
-        let appGroupName = "group.\(baseAppBundleId)"
-        let maybeAppGroupUrl = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName)
+        // MARK: Swiftgram
+        // Falls back to the app's private container when the app group
+        // entitlement is unavailable, so the app can still launch.
+        let maybeAppGroupUrl = sgAppGroupUrl()
         
         let buildConfig = BuildConfig(baseAppBundleId: baseAppBundleId)
         self.buildConfig = buildConfig
@@ -928,6 +939,9 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 }
             })
         }, requestSiriAuthorization: { completion in
+            #if targetEnvironment(simulator)
+            completion(false)
+            #else
             if #available(iOS 10, *) {
                 INPreferences.requestSiriAuthorization { status in
                     if case .authorized = status {
@@ -939,7 +953,11 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             } else {
                 completion(false)
             }
+            #endif
         }, siriAuthorization: {
+            #if targetEnvironment(simulator)
+            return .denied
+            #else
             if buildConfig.isSiriEnabled {
                 if #available(iOS 10, *) {
                     switch INPreferences.siriAuthorizationStatus() {
@@ -958,6 +976,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             } else {
                 return .denied
             }
+            #endif
         }, getWindowHost: {
             return self.nativeWindow
         }, presentNativeController: { controller in
@@ -1114,7 +1133,10 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             }
         }
         
-        let sharedContextSignal = currentPresentationDataAndSettings(accountManager: accountManager, systemUserInterfaceStyle: systemUserInterfaceStyle)
+        let sharedContextSignal = TgwsProxyCoordinator.shared.prepare(accountManager: accountManager)
+        |> mapToSignal { _ in
+            currentPresentationDataAndSettings(accountManager: accountManager, systemUserInterfaceStyle: systemUserInterfaceStyle)
+        }
         |> map { initialPresentationDataAndSettings -> (AccountManager, InitialPresentationDataAndSettings) in
             return (accountManager, initialPresentationDataAndSettings)
         }
@@ -1578,10 +1600,10 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         })
         
         if let url = launchOptions?[.url] {
-            if let url = url as? URL, url.scheme == "tg" || url.scheme == buildConfig.appSpecificUrlScheme {
+            if let url = url as? URL, let scheme = url.scheme?.lowercased(), scheme == "tg" || scheme == "sg" || scheme == "reqgram" || scheme == buildConfig.appSpecificUrlScheme.lowercased() {
                 self.openUrlWhenReady(url: sgActionRequestHandlerSanitizer(url), external: true)
-            } else if let urlString = url as? String, urlString.lowercased().hasPrefix("tg:") || urlString.lowercased().hasPrefix("\(buildConfig.appSpecificUrlScheme):"), let url = URL(string: urlString) {
-                self.openUrlWhenReady(url: url, external: true)
+            } else if let urlString = url as? String, let url = URL(string: urlString), let scheme = url.scheme?.lowercased(), scheme == "tg" || scheme == "sg" || scheme == "reqgram" || scheme == buildConfig.appSpecificUrlScheme.lowercased() {
+                self.openUrlWhenReady(url: sgActionRequestHandlerSanitizer(url), external: true)
             }
         }
         
@@ -1989,6 +2011,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     }
 
     func applicationDidEnterBackground(_ application: UIApplication) {
+        self.stopAyuRemoteConfigRefreshScheduler()
         let _ = (self.sharedContextPromise.get()
         |> take(1)
         |> deliverOnMainQueue).start(next: { sharedApplicationContext in
@@ -2078,10 +2101,14 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
+        reqGramRunEmbeddedDiagnosticIfRequested()
         self.isInForegroundValue = true
         self.isInForegroundPromise.set(true)
         self.isActiveValue = true
         self.isActivePromise.set(true)
+        self.runForegroundTasks()
+
+        self.startAyuRemoteConfigRefreshScheduler()
 
         self.resetBadge()
         
@@ -2104,6 +2131,23 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         }
         
         //cancelWindowPanGestures(view: self.mainWindow.hostView.containerView)
+    }
+
+    private func startAyuRemoteConfigRefreshScheduler() {
+        AyuRemoteConfig.shared.startIfNeeded()
+        guard self.ayuRemoteConfigRefreshTimer == nil else {
+            return
+        }
+        let timer = SwiftSignalKit.Timer(timeout: 60.0 * 60.0, repeat: true, completion: {
+            AyuRemoteConfig.shared.startIfNeeded()
+        }, queue: Queue.mainQueue())
+        self.ayuRemoteConfigRefreshTimer = timer
+        timer.start()
+    }
+
+    private func stopAyuRemoteConfigRefreshScheduler() {
+        self.ayuRemoteConfigRefreshTimer?.invalidate()
+        self.ayuRemoteConfigRefreshTimer = nil
     }
     
     func applicationWillTerminate(_ application: UIApplication) {
@@ -3558,12 +3602,10 @@ extension AppDelegate {
                         SGSimpleSettings.shared.primaryUserId = stringUserId
                     }
                 } else {
-                    SGLogger.shared.log("SGIAP", "Status expired")
-                    DispatchQueue.main.async {
-                        NotificationCenter.default.post(name: .SGIAPHelperValidationErrorNotification, object: nil, userInfo: ["error": "PayWall.ValidationError.Expired"])
-                    }
+                    // MARK: Swiftgram Pro is always unlocked in this build; ignore server-side downgrade
+                    SGLogger.shared.log("SGIAP", "Ignoring expired status (Pro unlocked in this build)")
                 }
-                value.status = newStatus
+                value.status = max(newStatus, 2)
             } else {
                 SGLogger.shared.log("SGIAP", "Status \(value.status) for \(userId) hasn't changed")
                 if newStatus < 2 {

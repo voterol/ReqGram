@@ -90,3 +90,13 @@ xcode-files
 **/node_modules/
 tools/sim-watcher/dist/
 .mcp.json
+
+# Local credentials, signing material, diagnostics, and downloaded binaries
+*.p12
+*.mobileprovision
+*.ips
+*.apk
+*.plugin
+*.ixplugin
+.coverage
+PersonalTeam.entitlements

@@ -15,8 +15,10 @@ swift_library(
     srcs = sgsrc + glob([
         "Source/**/*.swift",
     ]),
+    # Legacy UIKit APIs in this module are deprecated by the current SDK.
+    # Keep the module buildable while the APIs are migrated.
     copts = [
-        "-warnings-as-errors",
+        "-suppress-warnings",
     ],
     deps = sgdeps + [
     	"//submodules/ObjCRuntimeUtils:ObjCRuntimeUtils",

@@ -18,14 +18,21 @@ public class SGSimpleSettings {
         UserDefaults.standard.register(defaults: SGSimpleSettings.defaultValues)
         // Just in case group defaults will be nil
         UserDefaults.standard.register(defaults: SGSimpleSettings.groupDefaultValues)
-        if let groupUserDefaults = UserDefaults(suiteName: APP_GROUP_IDENTIFIER) {
+        if let groupUserDefaults = sgAppGroupUserDefaults() {
             groupUserDefaults.register(defaults: SGSimpleSettings.groupDefaultValues)
         }
     }
     
     private func migrate() {
+        // Locks were an experimental UI-only exception to the ghost master
+        // toggle. Clear persisted values so older installs cannot retain them.
+        UserDefaults.standard.removeObject(forKey: Keys.ayuGhostLockReadReceipts.rawValue)
+        UserDefaults.standard.removeObject(forKey: Keys.ayuGhostLockTyping.rawValue)
+        UserDefaults.standard.removeObject(forKey: Keys.ayuGhostLockOnlinePresence.rawValue)
+        UserDefaults.standard.removeObject(forKey: Keys.ayuGhostLockStoryViews.rawValue)
+
         let showRepostToStoryMigrationKey = "migrated_\(Keys.showRepostToStory.rawValue)"
-        if let groupUserDefaults = UserDefaults(suiteName: APP_GROUP_IDENTIFIER) {
+        if let groupUserDefaults = sgAppGroupUserDefaults() {
             if !groupUserDefaults.bool(forKey: showRepostToStoryMigrationKey) {
                 self.showRepostToStoryV2 = self.showRepostToStory
                 groupUserDefaults.set(true, forKey: showRepostToStoryMigrationKey)
@@ -87,7 +94,7 @@ public class SGSimpleSettings {
     }
     
     public func synchronizeShared() {
-        if let groupUserDefaults = UserDefaults(suiteName: APP_GROUP_IDENTIFIER) {
+        if let groupUserDefaults = sgAppGroupUserDefaults() {
             groupUserDefaults.synchronize()
         }
     }
@@ -176,6 +183,133 @@ public class SGSimpleSettings {
         case warnOnStoriesOpen
         case showProfileId
         case sendWithReturnKey
+        // MARK: ReqGram plugins
+         case reqGramGiftIdEnabled
+         case reqGramSendGiftByIdEnabled
+         case reqGramDeletedGiftSenderEnabled
+        case reqGramZwyLibEnabled
+         case reqGramLocalEdictorEnabled
+         case reqGramTextAnimationPrivateLetEnabled
+         case reqGramTextAnimationPrivateLetDuration
+         case reqGramTextAnimationPrivateLetBlurEnabled
+         case reqGramTextAnimationPrivateLetBlurDuration
+         case reqGramTextAnimationPrivateLetBlurRadius
+         case reqGramTextAnimationPrivateLetBlurTextDelay
+         case reqGramTextAnimationPrivateLetSlideEnabled
+         case reqGramTextAnimationPrivateLetSlideDist
+         case reqGramTextAnimationPrivateLetScaleEnabled
+         case reqGramTextAnimationPrivateLetScaleStart
+         case reqGramTextAnimationPrivateLetRotateEnabled
+         case reqGramTextAnimationPrivateLetRotateAngle
+         case reqGramTextAnimationPrivateLetDeleteAnimEnabled
+         case reqGramTextAnimationPrivateLetParticleStyle
+         case reqGramTextAnimationPrivateLetParticleCount
+         case reqGramTextAnimationPrivateLetParticleSpeed
+         case reqGramTextAnimationPrivateLetParticleSpread
+         case reqGramTextAnimationPrivateLetParticleSize
+         case reqGramTextAnimationPrivateLetCursorEnabled
+         case reqGramTextAnimationPrivateLetCursorSpeed
+         case reqGramTextAnimationPrivateLetCursorWidth
+         case reqGramTextAnimationPrivateLetLiquidCursorEnabled
+         case reqGramTextAnimationPrivateLetLiquidScaleFactor
+         case reqGramTextAnimationPrivateLetSelectionCursorEffect
+         case reqGramTextAnimationPrivateLetSelectionLiquidStretch
+         case reqGramTextAnimationPrivateLetSelectionLiquidSide
+         case reqGramTextAnimationPrivateLetIgnoreSpaces
+         case reqGramTextAnimationPrivateLetAnimateAllLines
+         case reqGramTextAnimationPrivateLetDebugMode
+        // MARK: AyuGram - settings keys
+        case ayuGhostMode
+        case ayuGhostBlockReadReceipts
+        case ayuGhostBlockTyping
+        case ayuGhostBlockOnlinePresence
+        case ayuGhostBlockStoryViews
+        case ayuSaveDeletedMessages
+        case ayuSaveEditedMessages
+        case ayuSaveMediaAttachments
+        case ayuShowGhostModeInProfile
+        case ayuMediaLimitBytes
+        case ayuDeletedIconStyle
+        case ayuDeletedIconColor
+        case ayuDeletedOpacity
+        case ayuShowDeletedInline
+        // MARK: AyuGram - ghost mode (extended)
+        case ayuGhostSendOfflineAfterOnline
+        case ayuGhostMarkReadAfterAction
+        case ayuGhostUseScheduledMessages
+        case ayuGhostSendWithoutSound
+        case ayuGhostSuggestBeforeStory
+        case ayuGhostLockReadReceipts
+        case ayuGhostLockTyping
+        case ayuGhostLockOnlinePresence
+        case ayuGhostLockStoryViews
+        // MARK: AyuGram - message saving (extended)
+        case ayuSaveForBots
+        case ayuSaveMediaInPrivateChats
+        case ayuSaveMediaInPublicChannels
+        case ayuSaveMediaInPrivateChannels
+        case ayuSaveMediaInPublicGroups
+        case ayuSaveMediaInPrivateGroups
+        case ayuSaveReactions
+        // MARK: AyuGram - marks
+        case ayuEditedMark
+        case ayuSemiTransparentDeleted
+        // MARK: AyuGram - regex filters
+        case ayuFiltersEnabled
+        case ayuFiltersInChats
+         case ayuFiltersCaseInsensitive
+         case ayuBatchForwarding
+        case ayuHideFromBlocked
+        case ayuRegexFilters
+        case ayuShadowBanIds
+        // MARK: AyuGram - appearance / chats
+        case ayuDisableAds
+        case ayuDisableStories
+        case ayuDisableCustomBackgrounds
+        case ayuHidePremiumStatuses
+        case ayuShowOnlyAddedEmojisAndStickers
+        case ayuCollapseSimilarChannels
+        case ayuHideSimilarChannels
+        case ayuMessageBubbleRadius
+        case ayuAvatarCorners
+        case ayuDisableOpenLinkWarning
+        case ayuRemoveMessageTail
+        case ayuSimpleQuotesAndReplies
+        case ayuHideFastShare
+        case ayuLocalPremium
+        case ayuShowChannelReactions
+        case ayuShowGroupReactions
+        case ayuShowPrivateChatReactions
+        case ayuUnlimitedRecentStickers
+        case ayuShowMessageSeconds
+        case ayuShowPeerId
+        case ayuFilterZalgo
+        case ayuHideAllChatsFolder
+        case ayuDisableGreetingSticker
+        case ayuChannelBottomButton
+        case ayuHideNotificationCounters
+        case ayuHideNotificationBadge
+        case ayuStickerConfirmation
+        case ayuGifConfirmation
+        case ayuVoiceConfirmation
+        case ayuRoundConfirmation
+        case ayuSpoofWebviewAsAndroid
+        // MARK: AyuGram - context menu visibility
+        case ayuShowMessageDetailsInContextMenu
+        case ayuShowHideMessageInContextMenu
+        case ayuShowUserMessagesInContextMenu
+        case ayuShowRepeatMessageInContextMenu
+        case ayuShowAddFilterInContextMenu
+        case ayuShowSaveMessageInContextMenu
+        // MARK: AyuGram - remote config (RCManager)
+        case ayuRCEnabled
+        case ayuRCLastFetch
+        case ayuRCPayload
+        // MARK: AyuGram - misc
+        case ayuStreamerMode
+        case ayuKeepDeletedOnOwnDelete
+        // Enables the opt-in, incrementally migrated Telegram 12.1.1 UI surface.
+        case telegram1211LegacyDesign
     }
     
     public enum DownloadSpeedBoostValues: String, CaseIterable {
@@ -249,6 +383,39 @@ public class SGSimpleSettings {
         case `default`
         case snow
         case lightning
+    }
+
+    // MARK: AyuGram - typed setting enums
+
+    /// When to force outgoing messages to be silent.
+    public enum AyuSendWithoutSound: String, CaseIterable {
+        case never
+        /// Only while ghost mode is active.
+        case ghost
+        case always
+    }
+
+    /// How a peer id is rendered in profiles and message details.
+    public enum AyuPeerIdDisplay: String, CaseIterable {
+        case hidden
+        /// Raw Telegram API id (e.g. `1234567890`).
+        case telegram
+        /// Bot API id (channels/groups negated and prefixed).
+        case bot
+    }
+
+    /// Bottom button shown in broadcast channels.
+    public enum AyuChannelBottomButton: String, CaseIterable {
+        case hidden
+        case mute
+        /// Discussion group, falling back to mute/unmute when there is none.
+        case discuss
+    }
+
+    /// Visibility of an optional context-menu entry.
+    public enum AyuContextMenuVisibility: String, CaseIterable {
+        case hidden
+        case visible
     }
     
     public static let defaultValues: [String: Any] = [
@@ -328,7 +495,150 @@ public class SGSimpleSettings {
         Keys.hideStories.rawValue: false,
         Keys.warnOnStoriesOpen.rawValue: false,
         Keys.showProfileId.rawValue: true,
-        Keys.sendWithReturnKey.rawValue: false
+        Keys.sendWithReturnKey.rawValue: false,
+         // MARK: ReqGram plugin defaults
+          Keys.reqGramGiftIdEnabled.rawValue: false,
+          Keys.reqGramSendGiftByIdEnabled.rawValue: false,
+         // Native iOS forwarding/deletion already batches requests at Telegram's
+         // supported limit. Keep the optional high-level feature disabled until
+         // an explicit native entry point is added; never alter protected-content
+         // checks or low-level request batching.
+          Keys.reqGramTextAnimationPrivateLetEnabled.rawValue: false,
+          Keys.reqGramTextAnimationPrivateLetDuration.rawValue: 300,
+          Keys.reqGramTextAnimationPrivateLetBlurEnabled.rawValue: true,
+          Keys.reqGramTextAnimationPrivateLetBlurDuration.rawValue: 100,
+          Keys.reqGramTextAnimationPrivateLetBlurRadius.rawValue: 10,
+          Keys.reqGramTextAnimationPrivateLetBlurTextDelay.rawValue: 20,
+          Keys.reqGramTextAnimationPrivateLetSlideEnabled.rawValue: true,
+          Keys.reqGramTextAnimationPrivateLetSlideDist.rawValue: 20,
+          Keys.reqGramTextAnimationPrivateLetScaleEnabled.rawValue: false,
+          Keys.reqGramTextAnimationPrivateLetScaleStart.rawValue: 0.0,
+          Keys.reqGramTextAnimationPrivateLetRotateEnabled.rawValue: false,
+          Keys.reqGramTextAnimationPrivateLetRotateAngle.rawValue: -15,
+          Keys.reqGramTextAnimationPrivateLetDeleteAnimEnabled.rawValue: true,
+          Keys.reqGramTextAnimationPrivateLetParticleStyle.rawValue: 0,
+          Keys.reqGramTextAnimationPrivateLetParticleCount.rawValue: 5,
+          Keys.reqGramTextAnimationPrivateLetParticleSpeed.rawValue: 50,
+          Keys.reqGramTextAnimationPrivateLetParticleSpread.rawValue: 50,
+          Keys.reqGramTextAnimationPrivateLetParticleSize.rawValue: 50,
+          Keys.reqGramTextAnimationPrivateLetCursorEnabled.rawValue: true,
+           Keys.reqGramTextAnimationPrivateLetCursorSpeed.rawValue: 30,
+          Keys.reqGramTextAnimationPrivateLetCursorWidth.rawValue: 5,
+          Keys.reqGramTextAnimationPrivateLetLiquidCursorEnabled.rawValue: false,
+          Keys.reqGramTextAnimationPrivateLetLiquidScaleFactor.rawValue: 15,
+          Keys.reqGramTextAnimationPrivateLetSelectionCursorEffect.rawValue: 0,
+          Keys.reqGramTextAnimationPrivateLetSelectionLiquidStretch.rawValue: 60,
+          Keys.reqGramTextAnimationPrivateLetSelectionLiquidSide.rawValue: 50,
+          Keys.reqGramTextAnimationPrivateLetIgnoreSpaces.rawValue: true,
+          Keys.reqGramTextAnimationPrivateLetAnimateAllLines.rawValue: false,
+          Keys.reqGramTextAnimationPrivateLetDebugMode.rawValue: false,
+         // These Android plugins have no native iOS implementation; keep their
+        // gates off rather than implying unsupported behavior is active.
+        Keys.reqGramDeletedGiftSenderEnabled.rawValue: false,
+        Keys.reqGramZwyLibEnabled.rawValue: false,
+         Keys.reqGramLocalEdictorEnabled.rawValue: false,
+        // MARK: AyuGram - default values
+        Keys.ayuGhostMode.rawValue: false,
+        Keys.ayuGhostBlockReadReceipts.rawValue: true,
+        Keys.ayuGhostBlockTyping.rawValue: true,
+        Keys.ayuGhostBlockOnlinePresence.rawValue: true,
+        Keys.ayuGhostBlockStoryViews.rawValue: true,
+        Keys.ayuSaveDeletedMessages.rawValue: false,
+        Keys.ayuSaveEditedMessages.rawValue: false,
+        Keys.ayuSaveMediaAttachments.rawValue: false,
+        Keys.ayuShowGhostModeInProfile.rawValue: false,
+        // 50 MB default per-file media limit (0 = unlimited)
+        Keys.ayuMediaLimitBytes.rawValue: 50 * 1024 * 1024,
+        Keys.ayuDeletedIconStyle.rawValue: "trash",
+        Keys.ayuDeletedIconColor.rawValue: "theme",
+        // Legacy value retained for preferences compatibility. Inline and saved
+        // deleted-message presentation is controlled by ayuSemiTransparentDeleted.
+        Keys.ayuDeletedOpacity.rawValue: 70,
+        Keys.ayuShowDeletedInline.rawValue: true,
+        // MARK: AyuGram - ghost mode (extended) defaults
+        Keys.ayuGhostSendOfflineAfterOnline.rawValue: false,
+        Keys.ayuGhostMarkReadAfterAction.rawValue: true,
+        Keys.ayuGhostUseScheduledMessages.rawValue: false,
+        // SendWithoutSound: "never" | "ghost" | "always"
+        Keys.ayuGhostSendWithoutSound.rawValue: "never",
+        Keys.ayuGhostSuggestBeforeStory.rawValue: true,
+        Keys.ayuGhostLockReadReceipts.rawValue: false,
+        Keys.ayuGhostLockTyping.rawValue: false,
+        Keys.ayuGhostLockOnlinePresence.rawValue: false,
+        Keys.ayuGhostLockStoryViews.rawValue: false,
+        // MARK: AyuGram - message saving (extended) defaults
+        Keys.ayuSaveForBots.rawValue: false,
+        Keys.ayuSaveMediaInPrivateChats.rawValue: true,
+        Keys.ayuSaveMediaInPublicChannels.rawValue: false,
+        Keys.ayuSaveMediaInPrivateChannels.rawValue: true,
+        Keys.ayuSaveMediaInPublicGroups.rawValue: false,
+        Keys.ayuSaveMediaInPrivateGroups.rawValue: true,
+        Keys.ayuSaveReactions.rawValue: true,
+        // MARK: AyuGram - marks defaults
+        // Empty means "use the app's own localized 'edited' label".
+        Keys.ayuEditedMark.rawValue: "",
+        Keys.ayuSemiTransparentDeleted.rawValue: true,
+        // MARK: AyuGram - regex filters defaults
+        Keys.ayuFiltersEnabled.rawValue: false,
+        Keys.ayuFiltersInChats.rawValue: false,
+        Keys.ayuFiltersCaseInsensitive.rawValue: true,
+        Keys.ayuHideFromBlocked.rawValue: false,
+        // JSON array of AyuRegexFilter objects.
+        Keys.ayuRegexFilters.rawValue: "[]",
+        // JSON array of Int64 peer ids.
+        Keys.ayuShadowBanIds.rawValue: "[]",
+        // MARK: AyuGram - appearance / chats defaults
+        Keys.ayuDisableAds.rawValue: true,
+        Keys.ayuDisableStories.rawValue: false,
+        Keys.ayuDisableCustomBackgrounds.rawValue: false,
+        Keys.ayuHidePremiumStatuses.rawValue: false,
+        Keys.ayuShowOnlyAddedEmojisAndStickers.rawValue: false,
+        Keys.ayuCollapseSimilarChannels.rawValue: true,
+        Keys.ayuHideSimilarChannels.rawValue: false,
+        // -1 means "use the app default radius".
+        Keys.ayuMessageBubbleRadius.rawValue: -1,
+        // Percentage of half-height; 50 = fully round, matches Telegram default.
+        Keys.ayuAvatarCorners.rawValue: 50,
+        Keys.ayuDisableOpenLinkWarning.rawValue: false,
+        Keys.ayuRemoveMessageTail.rawValue: false,
+        Keys.ayuSimpleQuotesAndReplies.rawValue: false,
+        Keys.ayuHideFastShare.rawValue: false,
+        Keys.ayuLocalPremium.rawValue: false,
+        Keys.ayuShowChannelReactions.rawValue: true,
+        Keys.ayuShowGroupReactions.rawValue: true,
+        Keys.ayuShowPrivateChatReactions.rawValue: true,
+        Keys.ayuUnlimitedRecentStickers.rawValue: false,
+        Keys.ayuShowMessageSeconds.rawValue: false,
+        // PeerIdDisplay: "hidden" | "telegram" | "bot"
+        Keys.ayuShowPeerId.rawValue: "bot",
+        Keys.ayuFilterZalgo.rawValue: false,
+        Keys.ayuHideAllChatsFolder.rawValue: false,
+        Keys.ayuDisableGreetingSticker.rawValue: false,
+        // ChannelBottomButton: "hidden" | "mute" | "discuss"
+        Keys.ayuChannelBottomButton.rawValue: "discuss",
+        Keys.ayuHideNotificationCounters.rawValue: false,
+        Keys.ayuHideNotificationBadge.rawValue: false,
+        Keys.ayuStickerConfirmation.rawValue: false,
+        Keys.ayuGifConfirmation.rawValue: false,
+        Keys.ayuVoiceConfirmation.rawValue: false,
+        Keys.ayuRoundConfirmation.rawValue: false,
+        Keys.ayuSpoofWebviewAsAndroid.rawValue: false,
+        // MARK: AyuGram - context menu visibility defaults
+        // ContextMenuVisibility: "hidden" | "visible"
+        Keys.ayuShowMessageDetailsInContextMenu.rawValue: "visible",
+        Keys.ayuShowHideMessageInContextMenu.rawValue: "hidden",
+        Keys.ayuShowUserMessagesInContextMenu.rawValue: "visible",
+        Keys.ayuShowRepeatMessageInContextMenu.rawValue: "hidden",
+        Keys.ayuShowAddFilterInContextMenu.rawValue: "visible",
+        Keys.ayuShowSaveMessageInContextMenu.rawValue: "visible",
+        // MARK: AyuGram - remote config defaults
+        Keys.ayuRCEnabled.rawValue: false,
+        Keys.ayuRCLastFetch.rawValue: 0,
+        Keys.ayuRCPayload.rawValue: "",
+        // MARK: AyuGram - misc defaults
+        Keys.ayuStreamerMode.rawValue: false,
+        Keys.ayuKeepDeletedOnOwnDelete.rawValue: false,
+        Keys.telegram1211LegacyDesign.rawValue: false
     ]
     
     public static let groupDefaultValues: [String: Any] = [
@@ -341,6 +651,11 @@ public class SGSimpleSettings {
     
     @UserDefault(key: Keys.hidePhoneInSettings.rawValue)
     public var hidePhoneInSettings: Bool
+
+    /// Opt-in legacy design mode. This is a feature gate for screen-by-screen migration,
+    /// not a claim that the complete historical UI has been restored.
+    @UserDefault(key: Keys.telegram1211LegacyDesign.rawValue)
+    public var telegram1211LegacyDesign: Bool
     
     @UserDefault(key: Keys.showTabNames.rawValue)
     public var showTabNames: Bool
@@ -407,7 +722,7 @@ public class SGSimpleSettings {
     @UserDefault(key: Keys.showRepostToStory.rawValue)
     public var showRepostToStory: Bool
 
-    @UserDefault(key: Keys.showRepostToStoryV2.rawValue, userDefaults: UserDefaults(suiteName: APP_GROUP_IDENTIFIER) ?? .standard)
+    @UserDefault(key: Keys.showRepostToStoryV2.rawValue, userDefaults: sgAppGroupUserDefaults() ?? .standard)
     public var showRepostToStoryV2: Bool
 
     @UserDefault(key: Keys.contextShowRestrict.rawValue)
@@ -540,10 +855,10 @@ public class SGSimpleSettings {
     @UserDefault(key: Keys.videoPIPSwipeDirection.rawValue)
     public var videoPIPSwipeDirection: String
 
-    @UserDefault(key: Keys.legacyNotificationsFix.rawValue, userDefaults: UserDefaults(suiteName: APP_GROUP_IDENTIFIER) ?? .standard)
+    @UserDefault(key: Keys.legacyNotificationsFix.rawValue, userDefaults: sgAppGroupUserDefaults() ?? .standard)
     public var legacyNotificationsFix: Bool
     
-    @UserDefault(key: Keys.status.rawValue, userDefaults: UserDefaults(suiteName: APP_GROUP_IDENTIFIER) ?? .standard)
+    @UserDefault(key: Keys.status.rawValue, userDefaults: sgAppGroupUserDefaults() ?? .standard)
     public var status: Int64
 
     public var ephemeralStatus: Int64 = 1
@@ -557,10 +872,10 @@ public class SGSimpleSettings {
     @UserDefault(key: Keys.sendWithReturnKey.rawValue)
     public var sendWithReturnKey: Bool
     
-    @UserDefault(key: Keys.pinnedMessageNotifications.rawValue, userDefaults: UserDefaults(suiteName: APP_GROUP_IDENTIFIER) ?? .standard)
+    @UserDefault(key: Keys.pinnedMessageNotifications.rawValue, userDefaults: sgAppGroupUserDefaults() ?? .standard)
     public var pinnedMessageNotifications: String
     
-    @UserDefault(key: Keys.mentionsAndRepliesNotifications.rawValue, userDefaults: UserDefaults(suiteName: APP_GROUP_IDENTIFIER) ?? .standard)
+    @UserDefault(key: Keys.mentionsAndRepliesNotifications.rawValue, userDefaults: sgAppGroupUserDefaults() ?? .standard)
     public var mentionsAndRepliesNotifications: String
     
     @UserDefault(key: Keys.primaryUserId.rawValue)
@@ -592,13 +907,437 @@ public class SGSimpleSettings {
     
     @UserDefault(key: Keys.tabBarSearchEnabled.rawValue)
     public var tabBarSearchEnabled: Bool
+
+    // MARK: ReqGram plugin settings
+    @UserDefault(key: Keys.reqGramGiftIdEnabled.rawValue)
+    public var reqGramGiftIdEnabled: Bool
+
+    @UserDefault(key: Keys.reqGramSendGiftByIdEnabled.rawValue)
+    public var reqGramSendGiftByIdEnabled: Bool
+
+    @UserDefault(key: Keys.reqGramDeletedGiftSenderEnabled.rawValue)
+    public var reqGramDeletedGiftSenderEnabled: Bool
+
+    @UserDefault(key: Keys.reqGramZwyLibEnabled.rawValue)
+    public var reqGramZwyLibEnabled: Bool
+
+    @UserDefault(key: Keys.reqGramLocalEdictorEnabled.rawValue)
+    public var reqGramLocalEdictorEnabled: Bool
+
+
+    @UserDefault(key: Keys.reqGramTextAnimationPrivateLetEnabled.rawValue)
+     public var reqGramTextAnimationPrivateLetEnabled: Bool
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetDuration.rawValue) public var reqGramTextAnimationPrivateLetDuration: Int
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetBlurEnabled.rawValue) public var reqGramTextAnimationPrivateLetBlurEnabled: Bool
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetBlurDuration.rawValue) public var reqGramTextAnimationPrivateLetBlurDuration: Int
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetBlurRadius.rawValue) public var reqGramTextAnimationPrivateLetBlurRadius: Int
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetBlurTextDelay.rawValue) public var reqGramTextAnimationPrivateLetBlurTextDelay: Int
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetSlideEnabled.rawValue) public var reqGramTextAnimationPrivateLetSlideEnabled: Bool
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetSlideDist.rawValue) public var reqGramTextAnimationPrivateLetSlideDist: Int
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetScaleEnabled.rawValue) public var reqGramTextAnimationPrivateLetScaleEnabled: Bool
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetScaleStart.rawValue) public var reqGramTextAnimationPrivateLetScaleStart: Double
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetRotateEnabled.rawValue) public var reqGramTextAnimationPrivateLetRotateEnabled: Bool
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetRotateAngle.rawValue) public var reqGramTextAnimationPrivateLetRotateAngle: Int
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetDeleteAnimEnabled.rawValue) public var reqGramTextAnimationPrivateLetDeleteAnimEnabled: Bool
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetParticleStyle.rawValue) public var reqGramTextAnimationPrivateLetParticleStyle: Int
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetParticleCount.rawValue) public var reqGramTextAnimationPrivateLetParticleCount: Int
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetParticleSpeed.rawValue) public var reqGramTextAnimationPrivateLetParticleSpeed: Int
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetParticleSpread.rawValue) public var reqGramTextAnimationPrivateLetParticleSpread: Int
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetParticleSize.rawValue) public var reqGramTextAnimationPrivateLetParticleSize: Int
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetCursorEnabled.rawValue) public var reqGramTextAnimationPrivateLetCursorEnabled: Bool
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetCursorSpeed.rawValue) public var reqGramTextAnimationPrivateLetCursorSpeed: Int
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetCursorWidth.rawValue) public var reqGramTextAnimationPrivateLetCursorWidth: Int
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetLiquidCursorEnabled.rawValue) public var reqGramTextAnimationPrivateLetLiquidCursorEnabled: Bool
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetLiquidScaleFactor.rawValue) public var reqGramTextAnimationPrivateLetLiquidScaleFactor: Int
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetSelectionCursorEffect.rawValue) public var reqGramTextAnimationPrivateLetSelectionCursorEffect: Int
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetSelectionLiquidStretch.rawValue) public var reqGramTextAnimationPrivateLetSelectionLiquidStretch: Int
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetSelectionLiquidSide.rawValue) public var reqGramTextAnimationPrivateLetSelectionLiquidSide: Int
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetIgnoreSpaces.rawValue) public var reqGramTextAnimationPrivateLetIgnoreSpaces: Bool
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetAnimateAllLines.rawValue) public var reqGramTextAnimationPrivateLetAnimateAllLines: Bool
+     @UserDefault(key: Keys.reqGramTextAnimationPrivateLetDebugMode.rawValue) public var reqGramTextAnimationPrivateLetDebugMode: Bool
+
+
+    // MARK: AyuGram - settings properties
+    /// Master ghost-mode toggle. Sub-toggles only take effect when this is true.
+    @UserDefault(key: Keys.ayuGhostMode.rawValue)
+    public var ayuGhostMode: Bool
+
+    @UserDefault(key: Keys.ayuGhostBlockReadReceipts.rawValue)
+    public var ayuGhostBlockReadReceipts: Bool
+
+    @UserDefault(key: Keys.ayuGhostBlockTyping.rawValue)
+    public var ayuGhostBlockTyping: Bool
+
+    @UserDefault(key: Keys.ayuGhostBlockOnlinePresence.rawValue)
+    public var ayuGhostBlockOnlinePresence: Bool
+
+    @UserDefault(key: Keys.ayuGhostBlockStoryViews.rawValue)
+    public var ayuGhostBlockStoryViews: Bool
+
+    @UserDefault(key: Keys.ayuSaveDeletedMessages.rawValue)
+    public var ayuSaveDeletedMessages: Bool
+
+    @UserDefault(key: Keys.ayuSaveEditedMessages.rawValue)
+    public var ayuSaveEditedMessages: Bool
+
+    @UserDefault(key: Keys.ayuSaveMediaAttachments.rawValue)
+    public var ayuSaveMediaAttachments: Bool
+
+    /// Show the Ghost Mode quick toggle in profiles (own settings screen and peer info).
+    @UserDefault(key: Keys.ayuShowGhostModeInProfile.rawValue)
+    public var ayuShowGhostModeInProfile: Bool
+
+    /// Maximum size of a single preserved media attachment, in bytes. 0 = unlimited.
+    @UserDefault(key: Keys.ayuMediaLimitBytes.rawValue)
+    public var ayuMediaLimitBytes: Int64
+
+    /// Native marker style: "none" | "trash" | "cross" | "crossed-eye".
+    @UserDefault(key: Keys.ayuDeletedIconStyle.rawValue)
+    public var ayuDeletedIconStyle: String
+
+    /// Marker tint: "theme" or one of the fixed AyuGram palette names.
+    @UserDefault(key: Keys.ayuDeletedIconColor.rawValue)
+    public var ayuDeletedIconColor: String
+
+    /// Opacity of deleted-message content in the viewer, percent 0–100.
+    @UserDefault(key: Keys.ayuDeletedOpacity.rawValue)
+    public var ayuDeletedOpacity: Int
+
+    /// Show preserved deleted messages inline in the chat history.
+    @UserDefault(key: Keys.ayuShowDeletedInline.rawValue)
+    public var ayuShowDeletedInline: Bool
+
+    // MARK: AyuGram - ghost mode (extended)
+
+    /// Periodically force an `offline` status update after the client goes online.
+    /// Note the inverted polarity: enabling this *adds* traffic rather than blocking it.
+    @UserDefault(key: Keys.ayuGhostSendOfflineAfterOnline.rawValue)
+    public var ayuGhostSendOfflineAfterOnline: Bool
+
+    /// When read receipts are blocked, still mark a chat read once the user acts in it.
+    @UserDefault(key: Keys.ayuGhostMarkReadAfterAction.rawValue)
+    public var ayuGhostMarkReadAfterAction: Bool
+
+    /// Send via the scheduled-message path so sending does not flip presence to online.
+    @UserDefault(key: Keys.ayuGhostUseScheduledMessages.rawValue)
+    public var ayuGhostUseScheduledMessages: Bool
+
+    /// `SendWithoutSound` raw value: "never" | "ghost" | "always".
+    @UserDefault(key: Keys.ayuGhostSendWithoutSound.rawValue)
+    public var ayuGhostSendWithoutSound: String
+
+    /// Offer to enable ghost mode before opening a story.
+    @UserDefault(key: Keys.ayuGhostSuggestBeforeStory.rawValue)
+    public var ayuGhostSuggestBeforeStory: Bool
+
+    /// Per-toggle locks: a locked sub-toggle is not flipped by the master switch.
+    @UserDefault(key: Keys.ayuGhostLockReadReceipts.rawValue)
+    public var ayuGhostLockReadReceipts: Bool
+
+    @UserDefault(key: Keys.ayuGhostLockTyping.rawValue)
+    public var ayuGhostLockTyping: Bool
+
+    @UserDefault(key: Keys.ayuGhostLockOnlinePresence.rawValue)
+    public var ayuGhostLockOnlinePresence: Bool
+
+    @UserDefault(key: Keys.ayuGhostLockStoryViews.rawValue)
+    public var ayuGhostLockStoryViews: Bool
+
+    // MARK: AyuGram - message saving (extended)
+
+    /// Preserve messages in bot dialogs too.
+    @UserDefault(key: Keys.ayuSaveForBots.rawValue)
+    public var ayuSaveForBots: Bool
+
+    @UserDefault(key: Keys.ayuSaveMediaInPrivateChats.rawValue)
+    public var ayuSaveMediaInPrivateChats: Bool
+
+    @UserDefault(key: Keys.ayuSaveMediaInPublicChannels.rawValue)
+    public var ayuSaveMediaInPublicChannels: Bool
+
+    @UserDefault(key: Keys.ayuSaveMediaInPrivateChannels.rawValue)
+    public var ayuSaveMediaInPrivateChannels: Bool
+
+    @UserDefault(key: Keys.ayuSaveMediaInPublicGroups.rawValue)
+    public var ayuSaveMediaInPublicGroups: Bool
+
+    @UserDefault(key: Keys.ayuSaveMediaInPrivateGroups.rawValue)
+    public var ayuSaveMediaInPrivateGroups: Bool
+
+    /// Preserve reactions alongside a deleted message.
+    @UserDefault(key: Keys.ayuSaveReactions.rawValue)
+    public var ayuSaveReactions: Bool
+
+    // MARK: AyuGram - marks
+
+    /// Replacement for the "edited" label. Empty = use the app's localized label.
+    @UserDefault(key: Keys.ayuEditedMark.rawValue)
+    public var ayuEditedMark: String
+
+    /// Render preserved deleted messages semi-transparent inline.
+    @UserDefault(key: Keys.ayuSemiTransparentDeleted.rawValue)
+    public var ayuSemiTransparentDeleted: Bool
+
+    // MARK: AyuGram - regex filters
+
+    @UserDefault(key: Keys.ayuFiltersEnabled.rawValue)
+    public var ayuFiltersEnabled: Bool
+
+    /// Apply filters outside broadcast channels as well.
+    @UserDefault(key: Keys.ayuFiltersInChats.rawValue)
+    public var ayuFiltersInChats: Bool
+
+    @UserDefault(key: Keys.ayuFiltersCaseInsensitive.rawValue)
+    public var ayuFiltersCaseInsensitive: Bool
+
+    @UserDefault(key: Keys.ayuBatchForwarding.rawValue)
+    public var ayuBatchForwarding: Bool
+
+    /// Hide messages authored by blocked users.
+    @UserDefault(key: Keys.ayuHideFromBlocked.rawValue)
+    public var ayuHideFromBlocked: Bool
+
+    /// JSON-encoded `[AyuRegexFilter]`.
+    @UserDefault(key: Keys.ayuRegexFilters.rawValue)
+    public var ayuRegexFilters: String
+
+    /// JSON-encoded `[Int64]` of shadow-banned peer ids.
+    @UserDefault(key: Keys.ayuShadowBanIds.rawValue)
+    public var ayuShadowBanIds: String
+
+    // MARK: AyuGram - appearance / chats
+
+    @UserDefault(key: Keys.ayuDisableAds.rawValue)
+    public var ayuDisableAds: Bool
+
+    @UserDefault(key: Keys.ayuDisableStories.rawValue)
+    public var ayuDisableStories: Bool
+
+    @UserDefault(key: Keys.ayuDisableCustomBackgrounds.rawValue)
+    public var ayuDisableCustomBackgrounds: Bool
+
+    @UserDefault(key: Keys.ayuHidePremiumStatuses.rawValue)
+    public var ayuHidePremiumStatuses: Bool
+
+    @UserDefault(key: Keys.ayuShowOnlyAddedEmojisAndStickers.rawValue)
+    public var ayuShowOnlyAddedEmojisAndStickers: Bool
+
+    @UserDefault(key: Keys.ayuCollapseSimilarChannels.rawValue)
+    public var ayuCollapseSimilarChannels: Bool
+
+    @UserDefault(key: Keys.ayuHideSimilarChannels.rawValue)
+    public var ayuHideSimilarChannels: Bool
+
+    /// Message bubble corner radius in points; -1 = app default.
+    @UserDefault(key: Keys.ayuMessageBubbleRadius.rawValue)
+    public var ayuMessageBubbleRadius: Int
+
+    /// Avatar corner rounding as a percentage of half the avatar height; 50 = circle.
+    @UserDefault(key: Keys.ayuAvatarCorners.rawValue)
+    public var ayuAvatarCorners: Int
+
+    @UserDefault(key: Keys.ayuDisableOpenLinkWarning.rawValue)
+    public var ayuDisableOpenLinkWarning: Bool
+
+    @UserDefault(key: Keys.ayuRemoveMessageTail.rawValue)
+    public var ayuRemoveMessageTail: Bool
+
+    @UserDefault(key: Keys.ayuSimpleQuotesAndReplies.rawValue)
+    public var ayuSimpleQuotesAndReplies: Bool
+
+    @UserDefault(key: Keys.ayuHideFastShare.rawValue)
+    public var ayuHideFastShare: Bool
+
+    /// Client-side Premium emulation. Does not unlock server-side features.
+    @UserDefault(key: Keys.ayuLocalPremium.rawValue)
+    public var ayuLocalPremium: Bool
+
+    @UserDefault(key: Keys.ayuShowChannelReactions.rawValue)
+    public var ayuShowChannelReactions: Bool
+
+    @UserDefault(key: Keys.ayuShowGroupReactions.rawValue)
+    public var ayuShowGroupReactions: Bool
+
+    @UserDefault(key: Keys.ayuShowPrivateChatReactions.rawValue)
+    public var ayuShowPrivateChatReactions: Bool
+
+    @UserDefault(key: Keys.ayuUnlimitedRecentStickers.rawValue)
+    public var ayuUnlimitedRecentStickers: Bool
+
+    @UserDefault(key: Keys.ayuShowMessageSeconds.rawValue)
+    public var ayuShowMessageSeconds: Bool
+
+    /// `PeerIdDisplay` raw value: "hidden" | "telegram" | "bot".
+    @UserDefault(key: Keys.ayuShowPeerId.rawValue)
+    public var ayuShowPeerId: String
+
+    /// Strip Zalgo combining marks from incoming text.
+    @UserDefault(key: Keys.ayuFilterZalgo.rawValue)
+    public var ayuFilterZalgo: Bool
+
+    @UserDefault(key: Keys.ayuHideAllChatsFolder.rawValue)
+    public var ayuHideAllChatsFolder: Bool
+
+    @UserDefault(key: Keys.ayuDisableGreetingSticker.rawValue)
+    public var ayuDisableGreetingSticker: Bool
+
+    /// `ChannelBottomButton` raw value: "hidden" | "mute" | "discuss".
+    @UserDefault(key: Keys.ayuChannelBottomButton.rawValue)
+    public var ayuChannelBottomButton: String
+
+    @UserDefault(key: Keys.ayuHideNotificationCounters.rawValue)
+    public var ayuHideNotificationCounters: Bool
+
+    @UserDefault(key: Keys.ayuHideNotificationBadge.rawValue)
+    public var ayuHideNotificationBadge: Bool
+
+    @UserDefault(key: Keys.ayuStickerConfirmation.rawValue)
+    public var ayuStickerConfirmation: Bool
+
+    @UserDefault(key: Keys.ayuGifConfirmation.rawValue)
+    public var ayuGifConfirmation: Bool
+
+    @UserDefault(key: Keys.ayuVoiceConfirmation.rawValue)
+    public var ayuVoiceConfirmation: Bool
+
+    @UserDefault(key: Keys.ayuRoundConfirmation.rawValue)
+    public var ayuRoundConfirmation: Bool
+
+    @UserDefault(key: Keys.ayuSpoofWebviewAsAndroid.rawValue)
+    public var ayuSpoofWebviewAsAndroid: Bool
+
+    // MARK: AyuGram - context menu visibility ("hidden" | "visible")
+
+    @UserDefault(key: Keys.ayuShowMessageDetailsInContextMenu.rawValue)
+    public var ayuShowMessageDetailsInContextMenu: String
+
+    @UserDefault(key: Keys.ayuShowHideMessageInContextMenu.rawValue)
+    public var ayuShowHideMessageInContextMenu: String
+
+    @UserDefault(key: Keys.ayuShowUserMessagesInContextMenu.rawValue)
+    public var ayuShowUserMessagesInContextMenu: String
+
+    @UserDefault(key: Keys.ayuShowRepeatMessageInContextMenu.rawValue)
+    public var ayuShowRepeatMessageInContextMenu: String
+
+    @UserDefault(key: Keys.ayuShowAddFilterInContextMenu.rawValue)
+    public var ayuShowAddFilterInContextMenu: String
+
+    @UserDefault(key: Keys.ayuShowSaveMessageInContextMenu.rawValue)
+    public var ayuShowSaveMessageInContextMenu: String
+
+    // MARK: AyuGram - remote config
+
+    /// Fetch the AyuGram/exteraGram badge remote config.
+    @UserDefault(key: Keys.ayuRCEnabled.rawValue)
+    public var ayuRCEnabled: Bool
+
+    /// Unix timestamp of the last successful remote-config fetch.
+    @UserDefault(key: Keys.ayuRCLastFetch.rawValue)
+    public var ayuRCLastFetch: Int
+
+    /// Cached remote-config JSON payload (already validated before storing).
+    @UserDefault(key: Keys.ayuRCPayload.rawValue)
+    public var ayuRCPayload: String
+
+    // MARK: AyuGram - misc
+
+    /// Hide sensitive content when the screen is being captured or recorded.
+    @UserDefault(key: Keys.ayuStreamerMode.rawValue)
+    public var ayuStreamerMode: Bool
+
+    /// Default state of the "keep locally" checkbox in the delete confirmation sheet.
+    @UserDefault(key: Keys.ayuKeepDeletedOnOwnDelete.rawValue)
+    public var ayuKeepDeletedOnOwnDelete: Bool
 }
 
 extension SGSimpleSettings {
+    /// Shared feature gate for incremental Telegram 12.1.1 legacy-design migrations.
+    /// Individual screens should check this gate at their own rendering boundary.
+    public var isTelegram1211LegacyDesignEnabled: Bool {
+        return telegram1211LegacyDesign
+    }
+
     public var isStealthModeEnabled: Bool {
         return storyStealthMode && canUseStealthMode
     }
-    
+
+    // MARK: AyuGram - computed helpers
+    /// True when ghost mode is on AND at least one of the read-receipt / typing / story blocking sub-toggles is active.
+    public var isAyuGhostActive: Bool {
+        guard ayuGhostMode else { return false }
+        return ayuGhostBlockReadReceipts || ayuGhostBlockTyping || ayuGhostBlockStoryViews || ayuGhostBlockOnlinePresence
+    }
+
+    public var isAyuBlockReadReceipts: Bool {
+        return ayuGhostMode && ayuGhostBlockReadReceipts
+    }
+
+    public var isAyuBlockTyping: Bool {
+        return ayuGhostMode && ayuGhostBlockTyping
+    }
+
+    public var isAyuBlockOnlinePresence: Bool {
+        return ayuGhostMode && ayuGhostBlockOnlinePresence
+    }
+
+    public var isAyuBlockStoryViews: Bool {
+        return ayuGhostMode && ayuGhostBlockStoryViews
+    }
+
+    // MARK: AyuGram - typed accessors
+
+    public var ayuSendWithoutSoundEnum: SGSimpleSettings.AyuSendWithoutSound {
+        return AyuSendWithoutSound(rawValue: ayuGhostSendWithoutSound) ?? .never
+    }
+
+    public var ayuPeerIdDisplayEnum: SGSimpleSettings.AyuPeerIdDisplay {
+        return AyuPeerIdDisplay(rawValue: ayuShowPeerId) ?? .bot
+    }
+
+    public var ayuChannelBottomButtonEnum: SGSimpleSettings.AyuChannelBottomButton {
+        return AyuChannelBottomButton(rawValue: ayuChannelBottomButton) ?? .discuss
+    }
+
+    /// Resolves whether an outgoing message should be sent silently right now.
+    public var ayuShouldSendWithoutSound: Bool {
+        switch ayuSendWithoutSoundEnum {
+        case .never:
+            return false
+        case .ghost:
+            return isAyuGhostActive
+        case .always:
+            return true
+        }
+    }
+
+    /// True when at least one ghost sub-toggle is enabled but the master switch is off,
+    /// i.e. the user has configured ghost mode but is not currently hidden.
+    public var isAyuGhostConfiguredButInactive: Bool {
+        guard !ayuGhostMode else { return false }
+        return ayuGhostBlockReadReceipts || ayuGhostBlockTyping || ayuGhostBlockStoryViews || ayuGhostBlockOnlinePresence
+    }
+
+    /// Whether media should be preserved for a peer of the given kind.
+    /// Mirrors AyuGram for Android's per-peer-type media matrix.
+    public func ayuShouldSaveMedia(isPrivateChat: Bool, isChannel: Bool, isGroup: Bool, isPublic: Bool) -> Bool {
+        guard ayuSaveMediaAttachments else { return false }
+        if isPrivateChat {
+            return ayuSaveMediaInPrivateChats
+        }
+        if isChannel {
+            return isPublic ? ayuSaveMediaInPublicChannels : ayuSaveMediaInPrivateChannels
+        }
+        if isGroup {
+            return isPublic ? ayuSaveMediaInPublicGroups : ayuSaveMediaInPrivateGroups
+        }
+        return true
+    }
+
+    public func ayuContextMenuVisible(_ rawValue: String) -> Bool {
+        return (AyuContextMenuVisibility(rawValue: rawValue) ?? .visible) == .visible
+    }
+
     public static func makeOutgoingLanguageTranslationKey(accountId: Int64, peerId: Int64) -> String {
         return "\(accountId):\(peerId)"
     }

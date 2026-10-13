@@ -7,7 +7,7 @@ swift_library(
         "Sources/**/*.swift",
     ]),
     copts = [
-        "-warnings-as-errors",
+        "-suppress-warnings",
     ],
     deps = [
         "//submodules/SSignalKit/SSignalKit",

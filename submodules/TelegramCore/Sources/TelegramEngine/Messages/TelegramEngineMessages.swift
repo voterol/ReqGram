@@ -191,7 +191,7 @@ public extension TelegramEngine {
             return _internal_clearCallHistory(account: self.account, forEveryone: forEveryone)
         }
 
-        public func deleteMessagesInteractively(messageIds: [MessageId], type: InteractiveMessagesDeletionType, deleteAllInGroup: Bool = false) -> Signal<Void, NoError> {
+        public func deleteMessagesInteractively(messageIds: [MessageId], type: InteractiveMessagesDeletionType, deleteAllInGroup: Bool = false, userInitiated: Bool = false) -> Signal<Void, NoError> {
             self.account.stateManager.messagesRemovedContext.addIsMessagesDeletedInteractively(ids: messageIds.map { id -> DeletedMessageId in
                 if id.namespace == Namespaces.Message.Cloud && (id.peerId.namespace == Namespaces.Peer.CloudUser || id.peerId.namespace == Namespaces.Peer.CloudGroup) {
                     return .global(id.id)
@@ -200,11 +200,11 @@ public extension TelegramEngine {
                 }
             })
             
-            return _internal_deleteMessagesInteractively(account: self.account, messageIds: messageIds, type: type, deleteAllInGroup: deleteAllInGroup)
+            return _internal_deleteMessagesInteractively(account: self.account, messageIds: messageIds, type: type, deleteAllInGroup: deleteAllInGroup, userInitiated: userInitiated)
         }
 
         public func clearHistoryInteractively(peerId: PeerId, threadId: Int64?, type: InteractiveHistoryClearingType) -> Signal<Void, NoError> {
-            return _internal_clearHistoryInteractively(postbox: self.account.postbox, peerId: peerId, threadId: threadId, type: type)
+            return _internal_clearHistoryInteractively(accountPeerId: self.account.peerId, postbox: self.account.postbox, peerId: peerId, threadId: threadId, type: type)
         }
 
         public func clearAuthorHistory(peerId: PeerId, memberId: PeerId) -> Signal<Void, NoError> {
@@ -265,7 +265,7 @@ public extension TelegramEngine {
         }
 
         public func markMessageContentAsConsumedInteractively(messageId: MessageId) -> Signal<Void, NoError> {
-            return _internal_markMessageContentAsConsumedInteractively(postbox: self.account.postbox, messageId: messageId)
+            return _internal_markMessageContentAsConsumedInteractively(postbox: self.account.postbox, accountPeerId: self.account.peerId, messageId: messageId)
         }
 
         public func installInteractiveReadMessagesAction(peerId: PeerId, threadId: Int64?) -> Disposable {
@@ -1634,6 +1634,10 @@ public extension TelegramEngine {
         public func markStoryAsSeen(peerId: EnginePeer.Id, id: Int32, asPinned: Bool) -> Signal<Never, NoError> {
             // MARK: Swiftgram
             if SGSimpleSettings.shared.isStealthModeEnabled {
+                return .never()
+            }
+            // MARK: AyuGram - block story view increment when ghost mode is on
+            if SGSimpleSettings.shared.isAyuBlockStoryViews {
                 return .never()
             }
             return _internal_markStoryAsSeen(account: self.account, peerId: peerId, id: id, asPinned: asPinned)

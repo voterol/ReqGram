@@ -12,6 +12,7 @@ import AnimatedTextComponent
 import PhoneNumberFormat
 import TelegramStringFormatting
 import EmojiStatusComponent
+import AyuGram
 import GlassBackgroundComponent
 
 public final class ChatNavigationBarTitleView: UIView, NavigationBarTitleView {
@@ -315,6 +316,9 @@ public final class ChatTitleComponent: Component {
         private var credibilityIcon: ComponentView<Empty>?
         private var verifiedIcon: ComponentView<Empty>?
         private var statusIcon: ComponentView<Empty>?
+        private var projectBadgeStrip: ComponentView<Empty>?
+        private var ayuRemoteConfigObservation: AyuRemoteConfig.Observation?
+        private var ayuRemoteConfigRevision: UInt64?
         
         private var presenceManager: PeerPresenceStatusManager?
         
@@ -366,6 +370,16 @@ public final class ChatTitleComponent: Component {
             
             self.component = component
             self.state = state
+
+            if self.ayuRemoteConfigObservation == nil {
+                self.ayuRemoteConfigRevision = AyuRemoteConfig.shared.revision
+                self.ayuRemoteConfigObservation = AyuRemoteConfig.shared.observe { [weak self] revision in
+                    guard let self, self.ayuRemoteConfigRevision != revision else { return }
+                    self.ayuRemoteConfigRevision = revision
+                    self.state?.updated(transition: .immediate)
+                }
+                AyuRemoteConfig.shared.startIfNeeded()
+            }
             
             var titleSegments: [AnimatedTextComponent.Item] = []
             var titleLeftIcon: TitleIconComponent.Kind?
@@ -373,6 +387,8 @@ public final class ChatTitleComponent: Component {
             var titleCredibilityIcon: ChatTitleCredibilityIcon = .none
             var titleVerifiedIcon: ChatTitleCredibilityIcon = .none
             var titleStatusIcon: ChatTitleCredibilityIcon = .none
+            var projectBadges: [AyuBadgeContent] = []
+            var projectBadgePeerName = ""
             var isEnabled = true
             switch component.content {
             case let .peer(peerView, customTitle, _, _, isScheduledMessages, isMuted, _, hidePeerStatus, isEnabledValue):
@@ -442,6 +458,12 @@ public final class ChatTitleComponent: Component {
                             }
                         }
                         if peer.id != component.context.account.peerId {
+                            projectBadgePeerName = EnginePeer(peer).displayTitle(strings: component.strings, displayOrder: component.nameDisplayOrder)
+                            projectBadges = AyuBadges.emojiStatusContents(
+                                for: peer.id,
+                                placeholderColor: component.theme.list.mediaPlaceholderColor,
+                                themeColor: component.theme.list.itemAccentColor
+                            )
                             let premiumConfiguration = PremiumConfiguration.with(appConfiguration: component.context.currentAppConfiguration.with({ $0 }))
                             if peer.isFake {
                                 titleCredibilityIcon = .fake
@@ -456,9 +478,9 @@ public final class ChatTitleComponent: Component {
                             if peer.isVerified {
                                 titleCredibilityIcon = .verified
                             }
-                            if let verificationIconFileId = peer.verificationIconFileId {
-                                titleVerifiedIcon = .emojiStatus(PeerEmojiStatus(content: .emoji(fileId: verificationIconFileId), expirationDate: nil))
-                            }
+                             if let verificationIconFileId = peer.verificationIconFileId {
+                                 titleVerifiedIcon = .emojiStatus(PeerEmojiStatus(content: .emoji(fileId: verificationIconFileId), expirationDate: nil))
+                             }
                         }
                     }
                     if peerView.peerId.namespace == Namespaces.Peer.SecretChat {
@@ -1038,6 +1060,44 @@ public final class ChatTitleComponent: Component {
             if let statusIconSize {
                 titleRightIconsWidth += statusIconSize.width + statusIconsSpacing
             }
+
+            var projectBadgeStripSize: CGSize?
+            if !projectBadges.isEmpty {
+                let strip: ComponentView<Empty>
+                if let current = self.projectBadgeStrip {
+                    strip = current
+                } else {
+                    strip = ComponentView()
+                    self.projectBadgeStrip = strip
+                }
+                let languageCode = component.strings.baseLanguageCode
+                projectBadgeStripSize = strip.update(
+                    transition: transition,
+                    component: AnyComponent(ProjectBadgeStripComponent(
+                        context: component.context,
+                        badges: projectBadges,
+                        languageCode: languageCode,
+                        peerName: projectBadgePeerName,
+                        placeholderColor: component.theme.list.mediaPlaceholderColor,
+                        accentColor: component.theme.list.itemAccentColor,
+                        // Matches the adjacent navigation-bar title text, so
+                        // it contrasts with the navigation bar in every theme.
+                        foregroundColor: component.theme.rootController.navigationBar.primaryTextColor,
+                        isVisibleForAnimations: true,
+                        isInteractive: false,
+                        badgeAction: nil,
+                        overflowAction: nil
+                    )),
+                    environment: {},
+                    containerSize: CGSize(width: min(72.0, max(0.0, availableSize.width * 0.3)), height: 20.0)
+                )
+                if let projectBadgeStripSize, projectBadgeStripSize.width > 0.0 {
+                    titleRightIconsWidth += projectBadgeStripSize.width + statusIconsSpacing
+                }
+            } else if let strip = self.projectBadgeStrip {
+                self.projectBadgeStrip = nil
+                strip.view?.removeFromSuperview()
+            }
             
             let maxTitleWidth = availableSize.width - titleLeftIconsWidth - titleRightIconsWidth - containerSideInset * 2.0
             
@@ -1162,6 +1222,15 @@ public final class ChatTitleComponent: Component {
                 transition.setAlpha(view: statusIconView, alpha: 1.0)
                 transition.setScale(view: statusIconView, scale: 1.0)
                 nextRightIconX += statusIconsSpacing + statusIconSize.width
+            }
+
+            if let projectBadgeStripSize, projectBadgeStripSize.width > 0.0, let stripView = self.projectBadgeStrip?.view {
+                let stripFrame = CGRect(x: nextRightIconX + statusIconsSpacing, y: titleFrame.minY, width: projectBadgeStripSize.width, height: projectBadgeStripSize.height)
+                if stripView.superview == nil {
+                    self.contentContainer.addSubview(stripView)
+                }
+                transition.setFrame(view: stripView, frame: stripFrame)
+                nextRightIconX += statusIconsSpacing + projectBadgeStripSize.width
             }
             
             if let rightIconSize, let rightIconView = self.rightIcon?.view {

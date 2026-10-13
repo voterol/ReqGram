@@ -8,6 +8,8 @@ sgdeps = [
     "//Swiftgram/SGGHSettingsScheme:SGGHSettingsScheme",
     "//Swiftgram/SGConfig:SGConfig",
     "//Swiftgram/SGLogging:SGLogging",
+    # MARK: AyuGram - local store for preserved messages
+    "//Swiftgram/AyuGram:AyuGram",
 ]
 
 sgsrc = [

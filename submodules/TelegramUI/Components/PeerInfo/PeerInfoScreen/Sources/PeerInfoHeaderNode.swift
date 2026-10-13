@@ -1,4 +1,5 @@
 import Foundation
+import AyuGram
 import UIKit
 import AsyncDisplayKit
 import Display
@@ -138,6 +139,8 @@ final class PeerInfoHeaderNode: ASDisplayNode {
     var statusIconSize: CGSize?
     let titleExpandedStatusIconView: ComponentHostView<Empty>
     var titleExpandedStatusIconSize: CGSize?
+    let projectBadgeStripView: ComponentHostView<Empty>
+    let expandedProjectBadgeStripView: ComponentHostView<Empty>
     
     var subtitleRating: ComponentView<Empty>?
     
@@ -181,6 +184,8 @@ final class PeerInfoHeaderNode: ASDisplayNode {
     var displaySavedMusic: (() -> Void)?
     
     var displayPremiumIntro: ((UIView, PeerEmojiStatus?, Signal<(TelegramMediaFile, LoadedStickerPack)?, NoError>, Bool) -> Void)?
+    var displayAyuBadgeInfo: ((AyuBadgeContent, String) -> Void)?
+    var displayAllAyuBadges: (([AyuBadgeContent], String) -> Void)?
     var displayStatusPremiumIntro: (() -> Void)?
     var displayUniqueGiftInfo: ((UIView, String) -> Void)?
     var openUniqueGift: ((UIView, String) -> Void)?
@@ -207,6 +212,8 @@ final class PeerInfoHeaderNode: ASDisplayNode {
     
     private var currentStarRating: TelegramStarRating?
     private var currentPendingStarRating: TelegramStarPendingRating?
+    private var ayuRemoteConfigObservation: AyuRemoteConfig.Observation?
+    private var ayuHidePremiumStatusesObserver: NSObjectProtocol?
     
     init(hidePhoneInSettings: Bool, context: AccountContext, controller: PeerInfoScreenImpl, avatarInitiallyExpanded: Bool, isOpenedFromChat: Bool, isMediaOnly: Bool, isSettings: Bool, isMyProfile: Bool, forumTopicThreadId: Int64?, chatLocation: ChatLocation) {
         self.context = context
@@ -236,6 +243,10 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         
         self.titleCredibilityIconView = ComponentHostView<Empty>()
         self.titleNode.stateNode(forKey: TitleNodeStateRegular)?.view.addSubview(self.titleCredibilityIconView)
+        self.projectBadgeStripView = ComponentHostView<Empty>()
+        self.titleNode.stateNode(forKey: TitleNodeStateRegular)?.view.addSubview(self.projectBadgeStripView)
+        self.expandedProjectBadgeStripView = ComponentHostView<Empty>()
+        self.titleNode.stateNode(forKey: TitleNodeStateExpanded)?.view.addSubview(self.expandedProjectBadgeStripView)
         
         self.titleExpandedCredibilityIconView = ComponentHostView<Empty>()
         self.titleNode.stateNode(forKey: TitleNodeStateExpanded)?.view.addSubview(self.titleExpandedCredibilityIconView)
@@ -306,6 +317,14 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         self.animationRenderer = context.animationRenderer
         
         super.init()
+
+        self.ayuRemoteConfigObservation = AyuRemoteConfig.shared.observe { [weak self] _ in
+            self?.requestUpdateLayout?(false)
+        }
+        self.ayuHidePremiumStatusesObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: UserDefaults.standard, queue: .main) { [weak self] _ in
+            self?.requestUpdateLayout?(false)
+        }
+        AyuRemoteConfig.shared.startIfNeeded()
                 
         requestUpdateLayoutImpl = { [weak self] in
             self?.requestUpdateLayout?(false)
@@ -385,6 +404,9 @@ final class PeerInfoHeaderNode: ASDisplayNode {
     
     deinit {
         self.emojiStatusPackDisposable.dispose()
+        if let observer = self.ayuHidePremiumStatusesObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
     
     override func didLoad() {
@@ -495,7 +517,7 @@ final class PeerInfoHeaderNode: ASDisplayNode {
     private var currentStatusIcon: CredibilityIcon?
     
     private var currentPanelStatusData: PeerInfoStatusData?
-    func update(width: CGFloat, containerHeight: CGFloat, containerInset: CGFloat, statusBarHeight: CGFloat, navigationHeight: CGFloat, isModalOverlay: Bool, isMediaOnly: Bool, contentOffset: CGFloat, paneContainerY: CGFloat, presentationData: PresentationData, peer: EnginePeer?, cachedData: EngineCachedPeerData?, threadData: MessageHistoryThreadData?, peerNotificationSettings: TelegramPeerNotificationSettings?, threadNotificationSettings: TelegramPeerNotificationSettings?, globalNotificationSettings: EngineGlobalNotificationSettings?, statusData: PeerInfoStatusData?, panelStatusData: (PeerInfoStatusData?, PeerInfoStatusData?, CGFloat?), isSecretChat: Bool, isContact: Bool, isSettings: Bool, state: PeerInfoState, profileGiftsContext: ProfileGiftsContext?, screenData: PeerInfoScreenData?, isSearching: Bool, metrics: LayoutMetrics, deviceMetrics: DeviceMetrics, transition: ContainedViewLayoutTransition, additive: Bool, animateHeader: Bool) -> CGFloat {
+    func update(width: CGFloat, containerHeight: CGFloat, containerInset: CGFloat, statusBarHeight: CGFloat, navigationHeight: CGFloat, isModalOverlay: Bool, isMediaOnly: Bool, contentOffset: CGFloat, paneContainerY: CGFloat, presentationData: PresentationData, peer: EnginePeer?, effectiveEmojiStatus: PeerEmojiStatus?, cachedData: EngineCachedPeerData?, threadData: MessageHistoryThreadData?, peerNotificationSettings: TelegramPeerNotificationSettings?, threadNotificationSettings: TelegramPeerNotificationSettings?, globalNotificationSettings: EngineGlobalNotificationSettings?, statusData: PeerInfoStatusData?, panelStatusData: (PeerInfoStatusData?, PeerInfoStatusData?, CGFloat?), isSecretChat: Bool, isContact: Bool, isSettings: Bool, state: PeerInfoState, profileGiftsContext: ProfileGiftsContext?, screenData: PeerInfoScreenData?, isSearching: Bool, metrics: LayoutMetrics, deviceMetrics: DeviceMetrics, transition: ContainedViewLayoutTransition, additive: Bool, animateHeader: Bool) -> CGFloat {
         if self.appliedCustomNavigationContentNode !== self.customNavigationContentNode {
             if let previous = self.appliedCustomNavigationContentNode {
                 ComponentTransition(transition).setAlpha(view: previous.view, alpha: 0.0, completion: { [weak previous] _ in
@@ -598,14 +620,18 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         var credibilityIcon: CredibilityIcon = .none
         var verifiedIcon: CredibilityIcon = .none
         var statusIcon: CredibilityIcon = .none
+        var projectBadges: [AyuBadgeContent] = []
+        var projectBadgePeerName = ""
         if let peer {
+            projectBadgePeerName = AyuBadges.nonemptyDisplayTitle(peer.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder), languageCode: presentationData.strings.baseLanguageCode)
+            projectBadges = AyuBadges.emojiStatusContents(for: peer.id, placeholderColor: presentationData.theme.list.mediaPlaceholderColor, themeColor: presentationData.theme.list.itemAccentColor)
             if peer.id == self.context.account.peerId && !self.isSettings && !self.isMyProfile {
                 credibilityIcon = .none
             } else if peer.isFake {
                 credibilityIcon = .fake
             } else if peer.isScam {
                 credibilityIcon = .scam
-            } else if let emojiStatus = peer.emojiStatus {
+            } else if let emojiStatus = (peer.id == self.context.account.peerId ? effectiveEmojiStatus : peer.emojiStatus) {
                 statusIcon = .emojiStatus(emojiStatus)
             } else if peer.isPremium && !premiumConfiguration.isPremiumDisabled && (peer.id != self.context.account.peerId || self.isSettings || self.isMyProfile) {
                 credibilityIcon = .premium
@@ -618,7 +644,65 @@ final class PeerInfoHeaderNode: ASDisplayNode {
             if let verificationIconFileId = peer.verificationIconFileId {
                 verifiedIcon = .emojiStatus(PeerEmojiStatus(content: .emoji(fileId: verificationIconFileId), expirationDate: nil))
             }
+
+            if AyuBadges.hidePremiumStatuses {
+                statusIcon = .none
+                if case .premium = credibilityIcon {
+                    credibilityIcon = .none
+                }
+            }
+
         }
+
+        let projectBadgeStripSize = self.projectBadgeStripView.update(
+            transition: ComponentTransition(transition),
+            component: AnyComponent(ProjectBadgeStripComponent(
+                context: self.context,
+                badges: projectBadges,
+                languageCode: presentationData.strings.baseLanguageCode,
+                peerName: projectBadgePeerName,
+                placeholderColor: presentationData.theme.list.mediaPlaceholderColor,
+                // Project templates use the verified badge's theme fill;
+                // custom animated artwork is left untouched by the strip.
+                accentColor: presentationData.theme.list.itemCheckColors.fillColor,
+                // The header title is unconditionally white on the cover
+                // surface in both states, so white is the contrasting
+                // foreground here. `itemCheckColors.foregroundColor` is a
+                // checkbox contrast color and is black in the default dark
+                // theme, which would be invisible against this header.
+                foregroundColor: .white,
+                density: .profile,
+                isVisibleForAnimations: true,
+                isInteractive: true,
+                badgeAction: { [weak self] badge in self?.displayAyuBadgeInfo?(badge, projectBadgePeerName) },
+                overflowAction: { [weak self] badges in self?.displayAllAyuBadges?(badges, projectBadgePeerName) }
+            )),
+            environment: {},
+            containerSize: CGSize(width: min(112.0, max(0.0, width - 64.0)), height: 24.0)
+        )
+        self.projectBadgeStripView.isHidden = projectBadges.isEmpty
+        let expandedProjectBadgeStripSize = self.expandedProjectBadgeStripView.update(
+            transition: ComponentTransition(transition),
+            component: AnyComponent(ProjectBadgeStripComponent(
+                context: self.context,
+                badges: projectBadges,
+                languageCode: presentationData.strings.baseLanguageCode,
+                peerName: projectBadgePeerName,
+                placeholderColor: presentationData.theme.list.mediaPlaceholderColor,
+                // Keep the expanded title path on the same verified/accent
+                // token as the regular header path.
+                accentColor: presentationData.theme.list.itemCheckColors.fillColor,
+                foregroundColor: .white,
+                density: .profile,
+                isVisibleForAnimations: true,
+                isInteractive: true,
+                badgeAction: { [weak self] badge in self?.displayAyuBadgeInfo?(badge, projectBadgePeerName) },
+                overflowAction: { [weak self] badges in self?.displayAllAyuBadges?(badges, projectBadgePeerName) }
+            )),
+            environment: {},
+            containerSize: CGSize(width: min(112.0, max(0.0, width - 64.0)), height: 24.0)
+        )
+        self.expandedProjectBadgeStripView.isHidden = projectBadges.isEmpty
         
         var isForum = false
         if case let .channel(channel) = peer, channel.isForumOrMonoForum {
@@ -1621,6 +1705,27 @@ final class PeerInfoHeaderNode: ASDisplayNode {
                 nextIconX += 4.0 + verifiedIconSize.width
                 nextExpandedIconX += 4.0 + titleExpandedVerifiedIconSize.width
             }
+        }
+
+        if !projectBadges.isEmpty {
+            transition.updateFrame(
+                view: self.projectBadgeStripView,
+                frame: CGRect(
+                    x: nextIconX + 4.0,
+                    y: floor((titleSize.height - projectBadgeStripSize.height) / 2.0),
+                    width: projectBadgeStripSize.width,
+                    height: projectBadgeStripSize.height
+                )
+            )
+            transition.updateFrame(
+                view: self.expandedProjectBadgeStripView,
+                frame: CGRect(
+                    x: nextExpandedIconX + 4.0,
+                    y: floor((titleExpandedSize.height - expandedProjectBadgeStripSize.height) / 2.0),
+                    width: expandedProjectBadgeStripSize.width,
+                    height: expandedProjectBadgeStripSize.height
+                )
+            )
         }
         
         var titleFrame: CGRect
@@ -2804,6 +2909,12 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         }
         
         if !(self.state?.isEditing ?? false) {
+            let activeProjectBadgeStripView = self.isAvatarExpanded ? self.expandedProjectBadgeStripView : self.projectBadgeStripView
+            let projectBadgeStripFrame = activeProjectBadgeStripView.convert(activeProjectBadgeStripView.bounds, to: self.view)
+            if !activeProjectBadgeStripView.isHidden, projectBadgeStripFrame.contains(point), let badgeResult = activeProjectBadgeStripView.hitTest(self.view.convert(point, to: activeProjectBadgeStripView), with: event) {
+                return badgeResult
+            }
+
             switch self.currentCredibilityIcon {
             case .premium:
                 let iconFrame = self.titleCredibilityIconView.convert(self.titleCredibilityIconView.bounds, to: self.view)

@@ -3,6 +3,7 @@ import Postbox
 import SwiftSignalKit
 import TelegramApi
 import MtProtoKit
+import AyuGram
 
 private enum AccountKind {
     case authorized
@@ -367,8 +368,17 @@ public func currentAccount(allocateIfNotExists: Bool, networkArguments: NetworkI
 
 public func logoutFromAccount(id: AccountRecordId, accountManager: AccountManager<TelegramAccountManagerTypes>, alreadyLoggedOutRemotely: Bool) -> Signal<Void, NoError> {
     Logger.shared.log("AccountManager", "logoutFromAccount \(id)")
-    return accountManager.transaction { transaction -> Void in
+    return accountManager.transaction { transaction -> Int64? in
+        var accountPeerId: Int64?
         transaction.updateRecord(id, { current in
+            if let current = current {
+                for attribute in current.attributes {
+                    if case let .backupData(backupData) = attribute {
+                        accountPeerId = backupData.data?.peerId
+                        break
+                    }
+                }
+            }
             if alreadyLoggedOutRemotely {
                 return nil
             } else if let current = current {
@@ -388,6 +398,13 @@ public func logoutFromAccount(id: AccountRecordId, accountManager: AccountManage
                 return nil
             }
         })
+        return accountPeerId
+    }
+    |> map { accountPeerId -> Void in
+        // MARK: AyuGram - remove preserved content when its account is logged out
+        if let accountPeerId = accountPeerId {
+            AyuMessageStore.shared.removeAccount(accountPeerId: accountPeerId)
+        }
     }
 }
 

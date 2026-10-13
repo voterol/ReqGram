@@ -42,6 +42,10 @@ typedef NS_ENUM(NSInteger, SSZipArchiveErrorCode) {
 
 @interface SSZipArchive : NSObject
 
+// Strict plugin profile: raw UTF-8 names, regular files only, bounded inflation,
+// complete CRC verification. Never creates filesystem entries.
++ (nullable NSDictionary<NSString *, NSData *> *)reqGramPluginContentsAtPath:(NSString *)path;
+
 + (NSArray<SSZipEntry *> * _Nullable)getEntriesForFileAtPath:(NSString *)path;
 + (BOOL)extractFileFromArchiveAtPath:(NSString *)path filePath:(NSString *)filePath toPath:(NSString *)toPath;
 

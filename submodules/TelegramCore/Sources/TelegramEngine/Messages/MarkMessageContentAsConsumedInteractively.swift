@@ -3,9 +3,11 @@ import Postbox
 import TelegramApi
 import SwiftSignalKit
 
-func _internal_markMessageContentAsConsumedInteractively(postbox: Postbox, messageId: MessageId) -> Signal<Void, NoError> {
+func _internal_markMessageContentAsConsumedInteractively(postbox: Postbox, accountPeerId: PeerId, messageId: MessageId) -> Signal<Void, NoError> {
     return postbox.transaction { transaction -> Void in
         if let message = transaction.getMessage(messageId), message.flags.contains(.Incoming) {
+            // MARK: AyuGram - preserve view-once content before it is consumed locally
+            AyuHooks.willExpireMessage(transaction: transaction, id: messageId, accountPeerId: accountPeerId, mediaBox: postbox.mediaBox)
             var updateMessage = false
             var updatedAttributes = message.attributes
             
@@ -173,8 +175,13 @@ func _internal_markReactionsOrPollVotesAsSeenInteractively(postbox: Postbox, mes
     }
 }
 
-func markMessageContentAsConsumedRemotely(transaction: Transaction, messageId: MessageId, consumeDate: Int32?) {
+func markMessageContentAsConsumedRemotely(transaction: Transaction, mediaBox: MediaBox, accountPeerId: PeerId?, messageId: MessageId, consumeDate: Int32?) {
     if let message = transaction.getMessage(messageId) {
+        // MARK: AyuGram - preserve view-once content before it is consumed remotely
+        // (nil in secret-chat processing, where the account peer id is not in scope)
+        if let accountPeerId = accountPeerId {
+            AyuHooks.willExpireMessage(transaction: transaction, id: messageId, accountPeerId: accountPeerId, mediaBox: mediaBox)
+        }
         var updateMessage = false
         var updatedAttributes = message.attributes
         var updatedMedia = message.media

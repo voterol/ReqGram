@@ -25,7 +25,10 @@ UIImageOrientation TGNextCCWOrientationForOrientation(UIImageOrientation orienta
 CGFloat TGRotationForOrientation(UIImageOrientation orientation);
 CGFloat TGCounterRotationForOrientation(UIImageOrientation orientation);
 CGFloat TGRotationForInterfaceOrientation(UIInterfaceOrientation orientation);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 CGAffineTransform TGTransformForVideoOrientation(AVCaptureVideoOrientation orientation, bool mirrored);
+#pragma clang diagnostic pop
     
 bool TGOrientationIsSideward(UIImageOrientation orientation, bool *mirrored);
 UIImageOrientation TGMirrorSidewardOrientation(UIImageOrientation orientation);

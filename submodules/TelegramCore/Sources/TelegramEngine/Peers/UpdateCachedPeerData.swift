@@ -960,6 +960,8 @@ func _internal_fetchAndUpdateCachedPeerData(accountPeerId: PeerId, peerId rawPee
                                             })
                                         
                                             if let minAvailableMessageId = minAvailableMessageId, minAvailableMessageIdUpdated {
+                                                // MARK: AyuGram - preserve range-deleted message snapshots before removal
+                                                AyuHooks.willDeleteMessagesInRange(transaction: transaction, peerId: peerId, namespace: minAvailableMessageId.namespace, minId: 1, maxId: minAvailableMessageId.id, accountPeerId: accountPeerId, postbox: postbox)
                                                 var resourceIds: [MediaResourceId] = []
                                                 transaction.deleteMessagesInRange(peerId: peerId, namespace: minAvailableMessageId.namespace, minId: 1, maxId: minAvailableMessageId.id, forEachMedia: { media in
                                                     addMessageMediaResourceIdsToRemove(media: media, resourceIds: &resourceIds)

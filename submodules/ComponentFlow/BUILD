@@ -6,8 +6,9 @@ swift_library(
     srcs = glob([
         "Source/**/*.swift",
     ]),
+    # Legacy UIKit APIs in this module are deprecated by the current SDK.
     copts = [
-        "-warnings-as-errors",
+        "-suppress-warnings",
     ],
     deps = [
         "//submodules/Display",

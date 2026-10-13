@@ -12,7 +12,7 @@ public final class FunctionDescription {
     public let name: String
     public let parameters: [(String, ConstructorParameterDescription)]
     
-    init(name: String, parameters: [(String, ConstructorParameterDescription)]) {
+    public init(name: String, parameters: [(String, ConstructorParameterDescription)]) {
         self.name = name
         self.parameters = parameters
     }

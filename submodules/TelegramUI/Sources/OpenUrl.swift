@@ -428,7 +428,31 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
     )
     
     let continueHandling: () -> Void = {
-        if let scheme = parsedUrl.scheme, (scheme == "tg" || scheme == context.sharedContext.applicationBindings.appSpecificScheme) {
+        // MARK: AyuGram - hand Spotify web links to the native app when it is
+        // installed, so they don't open in the in-app browser.
+        if ayuTryHandleSpotify(parsedUrl, applicationBindings: context.sharedContext.applicationBindings) {
+            return
+        }
+
+        if parsedUrl.scheme?.lowercased() == "reqgram" {
+            let host = parsedUrl.host?.lowercased()
+            guard parsedUrl.user == nil, parsedUrl.password == nil, parsedUrl.query == nil, parsedUrl.fragment == nil else {
+                return
+            }
+            switch (host, parsedUrl.path) {
+            case ("support", ""):
+                context.sharedContext.presentGlobalController(supportDevelopmentController(context: context, navigationController: navigationController), nil)
+            case ("ayu", "/support"):
+                navigationController?.pushViewController(projectSupportController(context: context, kind: .ayuGram))
+            case ("extera", "/support"):
+                navigationController?.pushViewController(projectSupportController(context: context, kind: .exteraGram))
+            default:
+                break
+            }
+            return
+        }
+
+        if let scheme = parsedUrl.scheme?.lowercased(), (scheme == "tg" || scheme == context.sharedContext.applicationBindings.appSpecificScheme.lowercased()) {
             if parsedUrl.host == "tonsite" {
                 if let value = URL(string: "tonsite:/" + parsedUrl.path) {
                     parsedUrl = value
@@ -436,9 +460,25 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
             }
         }
         
-        if let scheme = parsedUrl.scheme, (scheme == "tg" || scheme == context.sharedContext.applicationBindings.appSpecificScheme) {
+        if let scheme = parsedUrl.scheme?.lowercased(), (scheme == "tg" || scheme == context.sharedContext.applicationBindings.appSpecificScheme.lowercased()) {
             var convertedUrl: String?
             let host = parsedUrl.host?.lowercased() ?? ""
+            if host == "support" && parsedUrl.path.isEmpty && parsedUrl.query == nil && parsedUrl.fragment == nil {
+                context.sharedContext.presentGlobalController(supportDevelopmentController(context: context, navigationController: navigationController), nil)
+                return
+            }
+            if parsedUrl.query == nil && parsedUrl.fragment == nil && parsedUrl.path == "/support" {
+                switch host {
+                case "ayu":
+                    navigationController?.pushViewController(projectSupportController(context: context, kind: .ayuGram))
+                    return
+                case "extera":
+                    navigationController?.pushViewController(projectSupportController(context: context, kind: .exteraGram))
+                    return
+                default:
+                    break
+                }
+            }
             if let query = parsedUrl.query, let params = QueryParameters(query) {
                 switch host {
                 case "localpeer":
@@ -550,6 +590,36 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                         })
                         return
                     }
+                case "chat":
+                    // MARK: AyuGram - tg://chat?id=<bare id> opens a chat by
+                    // numeric id. Channels/supergroups are tried first, then
+                    // legacy groups, matching AyuGram's ResolveChat.
+                    if let idValue = params["id"].flatMap(Int64.init), idValue > 0 {
+                        let channelId = EnginePeer.Id(namespace: Namespaces.Peer.CloudChannel, id: EnginePeer.Id.Id._internalFromInt64Value(idValue))
+                        let groupId = EnginePeer.Id(namespace: Namespaces.Peer.CloudGroup, id: EnginePeer.Id.Id._internalFromInt64Value(idValue))
+                        let _ = (context.engine.data.get(
+                            TelegramEngine.EngineData.Item.Peer.Peer(id: channelId),
+                            TelegramEngine.EngineData.Item.Peer.Peer(id: groupId)
+                        )
+                        |> deliverOnMainQueue).startStandalone(next: { channelPeer, groupPeer in
+                            if let peer = channelPeer ?? groupPeer, let navigationController = navigationController {
+                                context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer)))
+                            } else {
+                                let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+                                context.sharedContext.presentGlobalController(
+                                    textAlertController(context: context, title: nil, text: "AyuGram.Url.PeerNotFound".i18n(presentationData.strings.baseLanguageCode), actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]),
+                                    nil
+                                )
+                            }
+                        })
+                        return
+                    }
+                case "ayusettings":
+                    // MARK: AyuGram - tg://ayusettings?s=<section> deep link.
+                    // Any parameter value simply opens the AyuGram settings
+                    // screen; unknown sections must not fail the link.
+                    navigationController?.pushViewController(ayuSettingsController(context: context))
+                    return
                 case "login":
                     if let _ = params["token"] {
                         let alertController = textAlertController(
@@ -868,6 +938,29 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                 }
             } else {
                 switch host {
+                // MARK: AyuGram - parameterless deep links.
+                case "ayu", "ayusettings", "ayugram":
+                    // tg://ayu, tg://ayu/settings, tg://ayusettings
+                    navigationController?.pushViewController(ayuSettingsController(context: context))
+                    return
+                case "donate":
+                    let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+                    let statusController = OverlayStatusController(theme: presentationData.theme, type: .loading(cancelled: nil))
+                    context.sharedContext.presentGlobalController(statusController, nil)
+                    let _ = (context.engine.peers.supportPeerId()
+                    |> deliverOnMainQueue).startStandalone(next: { [weak statusController] peerId in
+                        statusController?.dismiss()
+                        guard let peerId, let navigationController else {
+                            return
+                        }
+                        let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
+                        |> deliverOnMainQueue).startStandalone(next: { peer in
+                            if let peer {
+                                context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer)))
+                            }
+                        })
+                    })
+                    return
                 case "stars":
                     handleResolvedUrl(.stars)
                 case "sg":

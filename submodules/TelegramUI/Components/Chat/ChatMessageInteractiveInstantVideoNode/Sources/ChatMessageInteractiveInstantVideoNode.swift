@@ -577,6 +577,7 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
                 context: item.context,
                 presentationData: item.presentationData,
                 edited: edited && !sentViaBot && !item.presentationData.isPreview,
+                isDeleted: item.message.isAyuSyntheticDeletedMessage,
                 impressionCount: !item.presentationData.isPreview ? viewCount : nil,
                 dateText: dateText,
                 type: statusType,
@@ -1671,7 +1672,7 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
                     switch fetchStatus {
                         case .Fetching:
                             if item.message.flags.isSending {
-                                let _ = item.context.engine.messages.deleteMessagesInteractively(messageIds: [item.message.id], type: .forEveryone).startStandalone()
+                                let _ = item.context.engine.messages.deleteMessagesInteractively(messageIds: [item.message.id], type: .forEveryone, userInitiated: true).startStandalone()
                             } else {
                                 messageMediaFileCancelInteractiveFetch(context: item.context, messageId: item.message.id, file: file)
                             }

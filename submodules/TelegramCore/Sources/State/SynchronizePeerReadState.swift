@@ -296,7 +296,6 @@ private func pushPeerReadState(network: Network, postbox: Postbox, stateManager:
                         }
                         return .complete()
                     }
-
                     if markedUnread {
                         pushSignal = pushSignal
                         |> then(network.request(Api.functions.messages.markDialogUnread(flags: 1 << 0, parentPeer: nil, peer: .inputDialogPeer(.init(peer: inputPeer))))
@@ -323,7 +322,7 @@ private func pushPeerReadState(network: Network, postbox: Postbox, stateManager:
     }
 }
 
-private func pushPeerReadState(network: Network, postbox: Postbox, stateManager: AccountStateManager, peerId: PeerId) -> Signal<Never, PeerReadStateValidationError> {
+private func pushPeerReadStateWhenAllowed(network: Network, postbox: Postbox, stateManager: AccountStateManager, peerId: PeerId) -> Signal<Never, PeerReadStateValidationError> {
     let currentReadState = postbox.transaction { transaction -> (MessageId.Namespace, PeerReadState)? in
         if let readStates = transaction.getPeerReadStates(peerId) {
             for (namespace, readState) in readStates {
@@ -373,6 +372,27 @@ private func pushPeerReadState(network: Network, postbox: Postbox, stateManager:
     }
     
     return verifiedState
+}
+
+private func pushPeerReadState(network: Network, postbox: Postbox, stateManager: AccountStateManager, peerId: PeerId) -> Signal<Never, PeerReadStateValidationError> {
+    // MARK: AyuGram - keep the Postbox operation pending and cancel an active push when blocking is enabled
+    return ayuBlockReadReceiptsSignal()
+    |> mapToSignalPromotingError { isBlocked -> Signal<Bool, PeerReadStateValidationError> in
+        if isBlocked {
+            return .never()
+        } else {
+            return Signal<Bool, PeerReadStateValidationError> { subscriber in
+                return pushPeerReadStateWhenAllowed(network: network, postbox: postbox, stateManager: stateManager, peerId: peerId).start(error: { error in
+                    subscriber.putError(error)
+                }, completed: {
+                    subscriber.putNext(true)
+                    subscriber.putCompletion()
+                })
+            }
+        }
+    }
+    |> take(1)
+    |> ignoreValues
 }
 
 func synchronizePeerReadState(network: Network, postbox: Postbox, stateManager: AccountStateManager, peerId: PeerId, push: Bool, validate: Bool) -> Signal<Never, PeerReadStateValidationError> {

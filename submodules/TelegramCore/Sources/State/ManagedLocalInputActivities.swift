@@ -3,6 +3,8 @@ import Postbox
 import SwiftSignalKit
 import TelegramApi
 import MtProtoKit
+// MARK: AyuGram
+import SGSimpleSettings
 
 
 public struct PeerActivitySpace: Hashable {
@@ -175,6 +177,11 @@ private func requestActivity(postbox: Postbox, network: Network, accountPeerId: 
                 }
             }
             
+            // MARK: AyuGram - suppress typing and upload activity in ghost mode
+            if SGSimpleSettings.shared.isAyuBlockTyping {
+                return .complete()
+            }
+
             if let inputPeer = apiInputPeer(peer) {
                 var flags: Int32 = 0
                 let topMessageId = threadId.flatMap { Int32(clamping: $0) }

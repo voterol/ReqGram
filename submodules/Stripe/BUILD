@@ -1,3 +1,4 @@
+load("@rules_cc//cc:objc_library.bzl", "objc_library")
 
 objc_library(
     name = "Stripe",
@@ -16,6 +17,7 @@ objc_library(
     copts = [
         "-I{}/PublicHeaders/Stripe".format(package_name()),
         "-Werror",
+        "-Wno-error=deprecated-declarations",
     ],
     sdk_frameworks = [
         "Foundation",

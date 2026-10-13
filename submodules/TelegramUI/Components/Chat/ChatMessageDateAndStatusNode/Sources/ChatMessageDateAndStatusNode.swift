@@ -48,6 +48,36 @@ public enum ChatMessageDateAndStatusType: Equatable {
 private let reactionCountFont = Font.semibold(11.0)
 private let reactionFont = Font.regular(12.0)
 
+private func ayuDeletedMarkerImage(style: String, color: UIColor, pointSize: CGFloat) -> UIImage? {
+    let symbolName: String
+    switch style {
+    case "none":
+        return nil
+    case "cross":
+        symbolName = "xmark"
+    case "crossed-eye", "eyeoff":
+        symbolName = "eye.slash"
+    default:
+        symbolName = "trash"
+    }
+    let configuration = UIImage.SymbolConfiguration(pointSize: pointSize, weight: .semibold)
+    guard let image = UIImage(systemName: symbolName, withConfiguration: configuration) else {
+        return nil
+    }
+    return generateTintedImage(image: image, color: color)
+}
+
+private func ayuDeletedMarkerColor(setting: String, themeColor: UIColor) -> UIColor {
+    switch setting {
+    case "red": return UIColor(rgb: 0xff453a)
+    case "orange": return UIColor(rgb: 0xff9f0a)
+    case "green": return UIColor(rgb: 0x30d158)
+    case "blue": return UIColor(rgb: 0x0a84ff)
+    case "purple": return UIColor(rgb: 0xbf5af2)
+    default: return themeColor
+    }
+}
+
 private final class StatusReactionNode: ASDisplayNode {
     let iconView: ReactionIconView
     
@@ -183,6 +213,7 @@ public class ChatMessageDateAndStatusNode: ASDisplayNode {
         var context: AccountContext
         var presentationData: ChatPresentationData
         var edited: Bool
+        var isDeleted: Bool
         var impressionCount: Int?
         var dateText: String
         var type: ChatMessageDateAndStatusType
@@ -209,6 +240,7 @@ public class ChatMessageDateAndStatusNode: ASDisplayNode {
             context: AccountContext,
             presentationData: ChatPresentationData,
             edited: Bool,
+            isDeleted: Bool = false,
             impressionCount: Int?,
             dateText: String,
             type: ChatMessageDateAndStatusType,
@@ -234,6 +266,7 @@ public class ChatMessageDateAndStatusNode: ASDisplayNode {
             self.context = context
             self.presentationData = presentationData
             self.edited = edited
+            self.isDeleted = isDeleted
             self.impressionCount = impressionCount == 0 ? nil : impressionCount
             self.dateText = dateText
             self.type = type
@@ -266,6 +299,7 @@ public class ChatMessageDateAndStatusNode: ASDisplayNode {
     private var clockMinNode: ASImageNode?
     private let dateNode: TextNode
     private var impressionIcon: ASImageNode?
+    private var deletedMarkerNode: ASImageNode?
     private var reactionNodes: [MessageReaction.Reaction: StatusReactionNode] = [:]
     private let reactionButtonsContainer = ReactionButtonsAsyncLayoutContainer()
     private var reactionButtonNode: HighlightTrackingButtonNode?
@@ -327,6 +361,7 @@ public class ChatMessageDateAndStatusNode: ASDisplayNode {
         
         var currentBackgroundNode = self.backgroundNode
         var currentImpressionIcon = self.impressionIcon
+        var currentDeletedMarkerNode = self.deletedMarkerNode
         var currentRepliesIcon = self.repliesIcon
         var currentStarsIcon = self.starsIcon
 
@@ -352,6 +387,7 @@ public class ChatMessageDateAndStatusNode: ASDisplayNode {
             var impressionImage: UIImage?
             var repliesImage: UIImage?
             var starsImage: UIImage?
+            var deletedMarkerImage: UIImage?
 
             let themeUpdated = arguments.presentationData.theme != currentTheme || arguments.type != currentType
             
@@ -404,7 +440,7 @@ public class ChatMessageDateAndStatusNode: ASDisplayNode {
                     isDark: arguments.presentationData.theme.theme.overallDarkAppearance
                 )
             }
-            
+
             switch arguments.type {
             case .BubbleIncoming:
                 dateColor = arguments.presentationData.theme.theme.chat.message.incoming.secondaryTextColor
@@ -537,6 +573,14 @@ public class ChatMessageDateAndStatusNode: ASDisplayNode {
                     starsImage = graphics.freeTonIcon
                 }
             }
+
+            if arguments.isDeleted {
+                deletedMarkerImage = ayuDeletedMarkerImage(
+                    style: SGSimpleSettings.shared.ayuDeletedIconStyle,
+                    color: ayuDeletedMarkerColor(setting: SGSimpleSettings.shared.ayuDeletedIconColor, themeColor: dateColor),
+                    pointSize: floor(arguments.presentationData.fontSize.baseDisplaySize * 9.0 / 17.0)
+                )
+            }
             
             var updatedDateText = arguments.dateText
             if arguments.edited {
@@ -575,6 +619,23 @@ public class ChatMessageDateAndStatusNode: ASDisplayNode {
                 impressionWidth = impressionSize.width + 3.0
             } else {
                 currentImpressionIcon = nil
+            }
+
+
+            var deletedMarkerSize = CGSize()
+            var deletedMarkerWidth: CGFloat = 0.0
+            if let deletedMarkerImage {
+                if currentDeletedMarkerNode == nil {
+                    let iconNode = ASImageNode()
+                    iconNode.isLayerBacked = true
+                    iconNode.displayWithoutProcessing = true
+                    iconNode.displaysAsynchronously = false
+                    currentDeletedMarkerNode = iconNode
+                }
+                deletedMarkerSize = deletedMarkerImage.size
+                deletedMarkerWidth = deletedMarkerSize.width + 3.0
+            } else {
+                currentDeletedMarkerNode = nil
             }
             
             var repliesIconSize = CGSize()
@@ -639,7 +700,7 @@ public class ChatMessageDateAndStatusNode: ASDisplayNode {
                         clockMinNode?.displayWithoutProcessing = true
                         clockMinNode?.frame = CGRect(origin: CGPoint(), size: clockMinImage?.size ?? CGSize())
                     }
-                    clockPosition = CGPoint(x: leftInset + date.size.width + 8.5, y: 7.5 + offset)
+                    clockPosition = CGPoint(x: leftInset + impressionWidth + deletedMarkerWidth + date.size.width + 8.5, y: 7.5 + offset)
                 case let .Sent(read):
                     let hideStatus: Bool
                     switch arguments.type {
@@ -679,9 +740,9 @@ public class ChatMessageDateAndStatusNode: ASDisplayNode {
                         let checkSize = loadedCheckFullImage!.size
                         
                         if read {
-                            checkReadFrame = CGRect(origin: CGPoint(x: leftInset + impressionWidth + date.size.width + 5.0 + statusWidth - checkSize.width, y: 3.0 + offset), size: checkSize)
+                            checkReadFrame = CGRect(origin: CGPoint(x: leftInset + impressionWidth + deletedMarkerWidth + date.size.width + 5.0 + statusWidth - checkSize.width, y: 3.0 + offset), size: checkSize)
                         }
-                        checkSentFrame = CGRect(origin: CGPoint(x: leftInset + impressionWidth + date.size.width + 5.0 + statusWidth - checkSize.width - checkOffset, y: 3.0 + offset), size: checkSize)
+                        checkSentFrame = CGRect(origin: CGPoint(x: leftInset + impressionWidth + deletedMarkerWidth + date.size.width + 5.0 + statusWidth - checkSize.width - checkOffset, y: 3.0 + offset), size: checkSize)
                     }
                 case .Failed:
                     statusWidth = 0.0
@@ -770,7 +831,7 @@ public class ChatMessageDateAndStatusNode: ASDisplayNode {
             
             leftInset += reactionInset
             
-            let layoutSize = CGSize(width: leftInset + impressionWidth + date.size.width + statusWidth + backgroundInsets.left + backgroundInsets.right, height: date.size.height + backgroundInsets.top + backgroundInsets.bottom)
+            let layoutSize = CGSize(width: leftInset + impressionWidth + deletedMarkerWidth + date.size.width + statusWidth + backgroundInsets.left + backgroundInsets.right, height: date.size.height + backgroundInsets.top + backgroundInsets.bottom)
             
             let verticalReactionsInset: CGFloat
             let verticalInset: CGFloat
@@ -1112,8 +1173,30 @@ public class ChatMessageDateAndStatusNode: ASDisplayNode {
                             impressionIcon.removeFromSupernode()
                             strongSelf.impressionIcon = nil
                         }
+
+
+                        if let currentDeletedMarkerNode, let deletedMarkerImage {
+                            let markerFrame = CGRect(
+                                origin: CGPoint(
+                                    x: leftOffset + leftInset + backgroundInsets.left + impressionWidth,
+                                    y: backgroundInsets.top + 1.0 + offset + verticalInset + floor((date.size.height - deletedMarkerSize.height) / 2.0)
+                                ),
+                                size: deletedMarkerSize
+                            )
+                            currentDeletedMarkerNode.image = deletedMarkerImage
+                            if currentDeletedMarkerNode.supernode == nil {
+                                strongSelf.deletedMarkerNode = currentDeletedMarkerNode
+                                strongSelf.addSubnode(currentDeletedMarkerNode)
+                                currentDeletedMarkerNode.frame = markerFrame
+                            } else {
+                                animation.animator.updateFrame(layer: currentDeletedMarkerNode.layer, frame: markerFrame, completion: nil)
+                            }
+                        } else if let deletedMarkerNode = strongSelf.deletedMarkerNode {
+                            deletedMarkerNode.removeFromSupernode()
+                            strongSelf.deletedMarkerNode = nil
+                        }
                         
-                        animation.animator.updateFrame(layer: strongSelf.dateNode.layer, frame: CGRect(origin: CGPoint(x: leftOffset + leftInset + backgroundInsets.left + impressionWidth, y: backgroundInsets.top + 1.0 + offset + verticalInset), size: date.size), completion: nil)
+                        animation.animator.updateFrame(layer: strongSelf.dateNode.layer, frame: CGRect(origin: CGPoint(x: leftOffset + leftInset + backgroundInsets.left + impressionWidth + deletedMarkerWidth, y: backgroundInsets.top + 1.0 + offset + verticalInset), size: date.size), completion: nil)
                         
                         if let clockFrameNode = clockFrameNode {
                             let clockPosition = CGPoint(x: leftOffset + backgroundInsets.left + clockPosition.x + reactionInset, y: backgroundInsets.top + clockPosition.y + verticalInset)

@@ -277,6 +277,7 @@
 #import <LegacyComponents/TGVideoCameraGLRenderer.h>
 #import <LegacyComponents/TGVideoCameraGLView.h>
 #import <LegacyComponents/TGVideoCameraMovieRecorder.h>
+
 #import <LegacyComponents/TGVideoEditAdjustments.h>
 #import <LegacyComponents/TGVideoInfo.h>
 #import <LegacyComponents/TGVideoMediaAttachment.h>

@@ -168,6 +168,7 @@ enum GCDAsyncSocketFlags
 	kSocketSecure                  = 1 << 13,  // If set, socket is using secure communication via SSL/TLS
 	kSocketHasReadEOF              = 1 << 14,  // If set, we have read EOF from socket
 	kReadStreamClosed              = 1 << 15,  // If set, we've read EOF plus prebuffer has been drained
+	kStreamsTeardownStarted        = 1 << 19,  // If set, CFStream teardown has been claimed
 #if TARGET_OS_IPHONE
 	kAddedStreamsToRunLoop         = 1 << 16,  // If set, CFStreams have been added to listener thread
 	kUsingCFStreamForTLS           = 1 << 17,  // If set, we're forced to use CFStream instead of SecureTransport
@@ -286,6 +287,7 @@ enum GCDAsyncSocketConfig
 - (BOOL)addStreamsToRunLoop;
 - (BOOL)openStreams;
 - (void)removeStreamsFromRunLoop;
+- (void)closeStreams;
 #endif
 
 // Class Methods
@@ -2727,21 +2729,20 @@ enum GCDAsyncSocketConfig
 	{
 		if (readStream || writeStream)
 		{
-			[self removeStreamsFromRunLoop];
-			
-			if (readStream)
+			if (!(flags & kStreamsTeardownStarted))
 			{
-				CFReadStreamSetClient(readStream, kCFStreamEventNone, NULL, NULL);
-				CFReadStreamClose(readStream);
-				CFRelease(readStream);
-				readStream = NULL;
-			}
-			if (writeStream)
-			{
-				CFWriteStreamSetClient(writeStream, kCFStreamEventNone, NULL, NULL);
-				CFWriteStreamClose(writeStream);
-				CFRelease(writeStream);
-				writeStream = NULL;
+				flags |= kStreamsTeardownStarted;
+				// CFStreams are scheduled on cfstreamThread. Keep their complete
+				// teardown on that run loop; closing from socketQueue after only
+				// unscheduling leaves CoreFoundation state split across two threads.
+				if (flags & kAddedStreamsToRunLoop)
+					[self performSelector:@selector(closeStreams)
+					                     onThread:cfstreamThread
+					                   withObject:nil
+					                waitUntilDone:YES];
+				else
+					[self closeStreams];
+				flags &= ~kAddedStreamsToRunLoop;
 			}
 		}
 	}
@@ -7011,12 +7012,20 @@ static void CFWriteStreamCallback (CFWriteStreamRef stream, CFStreamEventType ty
 		if (readStream)
 		{
 			CFReadStreamClose(readStream);
+		}
+		if (writeStream)
+		{
+			CFWriteStreamClose(writeStream);
+		}
+		// Match the normal teardown path: close both sides before releasing
+		// either owner of the paired SocketStream, including partial creation.
+		if (readStream)
+		{
 			CFRelease(readStream);
 			readStream = NULL;
 		}
 		if (writeStream)
 		{
-			CFWriteStreamClose(writeStream);
 			CFRelease(writeStream);
 			writeStream = NULL;
 		}
@@ -7101,6 +7110,41 @@ static void CFWriteStreamCallback (CFWriteStreamRef stream, CFStreamEventType ty
 		                waitUntilDone:YES];
 		
 		flags &= ~kAddedStreamsToRunLoop;
+	}
+}
+
+- (void)closeStreams
+{
+	NSAssert([NSThread currentThread] == cfstreamThread || !(flags & kAddedStreamsToRunLoop),
+	         @"CFStreams must be torn down on their run-loop thread");
+	if (!readStream && !writeStream)
+		return;
+
+	if (readStream)
+		CFReadStreamUnscheduleFromRunLoop(readStream, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
+	if (writeStream)
+		CFWriteStreamUnscheduleFromRunLoop(writeStream, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
+	if (readStream)
+	{
+		CFReadStreamSetClient(readStream, kCFStreamEventNone, NULL, NULL);
+		CFReadStreamClose(readStream);
+	}
+	if (writeStream)
+	{
+		CFWriteStreamSetClient(writeStream, kCFStreamEventNone, NULL, NULL);
+		CFWriteStreamClose(writeStream);
+	}
+
+	// Keep both paired stream owners until both close operations complete.
+	if (readStream)
+	{
+		CFRelease(readStream);
+		readStream = NULL;
+	}
+	if (writeStream)
+	{
+		CFRelease(writeStream);
+		writeStream = NULL;
 	}
 }
 

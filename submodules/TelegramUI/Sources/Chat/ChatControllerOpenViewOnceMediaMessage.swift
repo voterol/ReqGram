@@ -131,6 +131,7 @@ extension ChatControllerImpl {
         let isIncoming = message.effectivelyIncoming(self.context.account.peerId)
         
         var presentImpl: ((ViewController) -> Void)?
+        var dismissImpl: (() -> Void)?
         let configuration = ContextController.Configuration(
             sources: [
                 ContextController.Source(
@@ -153,12 +154,16 @@ extension ChatControllerImpl {
                         if let self {
                             self.context.sharedContext.mediaManager.setPlaylist(nil, type: .voice, control: .playback(.pause))
                         }
+                        dismissImpl?()
                     }
                 )
             ], initialId: 0
         )
         
         let contextController = makeContextController(presentationData: self.presentationData, configuration: configuration)
+        dismissImpl = { [weak contextController] in
+            contextController?.dismiss()
+        }
         contextController.getOverlayViews = { [weak self] in
             guard let self else {
                 return []

@@ -12,6 +12,7 @@ import TextFormat
 final class PeerInfoScreenCommentItem: PeerInfoScreenItem {
     enum Icon {
         case managedBot
+        case warning
     }
     
     enum LinkAction {
@@ -23,14 +24,16 @@ final class PeerInfoScreenCommentItem: PeerInfoScreenItem {
     let text: String
     let attributedPrefix: NSAttributedString?
     let useAccentLinkColor: Bool
+    let isWarning: Bool
     let linkAction: ((LinkAction) -> Void)?
     
-    init(id: AnyHashable, icon: Icon? = nil, text: String, attributedPrefix: NSAttributedString? = nil, useAccentLinkColor: Bool = true, linkAction: ((LinkAction) -> Void)? = nil) {
+    init(id: AnyHashable, icon: Icon? = nil, text: String, attributedPrefix: NSAttributedString? = nil, useAccentLinkColor: Bool = true, isWarning: Bool = false, linkAction: ((LinkAction) -> Void)? = nil) {
         self.id = id
         self.icon = icon
         self.text = text
         self.attributedPrefix = attributedPrefix
         self.useAccentLinkColor = useAccentLinkColor
+        self.isWarning = isWarning
         self.linkAction = linkAction
     }
     
@@ -40,6 +43,7 @@ final class PeerInfoScreenCommentItem: PeerInfoScreenItem {
 }
 
 private final class PeerInfoScreenCommentItemNode: PeerInfoScreenItemNode {
+    private let warningBackgroundNode: ASDisplayNode
     private var iconView: UIImageView?
     private let textNode: ImmediateTextNodeWithEntities
     private var linkHighlightingNode: LinkHighlightingNode?
@@ -51,6 +55,7 @@ private final class PeerInfoScreenCommentItemNode: PeerInfoScreenItemNode {
     private var chevronImage: UIImage?
     
     override init() {
+        self.warningBackgroundNode = ASDisplayNode()
         self.textNode = ImmediateTextNodeWithEntities()
         self.textNode.displaysAsynchronously = false
         self.textNode.isUserInteractionEnabled = false
@@ -60,6 +65,9 @@ private final class PeerInfoScreenCommentItemNode: PeerInfoScreenItemNode {
         
         super.init()
         
+        self.warningBackgroundNode.isLayerBacked = true
+        self.warningBackgroundNode.clipsToBounds = true
+        self.addSubnode(self.warningBackgroundNode)
         self.addSubnode(self.textNode)
         self.addSubnode(self.activateArea)
     }
@@ -87,9 +95,12 @@ private final class PeerInfoScreenCommentItemNode: PeerInfoScreenItemNode {
         let themeUpdated = self.presentationData?.theme !== presentationData.theme
         self.item = item
         self.presentationData = presentationData
+        self.backgroundColor = nil
         
-        let sideInset: CGFloat = 16.0 + safeInsets.left
-        let verticalInset: CGFloat = 7.0
+        let cardInset: CGFloat = item.isWarning ? 12.0 : 0.0
+        let cardVerticalInset: CGFloat = item.isWarning ? 6.0 : 0.0
+        let sideInset: CGFloat = 16.0 + safeInsets.left + cardInset
+        let verticalInset: CGFloat = 7.0 + cardVerticalInset
         
         self.textNode.maximumNumberOfLines = 0
         self.textNode.arguments = TextNodeWithEntities.Arguments(
@@ -101,7 +112,17 @@ private final class PeerInfoScreenCommentItemNode: PeerInfoScreenItemNode {
         )
         
         let textFont = Font.regular(presentationData.listsFontSize.itemListBaseHeaderFontSize)
-        let textColor = presentationData.theme.list.freeTextColor
+        let textColor = item.isWarning ? presentationData.theme.list.itemDestructiveColor : presentationData.theme.list.freeTextColor
+
+        if item.isWarning {
+            self.warningBackgroundNode.backgroundColor = presentationData.theme.list.itemDestructiveColor.withMultipliedAlpha(0.10)
+            self.warningBackgroundNode.borderColor = presentationData.theme.list.itemDestructiveColor.withMultipliedAlpha(0.26).cgColor
+            self.warningBackgroundNode.borderWidth = 1.0
+            self.warningBackgroundNode.cornerRadius = 10.0
+        } else {
+            self.warningBackgroundNode.backgroundColor = nil
+            self.warningBackgroundNode.borderWidth = 0.0
+        }
         
         var text = item.text
         text = text.replacingOccurrences(of: " >]", with: "\u{00A0}>]")
@@ -147,9 +168,11 @@ private final class PeerInfoScreenCommentItemNode: PeerInfoScreenItemNode {
                 switch icon {
                 case .managedBot:
                     iconView.image = UIImage(bundleImageName: "Peer Info/ManagedBotInlineTextIcon")?.withRenderingMode(.alwaysTemplate)
+                case .warning:
+                    iconView.image = UIImage(systemName: "exclamationmark.triangle.fill")?.withRenderingMode(.alwaysTemplate)
                 }
             }
-            iconView.tintColor = presentationData.theme.list.freeTextColor
+            iconView.tintColor = item.isWarning ? presentationData.theme.list.itemDestructiveColor : presentationData.theme.list.freeTextColor
             
             if let image = iconView.image {
                 iconView.frame = CGRect(origin: CGPoint(x: sideInset, y: verticalInset + 1.0), size: image.size)
@@ -166,6 +189,11 @@ private final class PeerInfoScreenCommentItemNode: PeerInfoScreenItemNode {
         let textFrame = CGRect(origin: CGPoint(x: sideInset + leftTextInset, y: verticalInset), size: textSize)
         
         let height = textSize.height + verticalInset * 2.0
+        if item.isWarning {
+            transition.updateFrame(node: self.warningBackgroundNode, frame: CGRect(x: cardInset, y: cardVerticalInset, width: width - cardInset * 2.0, height: height - cardVerticalInset * 2.0))
+        } else {
+            self.warningBackgroundNode.frame = .zero
+        }
         
         if self.textNode.frame.size != textFrame.size {
             self.textNode.frame = textFrame
@@ -173,7 +201,23 @@ private final class PeerInfoScreenCommentItemNode: PeerInfoScreenItemNode {
             transition.updateFrame(node: self.textNode, frame: textFrame)
         }
         
-        self.activateArea.frame = CGRect(origin: CGPoint(x: safeInsets.left, y: 0.0), size: CGSize(width: width - safeInsets.left - safeInsets.right, height: height))
+        self.activateArea.frame = CGRect(origin: CGPoint(x: safeInsets.left + cardInset, y: cardVerticalInset), size: CGSize(width: width - safeInsets.left - safeInsets.right - cardInset * 2.0, height: height - cardVerticalInset * 2.0))
+        self.activateArea.accessibilityTraits = item.linkAction == nil ? .staticText : [.staticText, .link]
+        self.activateArea.accessibilityHint = item.linkAction == nil ? nil : "Opens the external source"
+        self.activateArea.activate = { [weak self] in
+            guard let self, let item = self.item, let linkAction = item.linkAction else {
+                return false
+            }
+            guard let start = item.text.range(of: "](http://") ?? item.text.range(of: "](https://") else {
+                return false
+            }
+            let urlStart = item.text.index(start.lowerBound, offsetBy: 2)
+            guard let urlEnd = item.text[urlStart...].firstIndex(of: ")") else {
+                return false
+            }
+            linkAction(.tap(String(item.text[urlStart..<urlEnd])))
+            return true
+        }
         
         return height
     }

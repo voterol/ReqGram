@@ -51,7 +51,7 @@ targets:
     info:
       path: tgwatch Watch App/Info.plist
       properties:
-        CFBundleDisplayName: Swiftgram
+        CFBundleDisplayName: ReqGram
         CFBundleIconName: Swiftgram
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)

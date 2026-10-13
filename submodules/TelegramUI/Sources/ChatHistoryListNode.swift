@@ -1,4 +1,5 @@
 import SGSimpleSettings
+import AyuGram
 import Foundation
 import UIKit
 import SwiftSignalKit
@@ -473,7 +474,20 @@ private struct ChatHistoryAnimatedEmojiConfiguration {
 
 private var nextClientId: Int32 = 1
 
+private func ayuHistoryContainsMessages(_ entries: [ChatHistoryEntry]) -> Bool {
+    return entries.contains(where: { entry in
+        switch entry {
+        case .MessageEntry, .MessageGroupEntry:
+            return true
+        default:
+            return false
+        }
+    })
+}
+
 public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, ChatHistoryListNode {
+    private var ayuStoreChangedObserverToken: UUID?
+    private var ayuRemoteConfigObservation: AyuRemoteConfig.Observation?
     static let fixedAdMessageStableId: UInt32 = UInt32.max - 5000
 
     private let listView: ListViewImpl
@@ -969,6 +983,37 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
         }
 
         self.beginAdMessageManagement(adMessages: adMessages)
+
+        // One owner-level observer refreshes the visible bubble rows. Keeping
+        // this at history-list scope avoids a remote-config observer per row.
+        var initialAyuRemoteConfigRevision: UInt64? = AyuRemoteConfig.shared.revision
+        self.ayuRemoteConfigObservation = AyuRemoteConfig.shared.observe { [weak self] revision in
+            guard let self else { return }
+            if initialAyuRemoteConfigRevision == revision {
+                initialAyuRemoteConfigRevision = nil
+                return
+            }
+            initialAyuRemoteConfigRevision = nil
+            self.forEachItemNode { itemNode in
+                (itemNode as? ChatMessageBubbleItemNode)?.refreshAyuRemoteConfigBadges()
+            }
+        }
+
+        // MARK: AyuGram - refresh synthetic deleted entries when the preserved-message store changes
+        if case .default = source, chatLocation.peerId != nil {
+            self.ayuStoreChangedObserverToken = AyuMessageStore.addStoreChangedObserver { [weak self] peerIds in
+                guard let self else { return }
+                guard let currentPeerId = self.chatLocation.peerId else { return }
+                if peerIds.contains(currentPeerId.toInt64()) {
+                    // Advance the location id so distinctUntilChanged does not
+                    // suppress the refresh after the separate Ayu store changes.
+                    if var locationValue = self.chatHistoryLocationValue {
+                        locationValue.id += 1
+                        self.chatHistoryLocationValue = locationValue
+                    }
+                }
+            }
+        }
         
         self.listView.accessibilityPageScrolledString = { [weak self] row, count in
             if let strongSelf = self {
@@ -1286,6 +1331,10 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
     }
     
     deinit {
+        self.ayuRemoteConfigObservation?.dispose()
+        if let token = self.ayuStoreChangedObserverToken {
+            AyuMessageStore.removeStoreChangedObserver(token)
+        }
         self.historyDisposable.dispose()
         self.readHistoryDisposable.dispose()
         self.interactiveReadActionDisposable?.dispose()
@@ -1861,7 +1910,8 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
         
         let chatThemes = self.context.engine.themes.getChatThemes(accountManager: self.context.sharedContext.accountManager)
         
-        let deviceContactsNumbers = self.context.sharedContext.deviceContactPhoneNumbers.get()
+        let deviceContactsNumbers = Signal<Set<String>, NoError>.single(Set<String>())
+        |> then(self.context.sharedContext.deviceContactPhoneNumbers.get())
         |> distinctUntilChanged
         
         let premiumConfiguration = PremiumConfiguration.with(appConfiguration: self.context.currentAppConfiguration.with { $0 })
@@ -1914,14 +1964,18 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
         let messageViewQueue = Queue.mainQueue()
         let historyViewTransitionDisposable = (combineLatest(queue: messageViewQueue,
             self.context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.translationSettings]) |> take(1),
-            historyViewUpdate |> debug_measureTimeToFirstEvent(label: "chatHistoryNode_historyViewUpdate"),
-            self.chatPresentationDataPromise.get() |> debug_measureTimeToFirstEvent(label: "chatHistoryNode_chatPresentationData"),
+            historyViewUpdate
+            |> debug_measureTimeToFirstEvent(label: "chatHistoryNode_historyViewUpdate"),
+            self.chatPresentationDataPromise.get()
+            |> debug_measureTimeToFirstEvent(label: "chatHistoryNode_chatPresentationData"),
             selectedMessages |> debug_measureTimeToFirstEvent(label: "chatHistoryNode_selectedMessages"),
             updatingMedia |> debug_measureTimeToFirstEvent(label: "chatHistoryNode_updatingMedia"),
             automaticDownloadNetworkType |> debug_measureTimeToFirstEvent(label: "chatHistoryNode_automaticDownloadNetworkType"),
             preferredStoryHighQuality |> debug_measureTimeToFirstEvent(label: "chatHistoryNode_preferredStoryHighQuality"),
-            animatedEmojiStickers |> debug_measureTimeToFirstEvent(label: "chatHistoryNode_animatedEmojiStickers"),
-            additionalAnimatedEmojiStickers |> debug_measureTimeToFirstEvent(label: "chatHistoryNode_additionalAnimatedEmojiStickers"),
+            animatedEmojiStickers
+            |> debug_measureTimeToFirstEvent(label: "chatHistoryNode_animatedEmojiStickers"),
+            additionalAnimatedEmojiStickers
+            |> debug_measureTimeToFirstEvent(label: "chatHistoryNode_additionalAnimatedEmojiStickers"),
             customChannelDiscussionReadState |> debug_measureTimeToFirstEvent(label: "chatHistoryNode_customChannelDiscussionReadState"),
             customThreadOutgoingReadState |> debug_measureTimeToFirstEvent(label: "chatHistoryNode_customThreadOutgoingReadState"),
             availableReactions |> debug_measureTimeToFirstEvent(label: "chatHistoryNode_availableReactions"),
@@ -2228,7 +2282,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                 }
                                 
                 let previousChatHistoryEntriesForViewState = chatHistoryEntriesForViewState.with({ $0 })
-                let (filteredEntries, updatedChatHistoryEntriesForViewState) = chatHistoryEntriesForView(
+                var (filteredEntries, updatedChatHistoryEntriesForViewState) = chatHistoryEntriesForView(
                     currentState: previousChatHistoryEntriesForViewState,
                     context: context,
                     location: chatLocation,
@@ -2257,6 +2311,44 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                     isMusicPlaylist: isMusicPlaylist,
                     pinToTopStableId: pinToTopStableId
                 )
+                // MARK: AyuGram - inject preserved deleted messages only into
+                // ordinary peer history, after upstream entries have become
+                // ChatHistoryEntry values and before transition diffing.
+                if case .default = source, let peerId = chatLocation.peerId {
+                    let existingMessageIds = Set(view.entries.map { $0.message.id })
+                    let loadedIndices = view.entries.map { $0.message.index }
+                    let isConfirmedEmptyNewestPage: Bool
+                    let emptyNewestPageLimit: Int?
+                    if !view.isLoading && view.entries.isEmpty && !view.holeEarlier && !view.holeLater && tag == nil,
+                       let locationInput = update.2,
+                       case let .Initial(count) = locationInput.content {
+                        isConfirmedEmptyNewestPage = true
+                        emptyNewestPageLimit = count
+                    } else {
+                        isConfirmedEmptyNewestPage = false
+                        emptyNewestPageLimit = nil
+                    }
+                    let shouldInject = !view.isLoading && tag == nil && (!view.entries.isEmpty || isConfirmedEmptyNewestPage)
+                    if shouldInject {
+                        let syntheticEntries = AyuInlineDeletedEntries.entriesForWindow(
+                            context: context,
+                            peerId: peerId,
+                            accountId: context.account.peerId.toInt64(),
+                            presentationData: chatPresentationData,
+                            lowerBound: view.holeEarlier ? loadedIndices.min() : nil,
+                            upperBound: view.holeLater ? loadedIndices.max() : nil,
+                            existingMessageIds: existingMessageIds,
+                            existingStableIds: Set(view.entries.map { $0.message.stableId }),
+                            threadId: chatLocation.threadId,
+                            emptyNewestPageLimit: emptyNewestPageLimit
+                        )
+                        if reverse {
+                            filteredEntries = Array(AyuInlineDeletedEntries.mergeIntoEntries(Array(filteredEntries.reversed()), synthetic: syntheticEntries).reversed())
+                        } else {
+                            filteredEntries = AyuInlineDeletedEntries.mergeIntoEntries(filteredEntries, synthetic: syntheticEntries)
+                        }
+                    }
+                }
                 let lastHeaderId = filteredEntries.last.flatMap { listMessageDateHeaderId(timestamp: $0.index.timestamp) } ?? 0
                 let processedView = ChatHistoryView(originalView: view, filteredEntries: filteredEntries, associatedData: associatedData, lastHeaderId: lastHeaderId, id: id, locationInput: update.2, ignoreMessagesInTimestampRange: update.3, ignoreMessageIds: update.4)
                 let previousValueAndVersion = previousView.swap((processedView, update.1, selectedMessages, allAdMessages.version))
@@ -2902,6 +2994,10 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                     for i in (wideIndexRange.0 ... wideIndexRange.1) {
                         switch historyView.filteredEntries[i] {
                         case let .MessageEntry(message, _, _, _, _, _):
+                            // MARK: AyuGram - synthetic preserved-deleted entries have no postbox backing; skip translation
+                            if AyuInlineDeletedEntries.isSynthetic(message) {
+                                continue
+                            }
                             guard message.adAttribute == nil && message.id.namespace == Namespaces.Message.Cloud else {
                                 continue
                             }
@@ -2920,6 +3016,10 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                             }
                         case let .MessageGroupEntry(_, messages, _):
                             for (message, _, _, _, _) in messages {
+                                // MARK: AyuGram - synthetic preserved-deleted entries have no postbox backing; skip translation
+                                if AyuInlineDeletedEntries.isSynthetic(message) {
+                                    continue
+                                }
                                 guard message.adAttribute == nil && message.id.namespace == Namespaces.Message.Cloud else {
                                     continue
                                 }
@@ -2967,6 +3067,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                     
                     switch historyView.filteredEntries[i] {
                     case let .MessageEntry(message, _, _, _, _, _):
+                        let isAyuSyntheticMessage = message.isAyuSyntheticDeletedMessage
                         if let author = message.author as? TelegramUser {
                             peerIdsWithRefreshStories.append(author.id)
                         }
@@ -3037,10 +3138,14 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                                         }
                                     }
                                 }
-                                downloadableResourceIds.append((message.id, telegramFile.resource.id.stringRepresentation))
+                                if !isAyuSyntheticMessage {
+                                    downloadableResourceIds.append((message.id, telegramFile.resource.id.stringRepresentation))
+                                }
                             } else if let image = media as? TelegramMediaImage {
                                 if let representation = image.representations.last {
-                                    downloadableResourceIds.append((message.id, representation.resource.id.stringRepresentation))
+                                    if !isAyuSyntheticMessage {
+                                        downloadableResourceIds.append((message.id, representation.resource.id.stringRepresentation))
+                                    }
                                 }
                             } else if let invoice = media as? TelegramMediaInvoice, let extendedMedia = invoice.extendedMedia, case .preview = extendedMedia {
                                 messageIdsWithInactiveExtendedMedia.insert(message.id)
@@ -3086,7 +3191,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                         } else {
                             topVisibleMessageRange = ChatTopVisibleMessageRange(lowerBound: message.index, upperBound: message.index, isLast: i == historyView.filteredEntries.count - 1, isLoading: isLoading)
                         }
-                        if message.id.namespace == Namespaces.Message.Cloud, self.remainingDynamicAdMessageInterval != nil {
+                        if message.id.namespace == Namespaces.Message.Cloud, self.remainingDynamicAdMessageInterval != nil, !AyuInlineDeletedEntries.isSynthetic(message) {
                             allVisibleAnchorMessageIds.append((message.id, nodeIndex))
                         }
                     case let .MessageGroupEntry(_, messages, _):
@@ -3169,6 +3274,10 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
             for entry in historyView.filteredEntries {
                 switch entry {
                 case let .MessageEntry(message, _, _, _, _, _):
+                    // MARK: AyuGram - synthetic preserved-deleted entries have no postbox backing; skip reaction reads
+                    if AyuInlineDeletedEntries.isSynthetic(message) {
+                        break
+                    }
                     if let _ = message.inlineBotAttribute {
                         if let visibleBusinessBotMessageIdValue = visibleBusinessBotMessageId {
                             if visibleBusinessBotMessageIdValue < message.id {
@@ -3195,6 +3304,10 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                     }
                 case let .MessageGroupEntry(_, messages, _):
                     for (message, _, _, _, _) in messages {
+                        // MARK: AyuGram - synthetic preserved-deleted entries have no postbox backing; skip reaction reads
+                        if AyuInlineDeletedEntries.isSynthetic(message) {
+                            continue
+                        }
                         if let _ = message.inlineBotAttribute {
                             if let visibleBusinessBotMessageIdValue = visibleBusinessBotMessageId {
                                 if visibleBusinessBotMessageIdValue < message.id {
@@ -3870,7 +3983,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                 }
             }
             
-            let isEmpty = transition.historyView.originalView.entries.isEmpty || loadState == .empty(.botInfo)
+            let isEmpty = !ayuHistoryContainsMessages(transition.historyView.filteredEntries) || loadState == .empty(.botInfo)
             
             var hasReachedLimits = false
             if case let .customChatContents(customChatContents) = self.subject, let messageLimit = customChatContents.messageLimit {
@@ -4347,7 +4460,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                     strongSelf._initialData.set(.single(ChatHistoryCombinedInitialData(initialData: transition.initialData, buttonKeyboardMessage: transition.keyboardButtonsMessage, cachedData: transition.cachedData, cachedDataMessages: transition.cachedDataMessages, readStateData: transition.readStateData)))
                 }
                 strongSelf._cachedPeerDataAndMessages.set(.single((transition.cachedData, transition.cachedDataMessages)))
-                let isEmpty = transition.historyView.originalView.entries.isEmpty || loadState == .empty(.botInfo)
+                let isEmpty = !ayuHistoryContainsMessages(transition.historyView.filteredEntries) || loadState == .empty(.botInfo)
                 var hasReachedLimits = false
                 if case let .customChatContents(customChatContents) = strongSelf.subject, let messageLimit = customChatContents.messageLimit {
                     hasReachedLimits = transition.historyView.originalView.entries.count >= messageLimit
@@ -4761,16 +4874,15 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                 loop: for entry in historyView.filteredEntries.reversed() {
                     if index >= visibleRange.firstIndex && index <= visibleRange.lastIndex {
                         if case let .MessageEntry(message, _, _, _, _, _) = entry {
-                            if message.adAttribute != nil {
-                                continue
+                            if message.adAttribute == nil && !message.isAyuSyntheticDeletedMessage {
+                                if index != 0 || historyView.originalView.laterId != nil {
+                                    currentMessage = message
+                                }
+                                break loop
                             }
-                            if index != 0 || historyView.originalView.laterId != nil {
-                                currentMessage = message
-                            }
-                            break loop
                         } else if case let .MessageGroupEntry(_, messages, _) = entry {
                             if index != 0 || historyView.originalView.laterId != nil {
-                                currentMessage = messages.first?.0
+                                currentMessage = messages.lazy.map(\.0).first(where: { !$0.isAyuSyntheticDeletedMessage && $0.adAttribute == nil })
                             }
                             break loop
                         } else if case .ChatInfoEntry = entry {

@@ -3,6 +3,8 @@ import SGIAP
 import SGPayWall
 import SGProUI
 import SGSimpleSettings
+// MARK: AyuGram
+import AyuGram
 //
 import Foundation
 import UIKit
@@ -80,6 +82,7 @@ import StarsTransactionScreen
 import StarsWithdrawalScreen
 import MiniAppListScreen
 import GiftOptionsScreen
+import GiftSetupScreen
 import GiftViewScreen
 import StarsIntroScreen
 import ContentReportScreen
@@ -117,6 +120,7 @@ import TextProcessingScreen
 import CreateBotScreen
 import EmojiStatusSelectionComponent
 import EntityKeyboard
+import SGScamRegistry
 
 private final class AccountUserInterfaceInUseContext {
     let subscribers = Bag<(Bool) -> Void>()
@@ -294,7 +298,11 @@ public final class SharedAccountContextImpl: SharedAccountContext {
     // MARK: Swiftgram
     private var immediateSGStatusValue = Atomic<SGStatus>(value: SGStatus.default)
     public var immediateSGStatus: SGStatus {
-        return self.immediateSGStatusValue.with { $0 }
+        let current = self.immediateSGStatusValue.with { $0 }
+        if current.status >= 2 {
+            return current
+        }
+        return SGStatus(status: current.status)
     }
     private var sgStatusDisposable: Disposable?
     public var SGIAP: SGIAPManager?
@@ -549,8 +557,14 @@ public final class SharedAccountContextImpl: SharedAccountContext {
         |> deliverOnMainQueue).start(next: { sharedData in
             if let settings = sharedData.entries[ApplicationSpecificSharedDataKeys.sgStatus]?.get(SGStatus.self) {
                 let _ = immediateSGStatusValue.swap(settings)
-                SGSimpleSettings.shared.ephemeralStatus = settings.status
-                SGSimpleSettings.shared.status = settings.status
+                let clampedStatus = max(settings.status, 2)
+                SGSimpleSettings.shared.ephemeralStatus = clampedStatus
+                SGSimpleSettings.shared.status = clampedStatus
+            } else {
+                // MARK: Swiftgram Pro unlocked by default when no stored status entry exists
+                let _ = immediateSGStatusValue.swap(SGStatus.default)
+                SGSimpleSettings.shared.ephemeralStatus = SGStatus.default.status
+                SGSimpleSettings.shared.status = SGStatus.default.status
             }
         })
         self.initSGIAP(isMainApp: applicationBindings.isMainApp)
@@ -805,11 +819,19 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                     primary = self.activeAccountsValue!.accounts.first?.1
                 }
                 if primary !== self.activeAccountsValue!.primary {
+                    ReqGramMessageActions.shared.setAccount(primary.map { "account_\($0.account.id.int64)" })
                     hadUpdates = true
                     self.activeAccountsValue!.primary?.account.postbox.clearCaches()
                     self.activeAccountsValue!.primary?.account.resetCachedData()
                     self.activeAccountsValue!.primary = primary
                 }
+                SGScamRegistryIntegration.configure(for: primary)
+                // MARK: AyuGram - publish the active account's peer id so that
+                // synchronous helpers can scope local premium to "me" only.
+                ayuLocalPremiumSelfPeerId = primary?.account.peerId
+                // Refresh the badge remote config alongside the account switch.
+                AyuRemoteConfig.shared.startIfNeeded()
+                AyuStreamerMode.shared.start()
                 if self.activeAccountsValue!.currentAuth?.id != authRecord?.0 {
                     hadUpdates = true
                     self.activeAccountsValue!.currentAuth?.postbox.clearCaches()
@@ -1806,6 +1828,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
         
         assert(Queue.mainQueue().isCurrent())
         var chatsBadge: String?
+        ReqGramMessageActions.shared.setAccount(nil)
         if let rootController = self.mainWindow?.viewController as? TelegramRootController {
             if let tabsController = rootController.viewControllers.first as? TabBarController {
                 for controller in tabsController.controllers {
@@ -3259,6 +3282,35 @@ public final class SharedAccountContextImpl: SharedAccountContext {
             controller.push(birthdayController)
         }
         
+        return controller
+    }
+
+    /// Opens the normal recipient and gift-composer flow for a catalog gift.
+    /// Kept here (rather than duplicating payment setup in a plugin) so the
+    /// plugin uses the same validation, caption entities and payment entity
+    /// path as the native gift UI.
+    public func makeStarGiftByIdController(context: AccountContext, giftId: Int64, onError: @escaping () -> Void = {}) -> ViewController? {
+        let giftPromise = Promise<StarGift.Gift?>()
+        giftPromise.set(resolveStarGiftById(context: context, giftId: giftId)
+        |> deliverOnMainQueue)
+
+        let controller = context.sharedContext.makeContactSelectionController(ContactSelectionControllerParams(
+            context: context,
+            mode: .starsGifting(birthdays: nil, hasActions: false, showSelf: true, selfSubtitle: nil),
+            autoDismiss: false,
+            title: { $0.Gift_PremiumOrStars_Title },
+            options: .single([])
+        ))
+        let _ = combineLatest(queue: Queue.mainQueue(), controller.result, giftPromise.get()).startStandalone(next: { [weak controller] result, gift in
+            guard let gift else {
+                onError()
+                return
+            }
+            guard let (peers, _, _, _, _, _) = result,
+                  let contact = peers.first, case let .peer(peer, _, _) = contact else { return }
+            let composer = GiftSetupScreen(context: context, peerId: peer.id, subject: .starGift(gift, nil))
+            controller?.push(composer)
+        })
         return controller
     }
     

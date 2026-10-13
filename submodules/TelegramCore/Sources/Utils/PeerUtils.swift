@@ -4,6 +4,16 @@ import SGSimpleSettings
 
 public let anonymousSavedMessagesId: Int64 = 2666000
 
+/// MARK: AyuGram
+/// Peer id of the currently active account, published so that synchronous
+/// helpers like `Peer.isPremium` can tell "me" from everyone else without
+/// threading an `AccountContext` through every call site.
+///
+/// Set on account switch; `nil` disables local premium entirely. Writes and
+/// reads are confined to the main thread in practice, and a stale value can
+/// only cause a cosmetic premium badge, never an authorization decision.
+public var ayuLocalPremiumSelfPeerId: PeerId?
+
 public extension Peer {
     var debugDisplayTitle: String {
         switch self {
@@ -34,7 +44,7 @@ public extension Peer {
         // MARK: Swiftgram
         let chatId = self.id.id._internalGetInt64Value()
         if contentSettings.appConfiguration.sgWebSettings.global.forceReasons.contains(chatId) {
-            return "Unavailable in Swiftgram due to App Store Guidelines"
+            return "Unavailable in ReqGram due to App Store Guidelines"
         } else if contentSettings.appConfiguration.sgWebSettings.global.unforceReasons.contains(chatId) {
             return nil
         }
@@ -235,7 +245,16 @@ public extension Peer {
     var isPremium: Bool {
         switch self {
         case let user as TelegramUser:
-            return user.flags.contains(.isPremium)
+            if user.flags.contains(.isPremium) {
+                return true
+            }
+            // MARK: AyuGram - local premium emulation. Applies only to the
+            // logged-in user's own peer, and only unlocks client-side gating;
+            // the server still rejects premium-only requests.
+            if SGSimpleSettings.shared.ayuLocalPremium, user.id == ayuLocalPremiumSelfPeerId {
+                return true
+            }
+            return false
         default:
             return false
         }

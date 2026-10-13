@@ -173,6 +173,7 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
     private var currentWebPageAndMedia: (TelegramMediaWebpage, EngineRawMedia)?
     private var mediaSubject: GalleryMediaSubject?
     private let messageContextDisposable = MetaDisposable()
+    private var currentMessageCopyProtected = false
     
     private var videoFramePreviewNode: (ASImageNode, ImmediateTextNode)?
     
@@ -858,6 +859,8 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
     func setMessage(_ message: EngineRawMessage, mediaSubject: GalleryMediaSubject? = nil, displayInfo: Bool = true, translateToLanguage: String? = nil, peerIsCopyProtected: Bool = false, displayPictureInPictureButton: Bool = false, settingsButtonState: SettingsButtonState? = nil, displayTextRecognitionButton: Bool = false, displayStickersButton: Bool = false, animated: Bool = false) {
         self.currentMessage = message
         self.mediaSubject = mediaSubject
+        let isAyuSynthetic = message.isAyuSyntheticDeletedMessage
+        self.currentMessageCopyProtected = message.isCopyProtected() || peerIsCopyProtected || message.paidContent != nil
         
         var displayInfo = displayInfo
         if Namespaces.Message.allNonRegular.contains(message.id.namespace) || message.timestamp == 0 {
@@ -865,7 +868,7 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
         }
         var canFullscreen = false
         var canDelete: Bool
-        var canShare = !message.containsSecretMedia && !Namespaces.Message.allNonRegular.contains(message.id.namespace) && message.adAttribute == nil
+        var canShare = !message.containsSecretMedia && (!Namespaces.Message.allNonRegular.contains(message.id.namespace) || isAyuSynthetic) && message.adAttribute == nil
                 
         var canEdit = false
         var isImage = false
@@ -949,6 +952,14 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
             canShare = false
             canEdit = false
         }
+        if isAyuSynthetic {
+            // The footer may expose local export only. Every mutation,
+            // navigation and server-backed action is invalid for this object.
+            displayInfo = false
+            canDelete = false
+            canEdit = false
+            canFullscreen = false
+        }
         
         if message.containsSecretMedia {
             canDelete = false
@@ -994,6 +1005,11 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
             if let result = addLocallyGeneratedEntities(text, enabledTypes: [.timecode], entities: entities, mediaDuration: mediaDuration) {
                 entities = result
             }
+            if isAyuSynthetic {
+                // Do not make message/timecode links or other navigation
+                // targets from a synthetic MessageId.
+                entities = []
+            }
             if let translateToLanguage, mediaSubject == nil && !text.isEmpty {
                 for attribute in message.attributes {
                     if let attribute = attribute as? TranslationMessageAttribute, !attribute.text.isEmpty, attribute.toLang == translateToLanguage {
@@ -1007,7 +1023,7 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
             let codeHighlightSpecs = extractMessageSyntaxHighlightSpecs(text: text, entities: entities)
             var cachedMessageSyntaxHighlight: CachedMessageSyntaxHighlight?
             
-            if !codeHighlightSpecs.isEmpty {
+            if !codeHighlightSpecs.isEmpty && !isAyuSynthetic {
                 for attribute in message.attributes {
                     if let attribute = attribute as? DerivedDataMessageAttribute {
                         if let value = attribute.data["code"]?.get(CachedMessageSyntaxHighlight.self) {
@@ -1693,7 +1709,7 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
                     items.append(ActionSheetButtonItem(title: globalTitle, color: .destructive, action: { [weak actionSheet] in
                         actionSheet?.dismissAnimated()
                         if let strongSelf = self {
-                            let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: messages.map { $0.id }, type: .forEveryone).start()
+                            let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: messages.map { $0.id }, type: .forEveryone, userInitiated: true).start()
                             strongSelf.controllerInteraction?.dismissController()
                         }
                     }))
@@ -1708,13 +1724,13 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
                     items.append(ActionSheetButtonItem(title: localOptionText, color: .destructive, action: { [weak actionSheet] in
                         actionSheet?.dismissAnimated()
                         if let strongSelf = self {
-                            let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: messages.map { $0.id }, type: .forLocalPeer).start()
+                            let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: messages.map { $0.id }, type: .forLocalPeer, userInitiated: true).start()
                             strongSelf.controllerInteraction?.dismissController()
                         }
                     }))
                 }
                 if !ask && items.count == 1 {
-                    let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: messages.map { $0.id }, type: .forEveryone).start()
+                    let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: messages.map { $0.id }, type: .forEveryone, userInitiated: true).start()
                     strongSelf.controllerInteraction?.dismissController()
                 } else if !items.isEmpty {
                     strongSelf.interacting?(true)
@@ -1736,6 +1752,29 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
         self.interacting?(true)
         
         if let currentMessage = self.currentMessage {
+            if currentMessage.isAyuSyntheticDeletedMessage {
+                guard !self.currentMessageCopyProtected else {
+                    self.interacting?(false)
+                    return
+                }
+                var subject: ShareControllerSubject?
+                if let image = currentMessage.media.first as? TelegramMediaImage {
+                    subject = .image(image.representations.map { representation in
+                        ImageRepresentationWithReference(representation: representation, reference: .standalone(resource: representation.resource))
+                    })
+                } else if let file = currentMessage.media.first as? TelegramMediaFile {
+                    subject = .media(.standalone(media: file), self.shareMediaParameters?())
+                }
+                guard let subject else {
+                    self.interacting?(false)
+                    return
+                }
+                let shareController = self.context.sharedContext.makeShareController(context: self.context, params: ShareControllerParams(subject: subject, preferredAction: .default, externalShare: true, immediateExternalShare: true, dismissed: { [weak self] _ in
+                    self?.interacting?(false)
+                }))
+                self.controllerInteraction?.presentController(shareController, nil)
+                return
+            }
             let _ = (self.context.engine.data.get(TelegramEngine.EngineData.Item.Messages.MessageGroup(id: currentMessage.id))
             |> deliverOnMainQueue).start(next: { [weak self] messages in
                 if let strongSelf = self, !messages.isEmpty {

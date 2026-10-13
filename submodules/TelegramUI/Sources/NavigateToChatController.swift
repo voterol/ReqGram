@@ -118,6 +118,7 @@ public func navigateToChatControllerImpl(_ params: NavigateToChatControllerParam
             }
             
             let controller = ChatListControllerImpl(context: params.context, location: chatListLocation, controlsHistoryPreload: false, enableDebugActions: false)
+            controller.navigationPresentation = .master
             
             let activateMessageSearch = params.activateMessageSearch
             let chatListCompletion = params.chatListCompletion

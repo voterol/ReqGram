@@ -1,3 +1,4 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 arch_specific_crc32c_sources = select({
     "@build_bazel_rules_apple//apple:ios_arm64": [

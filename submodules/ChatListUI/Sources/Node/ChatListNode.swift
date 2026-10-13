@@ -314,6 +314,7 @@ public struct ChatListNodeState: Equatable {
     public var selectedPeerMap: [EnginePeer.Id: EnginePeer]
     public var selectedThreadIds: Set<Int64>
     public var archiveStoryState: StoryState?
+    public var externalDecorationRevision: UInt64
     
     public init(
         presentationData: ChatListPresentationData,
@@ -329,7 +330,8 @@ public struct ChatListNodeState: Equatable {
         hiddenItemShouldBeTemporaryRevealed: Bool,
         hiddenPsaPeerId: EnginePeer.Id?,
         selectedThreadIds: Set<Int64>,
-        archiveStoryState: StoryState?
+        archiveStoryState: StoryState?,
+        externalDecorationRevision: UInt64 = 0
     ) {
         self.presentationData = presentationData
         self.editing = editing
@@ -345,6 +347,7 @@ public struct ChatListNodeState: Equatable {
         self.hiddenPsaPeerId = hiddenPsaPeerId
         self.selectedThreadIds = selectedThreadIds
         self.archiveStoryState = archiveStoryState
+        self.externalDecorationRevision = externalDecorationRevision
     }
     
     public static func ==(lhs: ChatListNodeState, rhs: ChatListNodeState) -> Bool {
@@ -388,6 +391,9 @@ public struct ChatListNodeState: Equatable {
             return false
         }
         if lhs.archiveStoryState != rhs.archiveStoryState {
+            return false
+        }
+        if lhs.externalDecorationRevision != rhs.externalDecorationRevision {
             return false
         }
         return true
@@ -2207,6 +2213,7 @@ public final class ChatListNode: ListViewImpl {
         let previousChatListFilters = Atomic<[ChatListFilter]?>(value: nil)
         
         let previousAccountIsPremium = Atomic<Bool?>(value: nil)
+        let previousExternalDecorationRevision = Atomic<UInt64?>(value: nil)
         
         let accountIsPremium = context.engine.data.subscribe(
             TelegramEngine.EngineData.Item.Peer.Peer(id: context.account.peerId)
@@ -2696,6 +2703,9 @@ public final class ChatListNode: ListViewImpl {
                 forceAllUpdated = true
             }
             if accountIsPremium != previousAccountIsPremium.swap(accountIsPremium) {
+                forceAllUpdated = true
+            }
+            if state.externalDecorationRevision != previousExternalDecorationRevision.swap(state.externalDecorationRevision) {
                 forceAllUpdated = true
             }
             let presentationData = state.presentationData
@@ -3356,6 +3366,14 @@ public final class ChatListNode: ListViewImpl {
             self.currentState = state
             self.statePromise.set(state)
             self.selectionCountChanged?(state.selectedPeerIds.count)
+        }
+    }
+
+    public func invalidateExternalDecorations() {
+        self.updateState { state in
+            var state = state
+            state.externalDecorationRevision &+= 1
+            return state
         }
     }
     

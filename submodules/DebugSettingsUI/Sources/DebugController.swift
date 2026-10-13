@@ -311,7 +311,7 @@ private enum DebugControllerEntry: ItemListNodeEntry {
         let arguments = arguments as! DebugControllerArguments
         switch self {
         case .SGDebug:
-            return ItemListDisclosureItem(presentationData: presentationData, title: "Swiftgram Debug", label: "", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, title: "ReqGram Debug", label: "", sectionId: self.section, style: .blocks, action: {
                 guard let context = arguments.context else {
                     return
                 }
@@ -423,10 +423,10 @@ private enum DebugControllerEntry: ItemListNodeEntry {
             var fileName = "Log-iOS-Short.txt"
             var appName = "Telegram"
             if case .sendSGLogs(_) = self {
-                title = "Send Swiftgram Logs"
+                title = "Send ReqGram Logs"
                 logCollectionSignal = SGLogger.shared.collectLogs()
-                fileName = "Log-iOS-Swiftgram.txt"
-                appName = "Swiftgram"
+                fileName = "Log-iOS-ReqGram.txt"
+                appName = "ReqGram"
             }
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: "", sectionId: self.section, style: .blocks, action: {
                 let _ = (logCollectionSignal

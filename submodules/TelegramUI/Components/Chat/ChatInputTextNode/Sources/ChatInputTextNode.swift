@@ -9,6 +9,79 @@ import TextFormat
 import AccountContext
 import TextNodeWithEntities
 
+/// Visual-only animation for newly inserted glyphs in the legacy input renderer.
+/// This deliberately contains no settings or text-storage concerns.
+public struct ChatInputTextAnimationConfiguration: Equatable {
+    public var insertionEnabled: Bool
+    public var duration: TimeInterval
+    public var slideDistance: CGFloat
+    public var blurEnabled: Bool
+    public var blurDuration: TimeInterval
+    public var blurRadius: CGFloat
+    public var blurTextDelay: TimeInterval
+    public var scaleEnabled: Bool
+    public var scaleStart: CGFloat
+    public var rotateEnabled: Bool
+    public var rotateAngle: CGFloat
+    public var ignoreSpaces: Bool
+    public var animateAllLines: Bool
+    public var deletionParticlesEnabled: Bool
+    public var deletionParticleCount: Int
+    public var deletionParticleStyle: Int
+    public var deletionParticleSpeed: CGFloat
+    public var deletionParticleSpread: CGFloat
+    public var deletionParticleSize: CGFloat
+    public var selectionEffect: Int
+    public var selectionLiquidStretch: CGFloat
+    public var selectionLiquidSide: CGFloat
+    public var cursorEnabled: Bool
+    public var cursorSpeed: CGFloat
+    public var cursorWidth: CGFloat
+    public var liquidCursorEnabled: Bool
+    public var liquidCursorScale: CGFloat
+
+    public init(insertionEnabled: Bool = false, duration: TimeInterval = 0.22, slideDistance: CGFloat = 4.0,
+                blurEnabled: Bool = false, blurDuration: TimeInterval = 0.22, blurRadius: CGFloat = 10.0,
+                blurTextDelay: TimeInterval = 0.0, scaleEnabled: Bool = false, scaleStart: CGFloat = 0.0,
+                rotateEnabled: Bool = false, rotateAngle: CGFloat = 0.0, ignoreSpaces: Bool = true,
+                 animateAllLines: Bool = false, deletionParticlesEnabled: Bool = false,
+                 deletionParticleCount: Int = 5, deletionParticleStyle: Int = 0,
+                 deletionParticleSpeed: CGFloat = 50.0, deletionParticleSpread: CGFloat = 50.0,
+                  deletionParticleSize: CGFloat = 50.0,
+                  selectionEffect: Int = 0, selectionLiquidStretch: CGFloat = 60.0,
+                  selectionLiquidSide: CGFloat = 50.0, cursorEnabled: Bool = false,
+                   cursorSpeed: CGFloat = 30.0, cursorWidth: CGFloat = 5.0,
+                   liquidCursorEnabled: Bool = false, liquidCursorScale: CGFloat = 15.0) {
+        self.insertionEnabled = insertionEnabled
+        self.duration = duration.isFinite ? min(max(duration, 0.05), 0.6) : 0.22
+        self.slideDistance = slideDistance.isFinite ? min(max(slideDistance, 0.0), 20.0) : 4.0
+        self.blurEnabled = blurEnabled
+        self.blurDuration = blurDuration.isFinite ? min(max(blurDuration, 0.05), 0.6) : 0.22
+        self.blurRadius = blurRadius.isFinite ? min(max(blurRadius, 0.0), 30.0) : 10.0
+        self.blurTextDelay = blurTextDelay.isFinite ? min(max(blurTextDelay, 0.0), 0.5) : 0.0
+        self.scaleEnabled = scaleEnabled
+        self.scaleStart = scaleStart.isFinite ? min(max(scaleStart, 0.0), 2.0) : 0.0
+        self.rotateEnabled = rotateEnabled
+        self.rotateAngle = rotateAngle.isFinite ? min(max(rotateAngle, -180.0), 180.0) : 0.0
+        self.ignoreSpaces = ignoreSpaces
+        self.animateAllLines = animateAllLines
+        self.deletionParticlesEnabled = deletionParticlesEnabled
+        self.deletionParticleCount = min(max(deletionParticleCount, 1), 16)
+        self.deletionParticleStyle = min(max(deletionParticleStyle, 0), 2)
+        self.deletionParticleSpeed = deletionParticleSpeed.isFinite ? min(max(deletionParticleSpeed, 0.0), 100.0) : 50.0
+        self.deletionParticleSpread = deletionParticleSpread.isFinite ? min(max(deletionParticleSpread, 0.0), 100.0) : 50.0
+        self.deletionParticleSize = deletionParticleSize.isFinite ? min(max(deletionParticleSize, 1.0), 100.0) : 50.0
+        self.selectionEffect = min(max(selectionEffect, 0), 2)
+        self.selectionLiquidStretch = selectionLiquidStretch.isFinite ? min(max(selectionLiquidStretch, 0.0), 100.0) : 60.0
+        self.selectionLiquidSide = selectionLiquidSide.isFinite ? min(max(selectionLiquidSide, 0.0), 100.0) : 50.0
+        self.cursorEnabled = cursorEnabled
+        self.cursorSpeed = cursorSpeed.isFinite ? min(max(cursorSpeed, 1.0), 100.0) : 30.0
+        self.cursorWidth = cursorWidth.isFinite ? min(max(cursorWidth, 1.0), 12.0) : 5.0
+        self.liquidCursorEnabled = liquidCursorEnabled
+        self.liquidCursorScale = liquidCursorScale.isFinite ? min(max(liquidCursorScale, 0.0), 80.0) : 15.0
+    }
+}
+
 public protocol ChatInputTextNodeDelegate: AnyObject {
     func chatInputTextNodeDidUpdateText()
     func chatInputTextNodeShouldReturn(modifierFlags: UIKeyModifierFlags) -> Bool
@@ -211,6 +284,15 @@ open class ChatInputTextNode: ASDisplayNode {
     public var textView: ChatInputTextView {
         return self.view as! ChatInputTextView
     }
+
+    public var textAnimationConfiguration: ChatInputTextAnimationConfiguration {
+        get {
+            return self.textView.textAnimationConfiguration
+        }
+        set {
+            self.textView.textAnimationConfiguration = newValue
+        }
+    }
     
     public var keyboardAppearance: UIKeyboardAppearance {
         get {
@@ -373,12 +455,71 @@ private final class ChatInputTextContainer: NSTextContainer {
 }
 
 private final class ChatInputLegacyLayoutManager: NSLayoutManager {
+    var animationConfiguration = ChatInputTextAnimationConfiguration() {
+        didSet {
+            if !animationConfiguration.insertionEnabled || UIAccessibility.isReduceMotionEnabled {
+                self.insertionRange = nil
+            }
+        }
+    }
+    private var insertionRange: NSRange?
+    private var insertionStartTime: CFTimeInterval = 0.0
+    private var animationInvalidation: DispatchWorkItem?
+    var invalidateDisplay: (() -> Void)?
+
+
     override init() {
         super.init()
     }
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    func beginInsertionAnimation(forCharacterRange range: NSRange) {
+        guard animationConfiguration.insertionEnabled, !UIAccessibility.isReduceMotionEnabled, range.length > 0, range.length <= 64 else {
+            insertionRange = nil
+            return
+        }
+        insertionRange = range
+        insertionStartTime = CACurrentMediaTime()
+        animationInvalidation?.cancel()
+        self.scheduleAnimationTick()
+    }
+
+    private func scheduleAnimationTick() {
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.insertionRange != nil else { return }
+            self.invalidateDisplay?()
+            if CACurrentMediaTime() - self.insertionStartTime < self.animationLifetime {
+                self.scheduleAnimationTick()
+            } else {
+                self.clearInsertionAnimation()
+            }
+        }
+        animationInvalidation = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.016, execute: workItem)
+    }
+
+    private var animationLifetime: TimeInterval {
+        let baseDuration = max(animationConfiguration.duration, 0.001)
+        let characterCount = insertionRange?.length ?? 1
+        let stagger = min(0.045, baseDuration * 0.35)
+        let sequenceDuration = stagger * Double(max(0, characterCount - 1))
+        guard animationConfiguration.blurEnabled else {
+            return sequenceDuration + baseDuration
+        }
+        return sequenceDuration + max(baseDuration, max(animationConfiguration.blurTextDelay, 0.0) + max(animationConfiguration.blurDuration, 0.001))
+    }
+
+    func clearInsertionAnimation() {
+        insertionRange = nil
+        animationInvalidation?.cancel()
+        animationInvalidation = nil
+    }
+
+    deinit {
+        animationInvalidation?.cancel()
     }
     
     override func notShownAttribute(forGlyphAt glyphIndex: Int) -> Bool {
@@ -390,15 +531,83 @@ private final class ChatInputLegacyLayoutManager: NSLayoutManager {
             super.drawGlyphs(forGlyphRange: glyphsToShow, at: origin)
             return
         }
-        let _ = context
-        /*for i in glyphsToShow.lowerBound ..< glyphsToShow.upperBound {
-            let rect = self.lineFragmentRect(forGlyphAt: i, effectiveRange: nil, withoutAdditionalLayout: true)
-            context.setAlpha(max(0.0, min(1.0, rect.minY / 200.0)))
-            let location = self.location(forGlyphAt: i)
-            super.drawGlyphs(forGlyphRange: NSRange(location: i, length: 1), at: location)
+        guard let insertionRange, animationConfiguration.insertionEnabled, !UIAccessibility.isReduceMotionEnabled else {
+            super.drawGlyphs(forGlyphRange: glyphsToShow, at: origin)
+            return
         }
-        context.setAlpha(1.0)*/
-        super.drawGlyphs(forGlyphRange: glyphsToShow, at: origin)
+        let elapsed = CACurrentMediaTime() - insertionStartTime
+        if elapsed >= animationLifetime {
+            clearInsertionAnimation()
+            super.drawGlyphs(forGlyphRange: glyphsToShow, at: origin)
+            return
+        }
+        var unanimatedRange: NSRange? = nil
+        let stagger = min(0.045, animationConfiguration.duration * 0.35)
+        let firstInsertedGlyph = insertionRange.location < numberOfGlyphs ? glyphIndexForCharacter(at: insertionRange.location) : NSNotFound
+        let firstInsertedLine: CGFloat? = firstInsertedGlyph == NSNotFound ? nil : lineFragmentRect(forGlyphAt: firstInsertedGlyph, effectiveRange: nil).minY
+        let flushUnanimated: () -> Void = {
+            if let range = unanimatedRange {
+                super.drawGlyphs(forGlyphRange: range, at: origin)
+                unanimatedRange = nil
+            }
+        }
+        for glyphIndex in glyphsToShow.lowerBound ..< glyphsToShow.upperBound {
+            let characterRange = characterRange(forGlyphRange: NSRange(location: glyphIndex, length: 1), actualGlyphRange: nil)
+            let character: String
+            if let textStorage, characterRange.location != NSNotFound {
+                character = (textStorage.string as NSString).substring(with: characterRange)
+            } else {
+                character = ""
+            }
+            let isSpace = character.unicodeScalars.allSatisfy { CharacterSet.whitespacesAndNewlines.contains($0) }
+            let isInserted = characterRange.location != NSNotFound && NSIntersectionRange(characterRange, insertionRange).length > 0 &&
+                (!animationConfiguration.ignoreSpaces || !isSpace) &&
+                (animationConfiguration.animateAllLines || firstInsertedLine.map { lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil).minY == $0 } == true)
+            if !isInserted {
+                if let range = unanimatedRange {
+                    if range.location + range.length == glyphIndex {
+                        unanimatedRange = NSRange(location: range.location, length: range.length + 1)
+                    } else {
+                        flushUnanimated()
+                        unanimatedRange = NSRange(location: glyphIndex, length: 1)
+                    }
+                } else {
+                    unanimatedRange = NSRange(location: glyphIndex, length: 1)
+                }
+                continue
+            }
+            flushUnanimated()
+            let animationOrdinal = max(0, characterRange.location - insertionRange.location)
+            let characterElapsed = elapsed - stagger * Double(animationOrdinal)
+            let progress = CGFloat(min(1.0, max(0.0, characterElapsed / max(animationConfiguration.duration, 0.001))))
+            let blurProgress = CGFloat(min(1.0, max(0.0, (characterElapsed - max(animationConfiguration.blurTextDelay, 0.0)) / max(animationConfiguration.blurDuration, 0.001))))
+            context.saveGState()
+            let glyphRect: CGRect
+            if let textContainer = textContainers.first {
+                glyphRect = boundingRect(forGlyphRange: NSRange(location: glyphIndex, length: 1), in: textContainer)
+            } else {
+                glyphRect = .zero
+            }
+            let center = CGPoint(x: glyphRect.midX + origin.x, y: glyphRect.midY + origin.y)
+            context.translateBy(x: center.x, y: center.y)
+            if animationConfiguration.scaleEnabled {
+                let start = animationConfiguration.scaleStart
+                context.scaleBy(x: start + (1.0 - start) * progress, y: start + (1.0 - start) * progress)
+            }
+            if animationConfiguration.rotateEnabled {
+                context.rotate(by: (animationConfiguration.rotateAngle * .pi / 180.0) * (1.0 - progress))
+            }
+            context.translateBy(x: -center.x, y: -center.y)
+            context.setAlpha(progress)
+            if animationConfiguration.blurEnabled {
+                // Core Graphics' shadow is a blur-style approximation, not a true text blur.
+                context.setShadow(offset: .zero, blur: animationConfiguration.blurRadius * (1.0 - blurProgress), color: UIColor.black.withAlphaComponent(0.16).cgColor)
+            }
+            context.translateBy(x: 0.0, y: animationConfiguration.slideDistance * (1.0 - progress))
+            super.drawGlyphs(forGlyphRange: NSRange(location: glyphIndex, length: 1), at: origin)
+            context.restoreGState()
+        }
+        flushUnanimated()
     }
 }
 
@@ -425,6 +634,8 @@ private protocol ChatInputTextInternal: AnyObject {
     
     var updateDisplayElements: (() -> Void)? { get set }
     var attributedString: NSAttributedString? { get }
+    var animationConfiguration: ChatInputTextAnimationConfiguration { get set }
+    func deletionRect(for characterRange: NSRange) -> CGRect
     
     func invalidateLayout()
     func setAttributedString(attributedString: NSAttributedString)
@@ -432,6 +643,10 @@ private protocol ChatInputTextInternal: AnyObject {
     func currentTextBoundingRect() -> CGRect
     func currentTextLastLineBoundingRect() -> CGRect
     func displayBlockQuotes() -> [DisplayBlockQuote]
+}
+
+private extension ChatInputTextInternal {
+    func deletionRect(for characterRange: NSRange) -> CGRect { return .null }
 }
 
 private final class ChatInputTextLegacyInternal: NSObject, ChatInputTextInternal, NSLayoutManagerDelegate, NSTextStorageDelegate {
@@ -442,6 +657,17 @@ private final class ChatInputTextLegacyInternal: NSObject, ChatInputTextInternal
     var defaultTextContainerInset: UIEdgeInsets = UIEdgeInsets()
     
     var updateDisplayElements: (() -> Void)?
+
+    var animationConfiguration: ChatInputTextAnimationConfiguration {
+        get { return self.customLayoutManager.animationConfiguration }
+        set { self.customLayoutManager.animationConfiguration = newValue }
+    }
+
+    func deletionRect(for characterRange: NSRange) -> CGRect {
+        let glyphRange = self.customLayoutManager.glyphRange(forCharacterRange: characterRange, actualCharacterRange: nil)
+        guard glyphRange.length > 0 else { return .null }
+        return self.customLayoutManager.boundingRect(forGlyphRange: glyphRange, in: self.textContainer)
+    }
     
     var attributedString: NSAttributedString? {
         return self.customTextStorage
@@ -461,6 +687,11 @@ private final class ChatInputTextLegacyInternal: NSObject, ChatInputTextInternal
         
         self.customLayoutManager.delegate = self
         self.customTextStorage.delegate = self
+        self.customLayoutManager.invalidateDisplay = { [weak self] in
+            guard let self else { return }
+            self.customLayoutManager.invalidateDisplay(forCharacterRange: NSRange(location: 0, length: self.customTextStorage.length))
+            self.updateDisplayElements?()
+        }
     }
     
     @objc func layoutManager(_ layoutManager: NSLayoutManager, paragraphSpacingBeforeGlyphAt glyphIndex: Int, withProposedLineFragmentRect rect: CGRect) -> CGFloat {
@@ -522,6 +753,15 @@ private final class ChatInputTextLegacyInternal: NSObject, ChatInputTextInternal
             return
         }
         self.updateDisplayElements?()
+    }
+
+    func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorage.EditActions, range editedRange: NSRange, changeInLength delta: Int) {
+        guard editedMask.contains(.editedCharacters) else { return }
+        if delta > 0 {
+            self.customLayoutManager.beginInsertionAnimation(forCharacterRange: editedRange)
+        } else {
+            self.customLayoutManager.clearInsertionAnimation()
+        }
     }
     
     func invalidateLayout() {
@@ -702,6 +942,8 @@ private final class ChatInputTextNewInternal: NSObject, ChatInputTextInternal, N
     var attributedString: NSAttributedString? {
         return self.contentStorage.attributedString
     }
+
+    var animationConfiguration: ChatInputTextAnimationConfiguration = ChatInputTextAnimationConfiguration()
     
     override init() {
         self.textContainer = ChatInputTextContainer(size: CGSize(width: 100.0, height: 100000.0))
@@ -956,6 +1198,136 @@ public final class ChatInputTextCollapsedQuoteAttachmentImpl: NSTextAttachment, 
     }
 }
 
+private final class ChatInputSelectionOverlayView: UIView {
+    private let selectionLayer = CAShapeLayer()
+    private let cursorLayer = CAShapeLayer()
+    private var displayLink: CADisplayLink?
+    private var displayedCaret = CGPoint.zero
+    private var targetCaret = CGPoint.zero
+    private var cursorSpeed: CGFloat = 30.0
+    private var liquidEnabled = false
+    private var liquidScale: CGFloat = 15.0
+    private var lastTimestamp: CFTimeInterval?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        self.isUserInteractionEnabled = false
+        self.isAccessibilityElement = false
+        self.backgroundColor = nil
+        self.clipsToBounds = true
+        self.layer.addSublayer(self.selectionLayer)
+        self.layer.addSublayer(self.cursorLayer)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    deinit { displayLink?.invalidate() }
+
+    private func tick(_ displayLink: CADisplayLink) {
+        let distance = hypot(targetCaret.x - displayedCaret.x, targetCaret.y - displayedCaret.y)
+        let delta = min(max(displayLink.timestamp - (lastTimestamp ?? displayLink.timestamp), 0.0), 1.0 / 30.0)
+        lastTimestamp = displayLink.timestamp
+        let amount = min(1.0, 1.0 - CGFloat(exp(-(7.0 + cursorSpeed / 7.5) * delta)))
+        // Treat a wrapped line as a new visual segment instead of drawing a diagonal teleport.
+        let lineWrap = abs(targetCaret.y - displayedCaret.y) > max(12.0, cursorLayer.bounds.height * 0.8)
+        let step = lineWrap ? 1.0 : amount
+        displayedCaret.x += (targetCaret.x - displayedCaret.x) * step
+        displayedCaret.y += (targetCaret.y - displayedCaret.y) * step
+        cursorLayer.position = displayedCaret
+        if liquidEnabled {
+            cursorLayer.transform = CATransform3DMakeScale(1.0, 1.0 + liquidScale / 100.0 * min(1.0, distance / 40.0), 1.0)
+        }
+        if distance < 0.25 {
+            cursorLayer.position = targetCaret
+            cursorLayer.transform = CATransform3DIdentity
+            self.displayLink?.invalidate()
+            self.displayLink = nil
+            lastTimestamp = nil
+        }
+    }
+
+    private func validRect(_ rect: CGRect) -> CGRect? {
+        guard !rect.isNull, !rect.isInfinite,
+              rect.origin.x.isFinite, rect.origin.y.isFinite,
+              rect.size.width.isFinite, rect.size.height.isFinite else {
+            return nil
+        }
+        let clipped = rect.intersection(self.bounds)
+        return clipped.isNull || clipped.width <= 0.0 || clipped.height <= 0.0 ? nil : clipped
+    }
+
+    func update(selectionRects: [CGRect], color: UIColor, configuration: ChatInputTextAnimationConfiguration, animated: Bool) {
+        cursorLayer.removeAllAnimations()
+        if configuration.cursorEnabled, selectionRects.isEmpty {
+            // The caller supplies the native caret rect separately through updateCaret.
+            cursorLayer.isHidden = false
+            cursorLayer.backgroundColor = color.cgColor
+            cursorLayer.bounds.size.width = configuration.cursorWidth
+        } else {
+            cursorLayer.isHidden = true
+        }
+        // Selection effects are deliberately additive: UIKit keeps ownership of
+        // the native selection highlight while this layer only draws the
+        // configured outline/liquid accent. Keep the accent translucent so it
+        // cannot obscure selected text or duplicate the native fill opaquely.
+        guard configuration.selectionEffect != 0, !selectionRects.isEmpty else {
+            self.selectionLayer.path = nil
+            self.selectionLayer.removeAllAnimations()
+            return
+        }
+        let path = UIBezierPath()
+        let sideInset = configuration.selectionLiquidSide / 50.0
+        let verticalInset = configuration.selectionLiquidStretch / 200.0 * 3.0
+        for rect in selectionRects {
+            guard let effectRect = self.validRect(rect.insetBy(dx: -sideInset, dy: -verticalInset)) else { continue }
+            path.append(UIBezierPath(roundedRect: effectRect, cornerRadius: min(5.0, effectRect.height * 0.25)))
+        }
+        self.selectionLayer.path = path.cgPath
+        self.selectionLayer.fillColor = configuration.selectionEffect == 2 ? color.withAlphaComponent(0.12).cgColor : UIColor.clear.cgColor
+        self.selectionLayer.strokeColor = color.withAlphaComponent(configuration.selectionEffect == 2 ? 0.3 : 0.55).cgColor
+        self.selectionLayer.lineWidth = configuration.selectionEffect == 2 ? 1.0 : 1.5
+        if animated {
+            let pulse = CABasicAnimation(keyPath: "opacity")
+            pulse.fromValue = 0.25
+            pulse.toValue = 1.0
+            pulse.duration = 0.16
+            pulse.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            self.selectionLayer.add(pulse, forKey: "appear")
+        }
+    }
+
+    func updateCaret(_ rect: CGRect, color: UIColor, configuration: ChatInputTextAnimationConfiguration, animated: Bool) {
+        guard configuration.cursorEnabled, !rect.isNull else {
+            cursorLayer.isHidden = true
+            displayLink?.invalidate()
+            displayLink = nil
+            lastTimestamp = nil
+            return
+        }
+        cursorLayer.isHidden = false
+        cursorLayer.backgroundColor = color.cgColor
+        cursorSpeed = configuration.cursorSpeed
+        liquidEnabled = configuration.liquidCursorEnabled
+        liquidScale = configuration.liquidCursorScale
+        cursorLayer.cornerRadius = configuration.cursorWidth * 0.5
+        cursorLayer.bounds = CGRect(x: 0, y: 0, width: configuration.cursorWidth, height: max(12.0, rect.height))
+        targetCaret = CGPoint(x: rect.midX, y: rect.midY)
+        if liquidEnabled {
+            let travel = hypot(targetCaret.x - displayedCaret.x, targetCaret.y - displayedCaret.y)
+            cursorLayer.transform = CATransform3DMakeScale(1.0, 1.0 + liquidScale / 100.0 * min(1.0, travel / 40.0), 1.0)
+        } else {
+            cursorLayer.transform = CATransform3DIdentity
+        }
+        if displayedCaret == .zero || !animated { displayedCaret = targetCaret; cursorLayer.position = displayedCaret }
+        else if displayLink == nil {
+            lastTimestamp = nil
+            let link = CADisplayLink(target: DisplayLinkTarget { [weak self] link in self?.tick(link) }, selector: #selector(DisplayLinkTarget.event(_:)))
+            link.add(to: .main, forMode: .common)
+            displayLink = link
+        }
+    }
+}
+
 public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate, NSLayoutManagerDelegate, NSTextStorageDelegate {
     public final class Theme: Equatable {
         public final class Quote: Equatable {
@@ -1057,6 +1429,152 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
         
     private let displayInternal: ChatInputTextInternal
     private let measureInternal: ChatInputTextInternal
+
+    /// Configures the legacy renderer's optional insertion animation. The rich editor path ignores this.
+    private var textAnimationConfigurationValue = ChatInputTextAnimationConfiguration()
+    public var textAnimationConfiguration: ChatInputTextAnimationConfiguration {
+        get {
+            return self.textAnimationConfigurationValue
+        }
+        set {
+            if self.textAnimationConfigurationValue != newValue {
+                self.textAnimationConfigurationValue = newValue
+                self.displayInternal.invalidateLayout()
+            } else {
+                self.textAnimationConfigurationValue = newValue
+            }
+            self.displayInternal.animationConfiguration = newValue
+            self.measureInternal.animationConfiguration = newValue
+            self.setNeedsDisplay()
+            self.updateSelectionOverlay(animated: false)
+        }
+    }
+
+    // Kept above the text renderer and outside UIKit's selection/caret machinery.
+    // This is intentionally a one-shot, small CAEmitterLayer rather than a custom
+    // text view animation so deletion cannot interfere with input or selection.
+    private var deletionParticleLayer: CAEmitterLayer?
+    private let selectionOverlayView = ChatInputSelectionOverlayView()
+    private var nativeTintColor: UIColor?
+
+    private func updateSelectionOverlay(animated: Bool) {
+        // The overlay is a subview of the scroll view. Its frame is therefore in
+        // the text view's content coordinate space; converting the UIKit rects is
+        // important when textContainerInset, zooming, or scrolling are involved.
+        self.selectionOverlayView.frame = self.bounds
+        let configuration = self.textAnimationConfigurationValue
+        let hasMarkedText = self.markedTextRange != nil
+        let hasSelection = self.selectedRange.length != 0
+        var selectionRects: [CGRect] = []
+        if self.isFirstResponder, !hasMarkedText, hasSelection, let range = self.selectedTextRange {
+            selectionRects = super.selectionRects(for: range).map { self.selectionOverlayView.convert($0.rect, from: self) }
+        }
+        let overlayColor = self.nativeTintColor ?? self.tintColor ?? .systemBlue
+        self.selectionOverlayView.update(selectionRects: selectionRects, color: overlayColor, configuration: configuration, animated: animated && !UIAccessibility.isReduceMotionEnabled)
+        let caretRect: CGRect
+        if self.isFirstResponder, !hasMarkedText, !hasSelection {
+            caretRect = self.selectionOverlayView.convert(self.caretRect(for: self.selectedTextRange?.end ?? self.beginningOfDocument), from: self)
+        } else {
+            caretRect = .null
+        }
+        self.selectionOverlayView.updateCaret(caretRect, color: overlayColor, configuration: configuration, animated: animated && !UIAccessibility.isReduceMotionEnabled)
+        // Tint is the supported UIKit switch for the insertion caret. Only make it
+        // transparent while our caret is actually visible; selection handles and
+        // marked-text/IME rendering immediately regain UIKit's native tint.
+        let customCaretActive = configuration.cursorEnabled && self.isFirstResponder && !hasMarkedText && !hasSelection && !caretRect.isNull
+        if customCaretActive {
+            if self.nativeTintColor == nil { self.nativeTintColor = self.tintColor }
+            if self.tintColor != .clear { self.tintColor = .clear }
+        } else if let nativeTintColor = self.nativeTintColor {
+            self.nativeTintColor = nil
+            self.tintColor = nativeTintColor
+        }
+    }
+
+    private func beginDeletionParticleAnimation(for range: NSRange) {
+        guard self.textAnimationConfigurationValue.deletionParticlesEnabled,
+              !UIAccessibility.isReduceMotionEnabled,
+              range.length > 0, range.length <= 64,
+              self.displayInternal.textContainer.layoutManager != nil else {
+            return
+        }
+
+        var rect = self.displayInternal.deletionRect(for: range)
+        rect = rect.offsetBy(dx: self.textContainerInset.left, dy: self.textContainerInset.top)
+        rect = self.selectionOverlayView.convert(rect, from: self)
+        guard rect.isNull == false, rect.intersects(self.selectionOverlayView.bounds) else { return }
+
+        self.deletionParticleLayer?.removeFromSuperlayer()
+        let emitter = CAEmitterLayer()
+        emitter.frame = self.selectionOverlayView.bounds
+        emitter.emitterShape = .rectangle
+        emitter.emitterMode = .surface
+        emitter.emitterPosition = CGPoint(x: rect.midX, y: rect.midY)
+        emitter.emitterSize = CGSize(width: max(4.0, rect.width), height: max(4.0, rect.height))
+        emitter.renderMode = .oldestLast
+        emitter.seed = UInt32.random(in: 0 ... UInt32.max)
+
+        let cell = CAEmitterCell()
+        cell.contents = Self.deletionParticleImage.cgImage
+        cell.birthRate = Float(self.textAnimationConfigurationValue.deletionParticleCount) / 0.08
+        cell.lifetime = 0.55
+        cell.lifetimeRange = 0.12
+        cell.velocity = 12.0 + 0.6 * CGFloat(self.textAnimationConfigurationValue.deletionParticleSpeed)
+        cell.velocityRange = 4.0 + 0.4 * CGFloat(self.textAnimationConfigurationValue.deletionParticleSpread)
+        cell.emissionLongitude = -.pi / 2.0
+        cell.emissionRange = .pi * 2.0 * CGFloat(self.textAnimationConfigurationValue.deletionParticleSpread) / 100.0
+        let particleScale = 0.15 + 0.009 * CGFloat(self.textAnimationConfigurationValue.deletionParticleSize)
+        cell.scale = particleScale
+        cell.scaleRange = particleScale * 0.45
+        switch self.textAnimationConfigurationValue.deletionParticleStyle {
+        case 1:
+            cell.contents = Self.deletionParticleSquareImage.cgImage
+        case 2:
+            cell.contents = Self.deletionParticleStarImage.cgImage
+        default:
+            break
+        }
+        cell.alphaSpeed = -1.55
+        cell.spinRange = 1.2
+        cell.yAcceleration = 8.0
+        emitter.emitterCells = [cell]
+        self.selectionOverlayView.layer.addSublayer(emitter)
+        self.deletionParticleLayer = emitter
+
+        // A zero birth rate after the initial burst prevents a repeating effect.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak emitter] in
+            emitter?.birthRate = 0.0
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self, weak emitter] in
+            guard let self, self.deletionParticleLayer === emitter else { return }
+            emitter?.removeFromSuperlayer()
+            self.deletionParticleLayer = nil
+        }
+    }
+
+    private static let deletionParticleImage: UIImage = {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 6.0, height: 6.0))
+        return renderer.image { context in
+            UIColor.white.setFill()
+            context.cgContext.addEllipse(in: CGRect(x: 0.8, y: 1.2, width: 3.0, height: 2.4))
+            context.cgContext.addEllipse(in: CGRect(x: 2.8, y: 2.0, width: 2.2, height: 2.8))
+            context.cgContext.fillPath()
+        }
+    }()
+
+    private static let deletionParticleSquareImage: UIImage = {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 6.0, height: 6.0))
+        return renderer.image { _ in UIColor.white.setFill(); UIBezierPath(rect: CGRect(x: 1, y: 1, width: 4, height: 4)).fill() }
+    }()
+
+    private static let deletionParticleStarImage: UIImage = {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 8.0, height: 8.0))
+        return renderer.image { context in
+            UIColor.white.setStroke(); context.cgContext.setLineWidth(1.2)
+            context.cgContext.move(to: CGPoint(x: 4, y: 0)); context.cgContext.addLine(to: CGPoint(x: 4, y: 8))
+            context.cgContext.move(to: CGPoint(x: 0, y: 4)); context.cgContext.addLine(to: CGPoint(x: 8, y: 4)); context.cgContext.strokePath()
+        }
+    }()
     
     private var validLayoutSize: CGSize?
     private var isUpdatingLayout: Bool = false
@@ -1114,7 +1632,11 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
         }
         
         self.displayInternal.updateDisplayElements = { [weak self] in
-            self?.updateTextElements()
+            guard let self else {
+                return
+            }
+            self.updateTextElements()
+            self.setNeedsDisplay()
         }
         
         self.shouldRespondToAction = { [weak self] action in
@@ -1143,6 +1665,7 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
         self.textContainerInset = UIEdgeInsets()
         self.backgroundColor = nil
         self.isOpaque = false
+        self.addSubview(self.selectionOverlayView)
         
         self.dropAutocorrectioniOS16 = { [weak self] in
             guard let self else {
@@ -1210,10 +1733,12 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
     }
     
     @objc public func textViewDidBeginEditing(_ textView: UITextView) {
+        self.updateSelectionOverlay(animated: false)
         self.customDelegate?.chatInputTextNodeDidBeginEditing()
     }
 
     @objc public func textViewDidEndEditing(_ textView: UITextView) {
+            self.updateSelectionOverlay(animated: false)
         self.customDelegate?.chatInputTextNodeDidFinishEditing()
     }
 
@@ -1221,6 +1746,7 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
         self.selectionChangedForEditedText = true
                 
         self.updateTextContainerInset()
+        self.updateSelectionOverlay(animated: true)
         
         self.customDelegate?.chatInputTextNodeDidUpdateText()
         
@@ -1233,6 +1759,7 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
         }
         
         self.selectionChangedForEditedText = false
+        self.updateSelectionOverlay(animated: true)
         
         DispatchQueue.main.async { [weak self] in
             guard let self else {
@@ -1248,13 +1775,23 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
     }
     
     @objc public func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+        // Capture the pre-edit geometry. UIKit applies the deletion after this
+        // callback, so the overlay never participates in text storage or caret
+        // placement.
         guard let customDelegate = self.customDelegate else {
+            if text.isEmpty, range.length > 0 {
+                self.beginDeletionParticleAnimation(for: range)
+            }
             return true
         }
         if self.isPreservingText {
             return false
         }
-        return customDelegate.chatInputTextNode(shouldChangeTextIn: range, replacementText: text)
+        let shouldChange = customDelegate.chatInputTextNode(shouldChangeTextIn: range, replacementText: text)
+        if shouldChange, text.isEmpty, range.length > 0 {
+            self.beginDeletionParticleAnimation(for: range)
+        }
+        return shouldChange
     }
     
     public func updateTextContainerInset() {
@@ -1336,8 +1873,15 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
         self.isUpdatingLayout = isLayoutUpdated
         
         super.layoutSubviews()
+        self.bringSubviewToFront(self.selectionOverlayView)
+        self.updateSelectionOverlay(animated: false)
         
         self.isUpdatingLayout = false
+    }
+
+    override public func setContentOffset(_ contentOffset: CGPoint, animated: Bool) {
+        super.setContentOffset(contentOffset, animated: animated)
+        self.updateSelectionOverlay(animated: false)
     }
     
     public func currentTextBoundingRect() -> CGRect {
@@ -1385,14 +1929,6 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
         }
         
         self.onUpdateLayout?()
-    }
-    
-    override public func caretRect(for position: UITextPosition) -> CGRect {
-        return super.caretRect(for: position)
-    }
-    
-    override public func selectionRects(for range: UITextRange) -> [UITextSelectionRect] {
-        return super.selectionRects(for: range)
     }
     
     override public func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {

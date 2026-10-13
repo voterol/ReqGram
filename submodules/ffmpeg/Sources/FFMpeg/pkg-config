@@ -113,7 +113,9 @@ elif [[ "$1" == --variable=* ]]; then
 	LIBDAV1D_PATH=""
 	# Parse the library path flags to find NAME (last arg)
 	ARGS=("$@")
-	NAME="${ARGS[-1]}"
+	# Bash 3.2 (the system bash on macOS) does not support negative array
+	# subscripts. Keep this helper usable by the iOS simulator build.
+	NAME="${ARGS[$((${#ARGS[@]} - 1))]}"
 	for ((i=1; i<${#ARGS[@]}-1; i++)); do
 		if [ "${ARGS[$i]}" == "--libopus_path" ]; then
 			LIBOPUS_PATH="${ARGS[$((i+1))]}"

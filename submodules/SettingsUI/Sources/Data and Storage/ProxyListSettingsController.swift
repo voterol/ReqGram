@@ -25,6 +25,9 @@ private final class ProxySettingsControllerArguments {
     let setServerWithRevealedOptions: (ProxyServerSettings?, ProxyServerSettings?) -> Void
     let toggleUseForCalls: (Bool) -> Void
     let shareProxyList: () -> Void
+    var toggleTgws: (Bool) -> Void = { _ in }
+    var openTgws: () -> Void = {}
+    var managedRouteActive = false
     
     init(toggleLocalDNS: @escaping (Bool) -> Void, toggleEnabled: @escaping (Bool) -> Void, addNewServer: @escaping () -> Void, activateServer: @escaping (ProxyServerSettings) -> Void, editServer: @escaping (ProxyServerSettings) -> Void, removeServer: @escaping (ProxyServerSettings) -> Void, setServerWithRevealedOptions: @escaping (ProxyServerSettings?, ProxyServerSettings?) -> Void, toggleUseForCalls: @escaping (Bool) -> Void, shareProxyList: @escaping () -> Void) {
         self.toggleLocalDNS = toggleLocalDNS
@@ -82,6 +85,8 @@ private enum ProxySettingsControllerEntry: ItemListNodeEntry {
     case enabled(PresentationTheme, String, Bool, Bool)
     case localDNSToggle(PresentationTheme, String, Bool)
     case localDNSNotice(PresentationTheme, String)
+    case tgwsToggle(PresentationTheme, Bool)
+    case tgwsSettings(PresentationTheme, String)
     case serversHeader(PresentationTheme, String)
     case addServer(PresentationTheme, String, Bool)
     case server(Int, PresentationTheme, PresentationStrings, ProxyServerSettings, Bool, DisplayProxyServerStatus, ProxySettingsServerItemEditing, Bool)
@@ -91,13 +96,13 @@ private enum ProxySettingsControllerEntry: ItemListNodeEntry {
     
     var section: ItemListSectionId {
         switch self {
-            case .localDNSToggle, .localDNSNotice:
+            case .localDNSToggle, .localDNSNotice, .tgwsToggle:
                 return ProxySettingsControllerSection.enabled.rawValue
             case .enabled:
                 return ProxySettingsControllerSection.enabled.rawValue
             case .serversHeader, .addServer, .server:
                 return ProxySettingsControllerSection.servers.rawValue
-            case .shareProxyList:
+            case .shareProxyList, .tgwsSettings:
                 return ProxySettingsControllerSection.share.rawValue
             case .useForCalls, .useForCallsInfo:
                 return ProxySettingsControllerSection.calls.rawValue
@@ -106,6 +111,8 @@ private enum ProxySettingsControllerEntry: ItemListNodeEntry {
     
     var stableId: ProxySettingsControllerEntryId {
         switch self {
+            case .tgwsToggle: return .index(-3)
+            case .tgwsSettings: return .index(6)
             case .enabled:
                 return .index(-2)
             case .localDNSToggle:
@@ -129,6 +136,12 @@ private enum ProxySettingsControllerEntry: ItemListNodeEntry {
     
     static func ==(lhs: ProxySettingsControllerEntry, rhs: ProxySettingsControllerEntry) -> Bool {
         switch lhs {
+            case let .tgwsToggle(theme, value):
+                if case let .tgwsToggle(otherTheme, otherValue) = rhs { return theme === otherTheme && value == otherValue }
+                return false
+            case let .tgwsSettings(theme, label):
+                if case let .tgwsSettings(otherTheme, otherLabel) = rhs { return theme === otherTheme && label == otherLabel }
+                return false
             case let .enabled(lhsTheme, lhsText, lhsValue, lhsCreatesNew):
                 if case let .enabled(rhsTheme, rhsText, rhsValue, rhsCreatesNew) = rhs, lhsTheme === rhsTheme, lhsText == rhsText, lhsValue == rhsValue, lhsCreatesNew == rhsCreatesNew {
                     return true
@@ -187,7 +200,19 @@ private enum ProxySettingsControllerEntry: ItemListNodeEntry {
     }
     
     static func <(lhs: ProxySettingsControllerEntry, rhs: ProxySettingsControllerEntry) -> Bool {
+        if case .tgwsSettings = lhs {
+            switch rhs { case .useForCalls, .useForCallsInfo: return true; default: return false }
+        }
+        if case .tgwsSettings = rhs {
+            switch lhs { case .useForCalls, .useForCallsInfo: return false; default: return true }
+        }
         switch lhs {
+            case .tgwsToggle:
+                switch rhs {
+                    case .enabled, .localDNSToggle, .tgwsToggle: return false
+                    default: return true
+                }
+            case .tgwsSettings: return false
             case .enabled:
                 switch rhs {
                     case .enabled:
@@ -254,6 +279,10 @@ private enum ProxySettingsControllerEntry: ItemListNodeEntry {
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         let arguments = arguments as! ProxySettingsControllerArguments
         switch self {
+            case let .tgwsToggle(_, value):
+                return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: "Tgwsproxy", value: value, sectionId: self.section, style: .blocks, updated: arguments.toggleTgws)
+            case let .tgwsSettings(_, label):
+                return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Tgwsproxy Settings", label: label, labelStyle: .multilineDetailText, sectionId: self.section, style: .blocks, action: arguments.openTgws)
             case let .enabled(_, text, value, createsNew):
                 return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: text, value: value, enableInteractiveChanges: !createsNew, enabled: true, sectionId: self.section, style: .blocks, updated: { value in
                     if createsNew {
@@ -304,13 +333,23 @@ private func proxySettingsControllerEntries(theme: PresentationTheme, strings: P
     entries.append(.enabled(theme, strings.ChatSettings_ConnectionType_UseProxy, proxySettings.enabled, proxySettings.servers.isEmpty))
     // MARK: Swiftgram
     entries.append(.localDNSToggle(theme, i18n("ProxySettings.UseSystemDNS", strings.baseLanguageCode), SGSimpleSettings.shared.localDNSForProxyHost))
-    entries.append(.localDNSNotice(theme, i18n("ProxySettings.UseSystemDNS.Notice", strings.baseLanguageCode)))
+    entries.append(.tgwsToggle(theme, TgwsProxySettings.shared.enabled))
+    let managedActive = proxySettings.activeServer.map(tgwsIsManagedProxy) ?? false
+    entries.append(.localDNSNotice(theme, i18n("ProxySettings.UseSystemDNS.Notice", strings.baseLanguageCode) + (TgwsProxySettings.shared.enabled || managedActive ? "\nTgwsproxy manages MTProto account traffic only, not all app traffic. Calls may connect directly; the previous SOCKS call route is not preserved while enabled. URLSession requests and app extensions are not protected. Use the Tgwsproxy switch to disable it and restore the previous route. System DNS does not configure the native core." : "")))
     entries.append(.serversHeader(theme, strings.SocksProxySetup_SavedProxies))
     entries.append(.addServer(theme, strings.SocksProxySetup_AddProxy, state.editing))
     var index = 0
     var existingServers = Set<ProxyServerSettings>()
     for server in proxySettings.servers {
         if !existingServers.insert(server).inserted {
+            continue
+        }
+        if tgwsIsManagedProxy(server) {
+            let starting = TgwsProxySettings.shared.state == .starting
+            let ready = TgwsProxySettings.shared.state == .ready || TgwsProxySettings.shared.state == .upstreamConnected
+            let nativeStatus = DisplayProxyServerStatus(activity: starting, text: "Tgwsproxy · \(tgwsRuntimeLabel(languageCode: strings.baseLanguageCode))", textActive: ready)
+            entries.append(.server(index, theme, strings, server, proxySettings.enabled && server == proxySettings.activeServer, nativeStatus, ProxySettingsServerItemEditing(editable: false, editing: false, revealed: false), proxySettings.enabled))
+            index += 1
             continue
         }
         let status: ProxyServerStatus = statuses[server] ?? .checking
@@ -353,8 +392,11 @@ private func proxySettingsControllerEntries(theme: PresentationTheme, strings: P
         entries.append(.server(index, theme, strings, server, server == proxySettings.activeServer, displayStatus, ProxySettingsServerItemEditing(editable: true, editing: state.editing, revealed: state.revealedServer == server), proxySettings.enabled))
         index += 1
     }
-    if !existingServers.isEmpty {
+    if existingServers.contains(where: { !tgwsIsManagedProxy($0) }) {
         entries.append(.shareProxyList(theme, strings.SocksProxySetup_ShareProxyList))
+    }
+    if TgwsProxySettings.shared.enabled {
+        entries.append(.tgwsSettings(theme, tgwsRuntimeLabel(languageCode: strings.baseLanguageCode)))
     }
     
     if let activeServer = proxySettings.activeServer, case .socks5 = activeServer.connection {
@@ -409,6 +451,7 @@ public func proxySettingsController(accountManager: AccountManager<TelegramAccou
     }
     
     var shareProxyListImpl: (() -> Void)?
+    var argumentsOpenTgwsImpl: (() -> Void)?
     
     let arguments = ProxySettingsControllerArguments(toggleLocalDNS: { value in
         SGSimpleSettings.shared.localDNSForProxyHost = value
@@ -430,13 +473,34 @@ public func proxySettingsController(accountManager: AccountManager<TelegramAccou
         presentControllerImpl?(actionSheet, ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
     }, toggleEnabled: { value in
         let _ = updateProxySettingsInteractively(accountManager: accountManager, { current in
+            // Generic Use Proxy must never turn an owned route into direct.
+            if let active = current.activeServer, tgwsIsManagedProxy(active) {
+                guard !value else { return current }
+                var current = current
+                current.enabled = false
+                return current
+            }
             var current = current
             current.enabled = value
             return current
         }).start()
+        if !value, TgwsProxySettings.shared.enabled {
+            try? TgwsProxySettings.shared.update(enabled: false)
+        }
     }, addNewServer: {
         pushControllerImpl?(proxyServerSettingsController(sharedContext: sharedContext, presentationData: presentationData, updatedPresentationData: updatedPresentationData, accountManager: accountManager, network: network, currentSettings: nil))
     }, activateServer: { server in
+        if tgwsIsManagedProxy(server) {
+            let _ = updateProxySettingsInteractively(accountManager: accountManager, { current in
+                var current = current
+                if current.servers.firstIndex(of: server) != nil {
+                    current.activeServer = server
+                    current.enabled = true
+                }
+                return current
+            }).start()
+            return
+        }
         let _ = updateProxySettingsInteractively(accountManager: accountManager, { current in
             var current = current
             if current.activeServer != server {
@@ -448,8 +512,10 @@ public func proxySettingsController(accountManager: AccountManager<TelegramAccou
             return current
         }).start()
     }, editServer: { server in
+        if tgwsIsManagedProxy(server) { argumentsOpenTgwsImpl?(); return }
         pushControllerImpl?(proxyServerSettingsController(sharedContext: sharedContext, presentationData: presentationData, updatedPresentationData: updatedPresentationData, accountManager: accountManager, network: network, currentSettings: server))
     }, removeServer: { server in
+        guard !tgwsIsManagedProxy(server) else { return }
         let _ = updateProxySettingsInteractively(accountManager: accountManager, { current in
             var current = current
             if let index = current.servers.firstIndex(of: server) {
@@ -462,6 +528,8 @@ public func proxySettingsController(accountManager: AccountManager<TelegramAccou
             return current
         }).start()
     }, setServerWithRevealedOptions: { server, fromServer in
+        if let server = server, tgwsIsManagedProxy(server) { return }
+        if let fromServer = fromServer, tgwsIsManagedProxy(fromServer) { return }
         updateState { state in
             var state = state
             if (server == nil && fromServer == state.revealedServer) || (server != nil && fromServer == nil) {
@@ -478,6 +546,21 @@ public func proxySettingsController(accountManager: AccountManager<TelegramAccou
     }, shareProxyList: {
        shareProxyListImpl?()
     })
+    arguments.openTgws = {
+        pushControllerImpl?(tgwsProxySettingsController(presentationData: presentationData, updatedPresentationData: updatedPresentationData))
+    }
+    argumentsOpenTgwsImpl = arguments.openTgws
+    arguments.toggleTgws = { value in
+        do { try TgwsProxySettings.shared.update(enabled: value) }
+        catch {
+            let sheet = ActionSheetController(presentationData: presentationData)
+            sheet.setItemGroups([ActionSheetItemGroup(items: [
+                ActionSheetTextItem(title: "Could not save Tgwsproxy settings. The route was not changed."),
+                ActionSheetButtonItem(title: presentationData.strings.Common_OK, color: .accent, font: .bold, action: { [weak sheet] in sheet?.dismissAnimated() })
+            ])])
+            presentControllerImpl?(sheet, ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
+        }
+    }
     
     let proxySettings = Promise<ProxySettings>()
     proxySettings.set(accountManager.sharedData(keys: [SharedDataKeys.proxySettings])
@@ -491,11 +574,13 @@ public func proxySettingsController(accountManager: AccountManager<TelegramAccou
     
     let statusesContext = ProxyServersStatuses(network: network, servers: proxySettings.get()
     |> map { proxySettings -> [ProxyServerSettings] in
-        return proxySettings.servers
+        return proxySettings.servers.filter { !tgwsIsManagedProxy($0) }
     })
     
-    let signal = combineLatest(updatedPresentationData, statePromise.get(), proxySettings.get(), statusesContext.statuses(), network.connectionStatus)
-    |> map { presentationData, state, proxySettings, statuses, connectionStatus -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    let signal = combineLatest(updatedPresentationData, statePromise.get(), proxySettings.get(), statusesContext.statuses(), network.connectionStatus, tgwsSettingsChanges())
+    |> deliverOnMainQueue
+    |> map { presentationData, state, proxySettings, statuses, connectionStatus, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        arguments.managedRouteActive = proxySettings.activeServer.map(tgwsIsManagedProxy) ?? false
         var presentationData = presentationData
         let updatedTheme = presentationData.theme.withModalBlocksBackground()
         presentationData = presentationData.withUpdated(theme: updatedTheme)
@@ -508,7 +593,7 @@ public func proxySettingsController(accountManager: AccountManager<TelegramAccou
         }
         
         let rightNavigationButton: ItemListNavigationButton?
-        if proxySettings.servers.isEmpty {
+        if proxySettings.servers.filter({ !tgwsIsManagedProxy($0) }).isEmpty {
             rightNavigationButton = nil
         } else if state.editing {
             rightNavigationButton = ItemListNavigationButton(content: .icon(.done), style: .bold, enabled: true, action: {
@@ -547,6 +632,7 @@ public func proxySettingsController(accountManager: AccountManager<TelegramAccou
         guard case let .server(_, _, _, fromServer, _, _, _, _) = fromEntry else {
             return .single(false)
         }
+        guard !tgwsIsManagedProxy(fromServer) else { return .single(false) }
         var referenceServer: ProxyServerSettings?
         var beforeAll = false
         var afterAll = false
@@ -604,6 +690,7 @@ public func proxySettingsController(accountManager: AccountManager<TelegramAccou
             |> deliverOnMainQueue).start(next: { settings in
                 var result = ""
                 for server in settings.servers {
+                    if tgwsIsManagedProxy(server) { continue }
                     if !result.isEmpty {
                         result += "\n\n"
                     }
@@ -624,7 +711,7 @@ public func proxySettingsController(accountManager: AccountManager<TelegramAccou
                     result += string
                 }
                 
-                presentExternalShare(context: context, text: result, parentController: strongController)
+                if !result.isEmpty { presentExternalShare(context: context, text: result, parentController: strongController) }
             })
     }
     

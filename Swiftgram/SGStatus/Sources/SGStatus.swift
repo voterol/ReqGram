@@ -6,17 +6,18 @@ public struct SGStatus: Equatable, Codable {
     public var status: Int64
     
     public static var `default`: SGStatus {
-        return SGStatus(status: 1)
+        return SGStatus(status: 2)
     }
     
     public init(status: Int64) {
-        self.status = status
+        self.status = max(status, 2)
     }
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: StringCodingKey.self)
 
-        self.status = try container.decodeIfPresent(Int64.self, forKey: "status") ?? 1
+        let decodedStatus = try container.decodeIfPresent(Int64.self, forKey: "status") ?? SGStatus.default.status
+        self.status = max(decodedStatus, 2)
     }
     
     public func encode(to encoder: Encoder) throws {

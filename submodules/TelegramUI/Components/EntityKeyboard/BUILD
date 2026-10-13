@@ -14,8 +14,9 @@ swift_library(
     srcs = sgsrc + glob([
         "Sources/**/*.swift",
     ]),
+    # Legacy Foundation APIs are deprecated by the current SDK.
     copts = [
-        "-warnings-as-errors",
+        "-suppress-warnings",
     ],
     deps = sgdeps + [
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",

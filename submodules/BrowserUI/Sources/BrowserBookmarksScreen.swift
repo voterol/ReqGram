@@ -284,7 +284,7 @@ public final class BrowserBookmarksScreen: ViewController {
                     f(.dismissWithoutContent)
                      
                     if let self {
-                        let _ = self.context.engine.messages.deleteMessagesInteractively(messageIds: [message.id], type: .forEveryone).startStandalone()
+                        let _ = self.context.engine.messages.deleteMessagesInteractively(messageIds: [message.id], type: .forEveryone, userInitiated: true).startStandalone()
                     }
                 })))
                 

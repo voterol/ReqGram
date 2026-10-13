@@ -12,7 +12,7 @@
 # OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
 # CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
 
-#load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 load(
     ":BUILD.generated.bzl",
     "crypto_headers",
@@ -156,11 +156,14 @@ cc_library(
     name = "ssl_headers",
     srcs = [],
     hdrs = [
+        x for x in ssl_headers
+    ] + [
         ":ssl_headers/{}".format(x) for x in ssl_headers
     ],
     includes = [
         "ssl_headers/src/include",
     ],
+    visibility = ["//visibility:public"],
 )
 
 cc_library(
@@ -180,7 +183,13 @@ cc_library(
 cc_library(
     name = "ssl",
     srcs = ssl_sources + ssl_internal_headers,
+    hdrs = [
+        ":ssl_headers/{}".format(x) for x in ssl_headers
+    ],
     copts = boringssl_copts_cxx,
+    includes = [
+        "ssl_headers/src/include",
+    ],
     visibility = ["//visibility:public"],
     deps = [
         ":crypto",

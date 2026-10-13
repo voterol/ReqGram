@@ -9,6 +9,8 @@ public final class RichTextEditorView: UIView, UIScrollViewDelegate {
     private let scrollView = GripYieldingScrollView()
     let canvas = DocumentCanvasView()
 
+    private var insertionAnimation: UIViewPropertyAnimator?
+
     /// Floor for the content height returned by `update(...)`/`performLayout`. Defaults to 44pt (a document
     /// editor wants a tappable minimum body). A compact host (e.g. the chat composer) sets it to 0 so the
     /// measured height hugs the actual text and the host owns the minimum field height.
@@ -120,6 +122,47 @@ public final class RichTextEditorView: UIView, UIScrollViewDelegate {
     /// selection/caret move. The host responds by re-running its own layout (which calls
     /// `update(size:insets:)`). May fire more than once per logical change; treat it as idempotent.
     public var onChange: (() -> Void)?
+
+    /// Visually acknowledges a just-inserted edit without changing the document, layout, or selection.
+    /// This is intentionally a whole-editor fallback, not native per-glyph animation. It is kept on the
+    /// canvas layer so the editor's hit-testing, caret, and TextKit state remain untouched.
+    public func animateInsertion(duration: TimeInterval, slideDistance: CGFloat = 0.0,
+                                 scaleStart: CGFloat = 1.0, rotateAngle: CGFloat = 0.0) {
+        guard !UIAccessibility.isReduceMotionEnabled,
+              self.bounds.width > 0.0,
+              self.canvas.superview != nil else {
+            return
+        }
+
+        self.insertionAnimation?.stopAnimation(true)
+        self.insertionAnimation = nil
+        self.canvas.layer.removeAnimation(forKey: "richTextEditorInsertion")
+
+        let duration = max(duration, 0.05)
+        let slide = slideDistance.isFinite ? min(max(slideDistance, 0.0), 20.0) : 0.0
+        let scale = min(max(scaleStart.isFinite ? scaleStart : 1.0, 0.85), 1.0)
+        let angle = rotateAngle.isFinite ? min(max(rotateAngle, -180.0), 180.0) * .pi / 180.0 : 0.0
+
+        // Animate only render-layer properties. In particular, do not call `document =`, reload the canvas,
+        // or alter selectedTextRange here. Blur/space/line options are not implemented by this fallback
+        // because they require glyph ownership that RichTextEditorView does not have.
+        self.canvas.layer.opacity = 0.82
+        self.canvas.transform = CGAffineTransform(translationX: 0.0, y: slide)
+            .scaledBy(x: scale, y: scale)
+            .rotated(by: angle)
+        let animator = UIViewPropertyAnimator(duration: duration, curve: .easeOut) { [weak self] in
+            self?.canvas.layer.opacity = 1.0
+            self?.canvas.transform = .identity
+        }
+        self.insertionAnimation = animator
+        animator.addCompletion { [weak self] _ in
+            guard let self, self.insertionAnimation === animator else { return }
+            self.insertionAnimation = nil
+            self.canvas.layer.opacity = 1.0
+            self.canvas.transform = .identity
+        }
+        animator.startAnimation()
+    }
 
     /// Fires once when the editor gains first-responder focus (the editing surface becomes first
     /// responder) — not on a repeat tap while already focused. A host can react by showing chrome.

@@ -1,5 +1,6 @@
 // MARK: Swiftgram
 import SGSimpleSettings
+import AyuGram
 
 import Foundation
 import UIKit
@@ -132,6 +133,8 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     
     private var badgeDisposable: Disposable?
     private var badgeIconDisposable: Disposable?
+    private var ayuRemoteConfigObservation: AyuRemoteConfig.Observation?
+    private let ayuBadgeAppearanceDisposable = MetaDisposable()
     
     private var didAppear = false
     private var dismissSearchOnDisappear = false
@@ -284,6 +287,17 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
         )
                 
         super.init(context: context, navigationBarPresentationData: nil)
+
+        self.ayuRemoteConfigObservation = AyuRemoteConfig.shared.observe { [weak self] _ in
+            guard let self, self.isNodeLoaded else { return }
+            self.chatListDisplayNode.invalidateExternalDecorations()
+        }
+        self.ayuBadgeAppearanceDisposable.set((sgSimpleSettingsBoolSignal(.ayuHidePremiumStatuses, defaultValue: false)
+        |> deliverOnMainQueue).startStrict(next: { [weak self] _ in
+            guard let self, self.isNodeLoaded else { return }
+            self.chatListDisplayNode.invalidateExternalDecorations()
+        }))
+        AyuRemoteConfig.shared.startIfNeeded()
         
         self.accessoryPanelContainer = ASDisplayNode()
         
@@ -2492,18 +2506,6 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             return
         }
         
-        #if true && DEBUG
-        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 1.0, execute: { [weak self] in
-            guard let strongSelf = self else {
-                return
-            }
-            let count = ChatControllerCount.with({ $0 })
-            if count > 1 {
-                strongSelf.present(textAlertController(context: strongSelf.context, title: "", text: "ChatControllerCount \(count)", actions: [TextAlertAction(type: .defaultAction, title: "OK", action: {})]), in: .window(.root))
-            }
-        })
-        #endif
-
         if let componentView = self.chatListHeaderView(), let storyPeerListView = componentView.storyPeerListView(), let _ = storyPeerListView.lockViewFrame(), !self.didShowPasscodeLockTooltipController, !"".isEmpty {
             self.passcodeLockTooltipDisposable.set(combineLatest(queue: .mainQueue(), ApplicationSpecificNotice.getPasscodeLockTips(accountManager: self.context.sharedContext.accountManager), self.context.sharedContext.accountManager.accessChallengeData() |> take(1)).startStrict(next: { [weak self] tooltipValue, passcodeView in
                     if let strongSelf = self {
@@ -2512,7 +2514,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                             if hasPasscode {
                                 let _ = ApplicationSpecificNotice.setPasscodeLockTips(accountManager: strongSelf.context.sharedContext.accountManager).startStandalone()
                                 
-                                let tooltipController = TooltipController(content: .text(strongSelf.presentationData.strings.DialogList_PasscodeLockHelp.replacingOccurrences(of: "Telegram", with: "Swiftgram") /* MARK: Swiftgram */), baseFontSize: strongSelf.presentationData.listsFontSize.baseDisplaySize, dismissByTapOutside: true)
+                                let tooltipController = TooltipController(content: .text(strongSelf.presentationData.strings.DialogList_PasscodeLockHelp.replacingOccurrences(of: "Telegram", with: "ReqGram") /* MARK: Swiftgram */), baseFontSize: strongSelf.presentationData.listsFontSize.baseDisplaySize, dismissByTapOutside: true)
                                 strongSelf.present(tooltipController, in: .window(.root), with: TooltipControllerPresentationArguments(sourceViewAndRect: { [weak self] in
                                     if let self, let componentView = self.chatListHeaderView(), let storyPeerListView = componentView.storyPeerListView(), let lockViewFrame = storyPeerListView.lockViewFrame() {
                                         return (storyPeerListView, lockViewFrame.offsetBy(dx: 4.0, dy: 14.0))
@@ -6908,16 +6910,19 @@ private final class ChatListLocationContext {
         switch self.location {
         case .chatList(.root):
             peerStatus = context.engine.data.subscribe(TelegramEngine.EngineData.Item.Peer.Peer(id: context.account.peerId))
-            |> map { peer -> NetworkStatusTitle.Status? in
+            |> mapToSignal { peer -> Signal<NetworkStatusTitle.Status?, NoError> in
                 guard case let .user(user) = peer else {
-                    return nil
+                    return .single(nil)
                 }
-                if let emojiStatus = user.emojiStatus {
-                    return .emoji(emojiStatus)
-                } else if user.isPremium {
-                    return .premium
-                } else {
-                    return nil
+                return context.engine.accountData.resolvedEmojiStatus(serverStatus: user.emojiStatus)
+                |> map { emojiStatus -> NetworkStatusTitle.Status? in
+                    if let emojiStatus {
+                        return .emoji(emojiStatus)
+                    } else if user.isPremium {
+                        return .premium
+                    } else {
+                        return nil
+                    }
                 }
             }
             |> distinctUntilChanged

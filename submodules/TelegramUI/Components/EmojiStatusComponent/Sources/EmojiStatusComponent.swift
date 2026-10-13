@@ -65,6 +65,15 @@ public final class EmojiStatusComponent: Component {
     public let roundMask: Bool
     public let isVisibleForAnimations: Bool
     public let useSharedAnimation: Bool
+    /// Applies the content's `themeColor` even when the emoji is not a custom
+    /// template emoji and does not belong to one of the known template packs.
+    ///
+    /// The default gate exists so ordinary colored emoji statuses keep their
+    /// own artwork. Some issuer-supplied badge artwork is transparent or
+    /// monochrome and is invisible unless it is tinted, but carries none of
+    /// the template markers, so those callers opt in explicitly. Defaults to
+    /// `false`, leaving every existing caller's behavior unchanged.
+    public let forceTint: Bool
     public let action: (() -> Void)?
     public let emojiFileUpdated: ((TelegramMediaFile?) -> Void)?
     public let tag: AnyObject?
@@ -79,6 +88,7 @@ public final class EmojiStatusComponent: Component {
         roundMask: Bool = false,
         isVisibleForAnimations: Bool,
         useSharedAnimation: Bool = false,
+        forceTint: Bool = false,
         action: (() -> Void)?,
         emojiFileUpdated: ((TelegramMediaFile?) -> Void)? = nil,
         tag: AnyObject? = nil
@@ -97,6 +107,7 @@ public final class EmojiStatusComponent: Component {
             roundMask: roundMask,
             isVisibleForAnimations: isVisibleForAnimations,
             useSharedAnimation: useSharedAnimation,
+            forceTint: forceTint,
             action: action,
             emojiFileUpdated: emojiFileUpdated,
             tag: tag
@@ -115,6 +126,7 @@ public final class EmojiStatusComponent: Component {
         roundMask: Bool = false,
         isVisibleForAnimations: Bool,
         useSharedAnimation: Bool = false,
+        forceTint: Bool = false,
         action: (() -> Void)?,
         emojiFileUpdated: ((TelegramMediaFile?) -> Void)? = nil,
         tag: AnyObject? = nil
@@ -130,6 +142,7 @@ public final class EmojiStatusComponent: Component {
         self.roundMask = roundMask
         self.isVisibleForAnimations = isVisibleForAnimations
         self.useSharedAnimation = useSharedAnimation
+        self.forceTint = forceTint
         self.action = action
         self.emojiFileUpdated = emojiFileUpdated
         self.tag = tag
@@ -148,6 +161,7 @@ public final class EmojiStatusComponent: Component {
             roundMask: self.roundMask,
             isVisibleForAnimations: isVisibleForAnimations,
             useSharedAnimation: self.useSharedAnimation,
+            forceTint: self.forceTint,
             action: self.action,
             emojiFileUpdated: self.emojiFileUpdated,
             tag: self.tag
@@ -183,6 +197,9 @@ public final class EmojiStatusComponent: Component {
             return false
         }
         if lhs.useSharedAnimation != rhs.useSharedAnimation {
+            return false
+        }
+        if lhs.forceTint != rhs.forceTint {
             return false
         }
         if lhs.tag !== rhs.tag {
@@ -237,7 +254,7 @@ public final class EmojiStatusComponent: Component {
         
         private var iconLayer: SimpleLayer?
         private var iconLayerImage: UIImage?
-        
+
         private var animationLayer: InlineStickerItemLayer?
         private var lottieAnimationView: AnimationView?
         private let hierarchyTrackingLayer: HierarchyTrackingLayer
@@ -253,7 +270,7 @@ public final class EmojiStatusComponent: Component {
             super.init(frame: frame)
             
             self.layer.addSublayer(self.hierarchyTrackingLayer)
-            
+
             self.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.tapGesture(_:))))
             
             self.hierarchyTrackingLayer.didEnterHierarchy = { [weak self] in
@@ -471,7 +488,7 @@ public final class EmojiStatusComponent: Component {
             }
             
             self.component = component
-            
+
             var size = CGSize()
             
             if let iconImage = iconImage {
@@ -584,6 +601,12 @@ public final class EmojiStatusComponent: Component {
                     
                     var accentTint = false
                     if let _ = emojiThemeColor {
+                        if component.forceTint {
+                            // Opted-in callers know the artwork is transparent
+                            // or monochrome and would otherwise be invisible,
+                            // even though it carries no template marker.
+                            accentTint = true
+                        }
                         if emojiFile.isCustomTemplateEmoji {
                             accentTint = true
                         }

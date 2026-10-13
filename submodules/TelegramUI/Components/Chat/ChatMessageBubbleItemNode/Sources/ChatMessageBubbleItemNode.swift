@@ -1,5 +1,6 @@
 import SGStrings
 import SGSimpleSettings
+import AyuGram
 import TranslateUI
 import Foundation
 import UIKit
@@ -150,12 +151,12 @@ private func contentNodeMessagesAndClassesForItem(_ item: ChatMessageItem) -> ([
                 addedPriceInfo = true
             }
         }
-        
+
         var messageMedia = message.media
         if let updatingMedia = itemAttributes.updatingMedia, messageMedia.isEmpty, case let .update(media) = updatingMedia.media {
             messageMedia.append(media.media)
         }
-        
+
         var isFile = false
         inner: for media in messageMedia {
             if let media = media as? TelegramMediaPaidContent {
@@ -412,7 +413,7 @@ private func contentNodeMessagesAndClassesForItem(_ item: ChatMessageItem) -> ([
                 }
             }
         }
-        
+
         if let attribute = message.factCheckAttribute, case .Loaded = attribute.content, messageWithFactCheckToAdd == nil {
             messageWithFactCheckToAdd = (message, itemAttributes)
         }
@@ -570,6 +571,19 @@ private func mapVisibility(_ visibility: ListViewItemNodeVisibility, boundsSize:
 }
 
 public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewItemNode {
+    private static func effectiveBubbleCorners(_ presentationData: ChatPresentationData) -> PresentationChatBubbleCorners {
+        if SGSimpleSettings.shared.isTelegram1211LegacyDesignEnabled {
+            // Telegram 12.1.1 used fixed, tailed bubble geometry. Keep the
+            // override at the bubble rendering boundary and leave modern
+            // presentation preferences untouched when the flag is disabled.
+            // Preserve explicit no-tail presentation contexts (previews and
+            // extracted content) instead of forcing ordinary chat geometry
+            // onto them.
+            return PresentationChatBubbleCorners(mainRadius: 16.0, auxiliaryRadius: 8.0, mergeBubbleCorners: true, hasTails: presentationData.chatBubbleCorners.hasTails)
+        } else {
+            return presentationData.chatBubbleCorners
+        }
+    }
     public class ContentContainer {
         public let contentMessageStableId: UInt32
         public let sourceNode: ContextExtractedContentContainingNode
@@ -732,6 +746,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
     }
     
     private var selectionNode: ChatMessageSelectionNode?
+
     private var deliveryFailedNode: ChatMessageDeliveryFailedNode?
     private var swipeToReplyNode: ChatMessageSwipeToReplyNode?
     private var swipeToReplyFeedback: HapticFeedback?
@@ -756,6 +771,8 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
     private var credibilityIconContent: EmojiStatusComponent.Content?
     private var credibilityButtonNode: HighlightTrackingButtonNode?
     private var credibilityHighlightNode: ASImageNode?
+    private var projectBadgeStripView: ComponentHostView<Empty>?
+    private var projectBadgeStripComponent: ProjectBadgeStripComponent?
     
     private var boostBadgeNode: TextNode?
     private var boostIconNode: UIImageView?
@@ -840,6 +857,24 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                         environment: {},
                         containerSize: credibilityIconView.bounds.size
                     )
+                }
+                if let projectBadgeStripView = self.projectBadgeStripView, let component = self.projectBadgeStripComponent {
+                    let updatedComponent = ProjectBadgeStripComponent(
+                        context: component.context,
+                        badges: component.badges,
+                        languageCode: component.languageCode,
+                        peerName: component.peerName,
+                        placeholderColor: component.placeholderColor,
+                        accentColor: component.accentColor,
+                        foregroundColor: component.foregroundColor,
+                        density: component.density,
+                        isVisibleForAnimations: self.visibilityStatus,
+                        isInteractive: false,
+                        badgeAction: nil,
+                        overflowAction: nil
+                    )
+                    self.projectBadgeStripComponent = updatedComponent
+                    let _ = projectBadgeStripView.update(transition: .immediate, component: AnyComponent(updatedComponent), environment: {}, containerSize: projectBadgeStripView.bounds.size)
                 }
             }
         }
@@ -1564,6 +1599,10 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
             applyLayout(.None, ListViewItemApply(isOnScreen: currentApplyParams.isOnScreen, timestamp: nil), false)
         }
     }
+
+    public func refreshAyuRemoteConfigBadges() {
+        self.internalUpdateLayout()
+    }
     
     override public func asyncLayout() -> (_ item: ChatMessageItem, _ params: ListViewItemLayoutParams, _ mergedTop: ChatMessageMerge, _ mergedBottom: ChatMessageMerge, _ dateHeaderAtBottom: ChatMessageHeaderSpec) -> (ListViewItemNodeLayout, (ListViewItemUpdateAnimation, ListViewItemApply, Bool) -> Void) {
         var currentContentClassesPropertiesAndLayouts: [(Message, AnyClass, Bool, Int?, (_ item: ChatMessageBubbleContentItem, _ layoutConstants: ChatMessageItemLayoutConstants, _ preparePosition: ChatMessageBubblePreparePosition, _ messageSelection: Bool?, _ constrainedSize: CGSize, _ avatarInset: CGFloat) -> (ChatMessageBubbleContentProperties, CGSize?, CGFloat, (CGSize, ChatMessageBubbleContentPosition) -> (CGFloat, (CGFloat) -> (CGSize, (ListViewItemUpdateAnimation, Bool, ListViewItemApply?) -> Void))))] = []
@@ -2122,6 +2161,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         }
         
         var authorNameString: String?
+        var displayedAuthorPeer: Peer?
         var authorRank: CachedChannelAdminRank?
         var authorIsChannel: Bool = false
         switch content {
@@ -2504,6 +2544,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         if initialDisplayHeader && displayAuthorInfo {
             if let peer = firstMessage.peers[firstMessage.id.peerId] as? TelegramChannel, case .broadcast = peer.info, item.content.firstMessage.adAttribute == nil, !overrideEffectiveAuthor {
                 authorNameString = EnginePeer(peer).displayTitle(strings: item.presentationData.strings, displayOrder: item.presentationData.nameDisplayOrder)
+                displayedAuthorPeer = peer
                 
                 let peer = (peer as Peer)
                 let nameColors: PeerNameColors.Colors?
@@ -2518,6 +2559,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                 authorNameColor = nameColors?.main
             } else if let effectiveAuthor = effectiveAuthor {
                 authorNameString = EnginePeer(effectiveAuthor).displayTitle(strings: item.presentationData.strings, displayOrder: item.presentationData.nameDisplayOrder)
+                displayedAuthorPeer = effectiveAuthor
                 
                 let nameColors: PeerNameColors.Colors
                 switch effectiveAuthor.nameColor {
@@ -2735,6 +2777,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                     context: item.context,
                     presentationData: item.presentationData,
                     edited: edited && !item.presentationData.isPreview,
+                    isDeleted: item.message.isAyuSyntheticDeletedMessage,
                     impressionCount: !item.presentationData.isPreview ? viewCount : nil,
                     dateText: dateText,
                     type: statusType,
@@ -2765,6 +2808,8 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         
         var nameNodeOriginY: CGFloat = 0.0
         var nameNodeSizeApply: (CGSize, () -> TextNode?) = (CGSize(), { nil })
+        var displayedProjectBadges: [AyuBadgeContent] = []
+        var projectBadgeStripWidth: CGFloat = 0.0
         var rankBadgeNodeSizeApply: (CGSize, () -> TextNode?, UIColor?) = (CGSize(), { nil }, nil)
         var ephemeralBadgeOriginY: CGFloat = 0.0
         var ephemeralBadgeNodeSizeApply: (CGSize, CGSize, () -> TextNode?) = (CGSize(), CGSize(), { nil })
@@ -2889,6 +2934,21 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                         credibilityIconWidth += 20.0
                     }
                 }
+
+                if let displayedAuthorPeer, displayedAuthorPeer.id.namespace != Namespaces.Peer.Empty {
+                    let resolvedBadges = AyuBadges.emojiStatusContents(
+                        for: displayedAuthorPeer.id,
+                        placeholderColor: incoming ? item.presentationData.theme.theme.chat.message.incoming.mediaPlaceholderColor : item.presentationData.theme.theme.chat.message.outgoing.mediaPlaceholderColor,
+                        themeColor: authorNameColor
+                    )
+                    let availableBadgeWidth = max(0.0, maximumNodeWidth - layoutConstants.text.bubbleInsets.left - layoutConstants.text.bubbleInsets.right - credibilityIconWidth - 44.0)
+                    let fittingCount = min(3, min(resolvedBadges.count, max(0, Int((availableBadgeWidth + 2.0) / 22.0))))
+                    if fittingCount > 0 {
+                        displayedProjectBadges = Array(resolvedBadges.prefix(fittingCount))
+                        projectBadgeStripWidth = CGFloat(fittingCount) * 22.0 - 2.0
+                    }
+                }
+                let projectBadgeReservedWidth = projectBadgeStripWidth > 0.0 ? projectBadgeStripWidth + 3.0 : 0.0
                 
                 let rankBadgeSizeAndApply = rankBadgeLayout(TextNodeLayoutArguments(attributedString: rankBadgeString, backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: max(0, maximumNodeWidth - layoutConstants.text.bubbleInsets.left - layoutConstants.text.bubbleInsets.right), height: CGFloat.greatestFiniteMagnitude), alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
                 if rankBadgeSizeAndApply.0.size.width > 0.0 {
@@ -2923,13 +2983,13 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                 
                 let closeButtonWidth: CGFloat = item.message.adAttribute != nil ? 18.0 : 0.0
                 
-                let sizeAndApply = authorNameLayout(TextNodeLayoutArguments(attributedString: attributedString, backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: max(0, maximumNodeWidth - layoutConstants.text.bubbleInsets.left - layoutConstants.text.bubbleInsets.right - credibilityIconWidth - rankBadgeSizeAndApply.0.size.width - closeButtonWidth), height: CGFloat.greatestFiniteMagnitude), alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
+                let sizeAndApply = authorNameLayout(TextNodeLayoutArguments(attributedString: attributedString, backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: max(0, maximumNodeWidth - layoutConstants.text.bubbleInsets.left - layoutConstants.text.bubbleInsets.right - credibilityIconWidth - projectBadgeReservedWidth - rankBadgeSizeAndApply.0.size.width - closeButtonWidth), height: CGFloat.greatestFiniteMagnitude), alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
                 nameNodeSizeApply = (sizeAndApply.0.size, {
                     return sizeAndApply.1()
                 })
 
                 if let viaSuffix {
-                    let (viaLayout, _) = viaMeasureLayout(TextNodeLayoutArguments(attributedString: viaSuffix, backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: max(0, maximumNodeWidth - layoutConstants.text.bubbleInsets.left - layoutConstants.text.bubbleInsets.right - credibilityIconWidth - rankBadgeSizeAndApply.0.size.width - closeButtonWidth), height: CGFloat.greatestFiniteMagnitude), alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
+                    let (viaLayout, _) = viaMeasureLayout(TextNodeLayoutArguments(attributedString: viaSuffix, backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: max(0, maximumNodeWidth - layoutConstants.text.bubbleInsets.left - layoutConstants.text.bubbleInsets.right - credibilityIconWidth - projectBadgeReservedWidth - rankBadgeSizeAndApply.0.size.width - closeButtonWidth), height: CGFloat.greatestFiniteMagnitude), alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
                     viaWidth = viaLayout.size.width + 3.0
                 }
                 
@@ -2948,7 +3008,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                     nameNodeOriginY += 5.0
                 }
                 
-                var headerSizeWidth = nameAvatarSpaceWidth + nameNodeSizeApply.0.width + 8.0 + credibilityIconWidth + boostBadgeWidth + closeButtonWidth + bubbleWidthInsets
+                var headerSizeWidth = nameAvatarSpaceWidth + nameNodeSizeApply.0.width + 8.0 + credibilityIconWidth + projectBadgeReservedWidth + boostBadgeWidth + closeButtonWidth + bubbleWidthInsets
                 if hasTitleTopicNavigation {
                 } else if rankBadgeSizeAndApply.0.size.width > 0.0 {
                     headerSizeWidth += rankBadgeSizeAndApply.0.size.width + 3.0
@@ -3161,7 +3221,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
             let (minWidth, buttonsLayout) = actionButtonsLayout(
                 item.context,
                 item.presentationData.theme,
-                item.presentationData.chatBubbleCorners,
+                Self.effectiveBubbleCorners(item.presentationData),
                 item.presentationData.strings,
                 item.controllerInteraction.presentationContext.backgroundNode,
                 ReplyMarkupMessageAttribute(
@@ -3205,7 +3265,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                 let (minWidth, buttonsLayout) = actionButtonsLayout(
                     item.context,
                     item.presentationData.theme,
-                    item.presentationData.chatBubbleCorners,
+                    Self.effectiveBubbleCorners(item.presentationData),
                     item.presentationData.strings,
                     item.controllerInteraction.presentationContext.backgroundNode,
                     ReplyMarkupMessageAttribute(
@@ -3246,7 +3306,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                 let (minWidth, buttonsLayout) = actionButtonsLayout(
                     item.context,
                     item.presentationData.theme,
-                    item.presentationData.chatBubbleCorners,
+                    Self.effectiveBubbleCorners(item.presentationData),
                     item.presentationData.strings,
                     item.controllerInteraction.presentationContext.backgroundNode,
                     ReplyMarkupMessageAttribute(
@@ -3295,7 +3355,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
             let (minWidth, buttonsLayout) = actionButtonsLayout(
                 item.context,
                 item.presentationData.theme,
-                item.presentationData.chatBubbleCorners,
+                Self.effectiveBubbleCorners(item.presentationData),
                 item.presentationData.strings,
                 item.controllerInteraction.presentationContext.backgroundNode,
                 ReplyMarkupMessageAttribute(
@@ -3316,7 +3376,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
             
             lastNodeTopPosition = .None(.Both)
         } else if let replyMarkup = replyMarkup, !item.presentationData.isPreview {
-            let (minWidth, buttonsLayout) = actionButtonsLayout(item.context, item.presentationData.theme, item.presentationData.chatBubbleCorners, item.presentationData.strings, item.controllerInteraction.presentationContext.backgroundNode, replyMarkup, [:], EngineMessage(item.message), maximumNodeWidth)
+            let (minWidth, buttonsLayout) = actionButtonsLayout(item.context, item.presentationData.theme, Self.effectiveBubbleCorners(item.presentationData), item.presentationData.strings, item.controllerInteraction.presentationContext.backgroundNode, replyMarkup, [:], EngineMessage(item.message), maximumNodeWidth)
             maxContentWidth = max(maxContentWidth, minWidth)
             actionButtonsFinalize = buttonsLayout
         } else if item.content.firstMessageAttributes.displayContinueThreadFooter {
@@ -3333,7 +3393,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
             let (minWidth, buttonsLayout) = actionButtonsLayout(
                 item.context,
                 item.presentationData.theme,
-                item.presentationData.chatBubbleCorners,
+                Self.effectiveBubbleCorners(item.presentationData),
                 item.presentationData.strings,
                 item.controllerInteraction.presentationContext.backgroundNode,
                 ReplyMarkupMessageAttribute(
@@ -3818,7 +3878,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         
         let layout = ListViewItemNodeLayout(contentSize: layoutSize, insets: UIEdgeInsets())
         
-        let graphics = PresentationResourcesChat.principalGraphics(theme: item.presentationData.theme.theme, wallpaper: item.presentationData.theme.wallpaper, bubbleCorners: item.presentationData.chatBubbleCorners)
+        let graphics = PresentationResourcesChat.principalGraphics(theme: item.presentationData.theme.theme, wallpaper: item.presentationData.theme.wallpaper, bubbleCorners: Self.effectiveBubbleCorners(item.presentationData))
         
         var updatedMergedTop = mergedBottom
         var updatedMergedBottom = mergedTop
@@ -3867,6 +3927,9 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                 authorNameColor: authorNameColor,
                 layoutConstants: layoutConstants,
                 currentCredibilityIcon: currentCredibilityIcon,
+                displayedProjectBadges: displayedProjectBadges,
+                projectBadgeStripWidth: projectBadgeStripWidth,
+                displayedAuthorName: authorNameString ?? "",
                 rankBadgeNodeSizeApply: rankBadgeNodeSizeApply,
                 ephemeralBadgeNodeSizeApply: ephemeralBadgeNodeSizeApply,
                 ephemeralBadgeOriginY: layoutInsets.top + ephemeralBadgeOriginY + detachedContentNodesHeight + additionalTopHeight,
@@ -3941,6 +4004,9 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         authorNameColor: UIColor?,
         layoutConstants: ChatMessageItemLayoutConstants,
         currentCredibilityIcon: (EmojiStatusComponent.Content, UIColor?)?,
+        displayedProjectBadges: [AyuBadgeContent],
+        projectBadgeStripWidth: CGFloat,
+        displayedAuthorName: String,
         rankBadgeNodeSizeApply: (CGSize, () -> TextNode?, UIColor?),
         ephemeralBadgeNodeSizeApply: (CGSize, CGSize, () -> TextNode?),
         ephemeralBadgeOriginY: CGFloat,
@@ -4042,7 +4108,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         } else {
             if case let .messageOptions(_, _, info) = item.associatedData.subject, case let .link(link) = info, link.isCentered {
                 backgroundType = .incoming(.Extracted)
-            } else if !item.presentationData.chatBubbleCorners.hasTails {
+            } else if !Self.effectiveBubbleCorners(item.presentationData).hasTails {
                 backgroundType = .incoming(.Extracted)
             } else {
                 backgroundType = .incoming(mergeType)
@@ -4381,6 +4447,46 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                 strongSelf.credibilityHighlightNode?.removeFromSupernode()
                 strongSelf.credibilityHighlightNode = nil
             }
+
+            if !displayedProjectBadges.isEmpty, projectBadgeStripWidth > 0.0 {
+                let projectBadgeStripView: ComponentHostView<Empty>
+                if let current = strongSelf.projectBadgeStripView {
+                    projectBadgeStripView = current
+                } else {
+                    projectBadgeStripView = ComponentHostView<Empty>()
+                    projectBadgeStripView.isUserInteractionEnabled = false
+                    strongSelf.projectBadgeStripView = projectBadgeStripView
+                    strongSelf.clippingNode.view.addSubview(projectBadgeStripView)
+                }
+                let nameColor = authorNameColor ?? item.presentationData.theme.theme.chat.message.outgoing.accentTextColor
+                let projectBadgeStripComponent = ProjectBadgeStripComponent(
+                    context: item.context,
+                    badges: displayedProjectBadges,
+                    languageCode: item.presentationData.strings.baseLanguageCode,
+                    peerName: displayedAuthorName,
+                    placeholderColor: incoming ? item.presentationData.theme.theme.chat.message.incoming.mediaPlaceholderColor : item.presentationData.theme.theme.chat.message.outgoing.mediaPlaceholderColor,
+                    accentColor: nameColor,
+                    foregroundColor: nameColor,
+                    density: .compact,
+                    isVisibleForAnimations: strongSelf.visibilityStatus,
+                    isInteractive: false,
+                    badgeAction: nil,
+                    overflowAction: nil
+                )
+                strongSelf.projectBadgeStripComponent = projectBadgeStripComponent
+                let stripSize = projectBadgeStripView.update(
+                    transition: .immediate,
+                    component: AnyComponent(projectBadgeStripComponent),
+                    environment: {},
+                    containerSize: CGSize(width: projectBadgeStripWidth, height: 20.0)
+                )
+                let precedingMaxX = strongSelf.credibilityIconView?.frame.maxX ?? nameNode.frame.maxX
+                projectBadgeStripView.frame = CGRect(x: precedingMaxX + 3.0, y: nameNode.frame.minY + floor((nameNode.bounds.height - stripSize.height) / 2.0), width: stripSize.width, height: stripSize.height)
+            } else {
+                strongSelf.projectBadgeStripView?.removeFromSuperview()
+                strongSelf.projectBadgeStripView = nil
+                strongSelf.projectBadgeStripComponent = nil
+            }
             
             var boostCount: Int = 0
             if incoming {
@@ -4653,6 +4759,13 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                         credibilityIconView?.removeFromSuperview()
                     })
                 }
+                if let projectBadgeStripView = strongSelf.projectBadgeStripView {
+                    strongSelf.projectBadgeStripView = nil
+                    strongSelf.projectBadgeStripComponent = nil
+                    projectBadgeStripView.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.1, removeOnCompletion: false, completion: { [weak projectBadgeStripView] _ in
+                        projectBadgeStripView?.removeFromSuperview()
+                    })
+                }
                 if let boostBadgeNode = strongSelf.boostBadgeNode {
                     strongSelf.boostBadgeNode = nil
                     boostBadgeNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.1, removeOnCompletion: false, completion: { [weak boostBadgeNode] _ in
@@ -4678,6 +4791,9 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                 strongSelf.rankBadgeNode = nil
                 strongSelf.credibilityIconView?.removeFromSuperview()
                 strongSelf.credibilityIconView = nil
+                strongSelf.projectBadgeStripView?.removeFromSuperview()
+                strongSelf.projectBadgeStripView = nil
+                strongSelf.projectBadgeStripComponent = nil
                 strongSelf.boostBadgeNode?.removeFromSupernode()
                 strongSelf.boostBadgeNode = nil
                 strongSelf.boostIconNode?.removeFromSuperview()
@@ -5813,6 +5929,21 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         strongSelf.updateSearchTextHighlightState()
         
         strongSelf.updateVisibility(isScroll: false)
+
+        // MARK: AyuGram - apply the authoritative deleted-message opacity to
+        // the actual inline bubble, rather than only to archive list rows.
+        let isSyntheticRoundVideo = item.message.isAyuSyntheticDeletedMessage && item.message.media.contains(where: { media in
+            guard let file = media as? TelegramMediaFile else {
+                return false
+            }
+            return file.attributes.contains(where: { attribute in
+                if case let .Video(_, _, flags, _, _, _) = attribute {
+                    return flags.contains(.instantRoundVideo)
+                }
+                return false
+            })
+        })
+        strongSelf.alpha = isSyntheticRoundVideo ? 1.0 : (item.message.isAyuSyntheticDeletedMessage ? CGFloat(AyuUtils.deletedMessageAlpha) : 1.0)
         
         if let (_, f) = strongSelf.awaitingAppliedReaction {
             strongSelf.awaitingAppliedReaction = nil
@@ -5823,8 +5954,17 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
     
     override public func updateAccessibilityData(_ accessibilityData: ChatMessageAccessibilityData) {
         super.updateAccessibilityData(accessibilityData)
-        
-        self.messageAccessibilityArea.accessibilityLabel = accessibilityData.label
+
+        if let item = self.item, item.message.isAyuSyntheticDeletedMessage {
+            let deletedState = "AyuGram.Deleted.Marker".i18n(item.presentationData.strings.baseLanguageCode)
+            if let label = accessibilityData.label, !label.isEmpty {
+                self.messageAccessibilityArea.accessibilityLabel = "\(label), \(deletedState)"
+            } else {
+                self.messageAccessibilityArea.accessibilityLabel = deletedState
+            }
+        } else {
+            self.messageAccessibilityArea.accessibilityLabel = accessibilityData.label
+        }
         self.messageAccessibilityArea.accessibilityValue = accessibilityData.value
         self.messageAccessibilityArea.accessibilityHint = accessibilityData.hint
         self.messageAccessibilityArea.accessibilityTraits = accessibilityData.traits
@@ -6986,7 +7126,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
             }
             
             if let backgroundType = self.backgroundType {
-                let graphics = PresentationResourcesChat.principalGraphics(theme: item.presentationData.theme.theme, wallpaper: item.presentationData.theme.wallpaper, bubbleCorners: item.presentationData.chatBubbleCorners)
+                let graphics = PresentationResourcesChat.principalGraphics(theme: item.presentationData.theme.theme, wallpaper: item.presentationData.theme.wallpaper, bubbleCorners: Self.effectiveBubbleCorners(item.presentationData))
                 
                 if self.highlightedState != nil, !(self.backgroundNode.layer.mask is SimpleLayer) {
                     let backgroundHighlightNode: ChatMessageBackground

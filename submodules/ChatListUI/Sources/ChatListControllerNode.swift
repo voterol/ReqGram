@@ -801,6 +801,13 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
             itemNode.updatePresentationData(presentationData)
         }
     }
+
+    func invalidateExternalDecorations() {
+        for (_, itemNode) in self.itemNodes {
+            itemNode.invalidateExternalDecorations()
+        }
+        self.pendingItemNode?.1.invalidateExternalDecorations()
+    }
     
     func playArchiveAnimation() {
         if let itemNode = self.itemNodes[self.selectedId] {
@@ -1415,6 +1422,11 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         self.inlineStackContainerNode?.updatePresentationData(presentationData)
         self.searchDisplayController?.updatePresentationData(presentationData)
     }
+
+    func invalidateExternalDecorations() {
+        self.mainContainerNode.invalidateExternalDecorations()
+        self.inlineStackContainerNode?.invalidateExternalDecorations()
+    }
     
     private func updateNavigationBar(layout: ContainerViewLayout, deferScrollApplication: Bool, transition: ComponentTransition) -> (tabs: AnyComponent<Empty>?, navigationHeight: CGFloat, storiesInset: CGFloat) {
         let headerContent = self.controller?.updateHeaderContent()
@@ -1662,7 +1674,9 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                 
             navigationHeaderPanels = AnyComponent(HeaderPanelContainerComponent(
                 theme: self.presentationData.theme,
-                tabs: (self.controller?.tabContainerData?.1 ?? false) ? nil : tabs, // MARK: Swiftgram
+                // The historical layout keeps the folder tabs in the header;
+                // the modern AyuGram layout renders them in the bottom panel.
+                tabs: (self.controller?.tabContainerData?.1 ?? false) && !SGSimpleSettings.shared.isTelegram1211LegacyDesignEnabled ? nil : tabs, // MARK: Swiftgram
                 panels: panels
             ))
         }
@@ -1856,7 +1870,12 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
 
         // MARK: Swiftgram
         let sgComponentTransition = ComponentTransition(transition)
-        let sgDisplayTabsAtBottom = self.controller?.tabContainerData?.1 ?? false
+        // Telegram 12.1.1 kept the folder tabs in the navigation area. The
+        // current AyuGram layout moves them into a floating bottom panel; use
+        // the legacy placement only when the opt-in design gate is enabled.
+        // Keeping this decision at the layout boundary also makes relaunches
+        // deterministic without changing the stored tab configuration.
+        let sgDisplayTabsAtBottom = !SGSimpleSettings.shared.isTelegram1211LegacyDesignEnabled && (self.controller?.tabContainerData?.1 ?? false)
         let sgShouldDisplayBottomFolders = sgDisplayTabsAtBottom && self.isSearchDisplayControllerActive == nil
         let sgFoldersSize = self.sgFoldersView.update(
             transition: sgComponentTransition,

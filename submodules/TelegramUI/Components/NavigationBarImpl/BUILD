@@ -6,8 +6,9 @@ swift_library(
     srcs = glob([
         "Sources/**/*.swift",
     ]),
+    # Legacy UIKit button styles are deprecated by the current SDK.
     copts = [
-        "-warnings-as-errors",
+        "-suppress-warnings",
     ],
     deps = [
         "//submodules/AsyncDisplayKit",

@@ -315,7 +315,7 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
             switch resourceStatus.mediaStatus {
             case let .fetchStatus(fetchStatus):
                 if let context = self.context, let message = self.message, message.flags.isSending {
-                    let _ = context.engine.messages.deleteMessagesInteractively(messageIds: [message.id], type: .forEveryone).startStandalone()
+                    let _ = context.engine.messages.deleteMessagesInteractively(messageIds: [message.id], type: .forEveryone, userInitiated: true).startStandalone()
                 } else {
                     switch fetchStatus {
                     case .Fetching:
@@ -954,6 +954,7 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
                         context: arguments.context,
                         presentationData: arguments.presentationData,
                         edited: edited && !arguments.presentationData.isPreview,
+                        isDeleted: arguments.message.isAyuSyntheticDeletedMessage,
                         impressionCount: !arguments.presentationData.isPreview ? viewCount : nil,
                         dateText: dateText,
                         type: statusType,

@@ -40,7 +40,7 @@ public class SGLocalizationManager {
         
         if let localizedString = findLocalizedString(forKey: key, inLocale: sanitizedLocale) {
             if args.isEmpty {
-                return String(format: localizedString)
+                return localizedString
             } else {
                 return String(format: localizedString, arguments: args)
             }

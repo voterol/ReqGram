@@ -20,6 +20,7 @@ import ComponentFlow
 import AnimationCache
 import MultiAnimationRenderer
 import EmojiStatusComponent
+import AyuGram
 import MoreButtonNode
 import TextFormat
 import TextNodeWithEntities
@@ -478,6 +479,8 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
     private var verifiedIconComponent: EmojiStatusComponent?
     private var emojiStatusIconView: ComponentHostView<Empty>?
     private var emojiStatusIconComponent: EmojiStatusComponent?
+    private var projectBadgeStripView: ComponentHostView<Empty>?
+    private var projectBadgeObservation: AyuRemoteConfig.Observation?
     public let statusNode: TextNodeWithEntities
     private var statusIconNode: ASImageNode?
     private var badgeBackgroundNode: ASImageNode?
@@ -572,6 +575,9 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                     )
                 }
                 self.statusNode.visibilityRect = self.visibilityStatus == false ? CGRect.zero : CGRect.infinite
+                if self.projectBadgeStripView != nil {
+                    self.updateProjectBadgeLayout()
+                }
                 
                 self.item?.visibilityUpdated?(self.visibilityStatus)
             }
@@ -686,6 +692,14 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
         }
     }
     
+    private func updateProjectBadgeLayout() {
+        guard let params = self.layoutParams else { return }
+        let (_, apply) = self.asyncLayout()(params.0, params.1, params.2, params.3, params.4, params.5)
+        // asyncLayout has a preparation closure and a separate UI apply closure.
+        // Badge revisions do not change row height, only the title's width.
+        apply().1(false, false)
+    }
+
     override public func didLoad() {
         super.didLoad()
         
@@ -1181,6 +1195,23 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                 maxTextWidth = max(0.0, maxTextWidth - titleBadgeLayoutAndApplyValue.0.size.width - 8.0)
             }
             
+            var projectBadges: [AyuBadgeContent] = []
+            if case .generalSearch = item.peerMode, case let .peer(peer, _) = item.peer, let peer {
+                projectBadges = AyuBadges.emojiStatusContents(
+                    for: peer.id,
+                    placeholderColor: item.presentationData.theme.list.mediaPlaceholderColor,
+                    themeColor: item.presentationData.theme.list.itemAccentColor
+                )
+            }
+            // Match the chat-list compact strip (up to three badges), keeping
+            // room for the name and all existing Telegram credibility icons.
+            let projectBadgeBudget = min(64.0, max(0.0, maxTextWidth - 60.0 - 8.0))
+            let projectBadgeCount = min(projectBadges.count, Int((projectBadgeBudget + 2.0) / 22.0))
+            let projectBadgeWidth = projectBadgeCount > 0 ? CGFloat(projectBadgeCount) * 22.0 - 2.0 : 0.0
+            if projectBadgeWidth > 0.0 {
+                maxTextWidth -= projectBadgeWidth + 8.0
+            }
+
             let (titleLayout, titleApply) = makeTitleLayout(TextNodeLayoutArguments(attributedString: titleAttributedString, backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: max(0.0, maxTextWidth), height: CGFloat.infinity), alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
             
             var maxStatusWidth: CGFloat = params.width - leftInset - rightInset - badgeSize
@@ -1274,6 +1305,14 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                             
                             strongSelf.accessibilityLabel = titleAttributedString?.string
                             strongSelf.accessibilityValue = statusAttributedString?.string
+                            if !projectBadges.isEmpty {
+                                let languageCode = item.presentationData.strings.baseLanguageCode
+                                let badgeLabels = projectBadges.map { badge in
+                                    let explanation = AyuBadges.explanation(for: badge, peerName: titleAttributedString?.string ?? "", languageCode: languageCode)
+                                    return "\(badge.issuer.displayName(languageCode: languageCode)), \(explanation.title)"
+                                }
+                                strongSelf.accessibilityValue = ([statusAttributedString?.string].compactMap { $0 } + badgeLabels).joined(separator: ", ")
+                            }
                             
                             strongSelf.containerNode.frame = CGRect(origin: CGPoint(), size: nodeLayout.contentSize)
                             strongSelf.contextSourceNode.frame = CGRect(origin: CGPoint(), size: nodeLayout.contentSize)
@@ -1703,6 +1742,42 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                                 emojiStatusIconView.removeFromSuperview()
                             }
                             
+                            if projectBadgeWidth > 0.0 {
+                                let stripView: ComponentHostView<Empty>
+                                if let current = strongSelf.projectBadgeStripView {
+                                    stripView = current
+                                } else {
+                                    stripView = ComponentHostView<Empty>()
+                                    stripView.isUserInteractionEnabled = false
+                                    strongSelf.projectBadgeStripView = stripView
+                                    strongSelf.offsetContainerNode.view.addSubview(stripView)
+                                }
+                                let stripSize = stripView.update(
+                                    transition: .immediate,
+                                    component: AnyComponent(ProjectBadgeStripComponent(
+                                        context: item.context,
+                                        badges: projectBadges,
+                                        languageCode: item.presentationData.strings.baseLanguageCode,
+                                        peerName: titleAttributedString?.string ?? "",
+                                        placeholderColor: item.presentationData.theme.list.mediaPlaceholderColor,
+                                        accentColor: item.presentationData.theme.list.itemAccentColor,
+                                        foregroundColor: item.presentationData.theme.list.itemPrimaryTextColor,
+                                        isVisibleForAnimations: strongSelf.visibilityStatus,
+                                        isInteractive: false,
+                                        badgeAction: nil,
+                                        overflowAction: nil
+                                    )),
+                                    environment: {},
+                                    containerSize: CGSize(width: projectBadgeWidth, height: 20.0)
+                                )
+                                nextIconX += 4.0
+                                transition.updateFrame(view: stripView, frame: CGRect(x: nextIconX, y: floorToScreenPixels(titleFrame.midY - stripSize.height / 2.0), width: stripSize.width, height: stripSize.height))
+                                nextIconX += stripSize.width
+                            } else if let stripView = strongSelf.projectBadgeStripView {
+                                strongSelf.projectBadgeStripView = nil
+                                stripView.removeFromSuperview()
+                            }
+
                             if let (titleBadgeLayout, titleBadgeApply) = titleBadgeLayoutAndApply {
                                 let titleBadgeNode = titleBadgeApply()
                                 let backgroundView: UIImageView
@@ -2052,6 +2127,42 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                             }
                             
                             strongSelf.updateEnableGestures()
+
+                            // Node construction/layout preparation can run off
+                            // main. Subscribe only in the UI apply phase. The
+                            // initial synchronous notification is deferred to
+                            // avoid reentering apply before storing the token.
+                            // App/account startup owns all fetching.
+                            if case .generalSearch = item.peerMode, case .peer = item.peer {
+                                if strongSelf.projectBadgeObservation == nil {
+                                    strongSelf.projectBadgeObservation = AyuRemoteConfig.shared.observe { [weak strongSelf] _ in
+                                        DispatchQueue.main.async { [weak strongSelf] in
+                                            strongSelf?.updateProjectBadgeLayout()
+                                        }
+                                    }
+                                }
+                            } else {
+                                strongSelf.projectBadgeObservation = nil
+                            }
+
+                            // A background layout may have captured badges before
+                            // a remote revision, then applied after its observer
+                            // already refreshed this row. Compare full descriptors
+                            // (including artwork/tint/text), not just badge ids.
+                            if case .generalSearch = item.peerMode, case let .peer(peer, _) = item.peer, let peer {
+                                let currentProjectBadges = AyuBadges.emojiStatusContents(
+                                    for: peer.id,
+                                    placeholderColor: item.presentationData.theme.list.mediaPlaceholderColor,
+                                    themeColor: item.presentationData.theme.list.itemAccentColor
+                                )
+                                if currentProjectBadges != projectBadges {
+                                    DispatchQueue.main.async { [weak strongSelf] in
+                                        // Read current layoutParams rather than
+                                        // retaining a peer that may be recycled.
+                                        strongSelf?.updateProjectBadgeLayout()
+                                    }
+                                }
+                            }
                         }
                     })
                 } else {

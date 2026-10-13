@@ -1,3 +1,4 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 common_flags = [
     "-DWEBRTC_IOS",

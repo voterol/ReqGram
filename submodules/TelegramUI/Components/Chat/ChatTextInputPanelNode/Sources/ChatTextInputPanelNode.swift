@@ -1,6 +1,39 @@
 // MARK: Swiftgram
 import TelegramUIPreferences
 import SGSimpleSettings
+
+private func makeChatInputTextAnimationConfiguration() -> ChatInputTextAnimationConfiguration {
+    let settings = SGSimpleSettings.shared
+    return ChatInputTextAnimationConfiguration(
+        insertionEnabled: settings.reqGramTextAnimationPrivateLetEnabled,
+        duration: Double(settings.reqGramTextAnimationPrivateLetDuration) / 1000.0,
+        slideDistance: CGFloat(settings.reqGramTextAnimationPrivateLetEnabled && settings.reqGramTextAnimationPrivateLetSlideEnabled ? settings.reqGramTextAnimationPrivateLetSlideDist : 0),
+        blurEnabled: settings.reqGramTextAnimationPrivateLetEnabled && settings.reqGramTextAnimationPrivateLetBlurEnabled,
+        blurDuration: Double(settings.reqGramTextAnimationPrivateLetBlurDuration) / 1000.0,
+        blurRadius: CGFloat(settings.reqGramTextAnimationPrivateLetBlurRadius),
+        blurTextDelay: Double(settings.reqGramTextAnimationPrivateLetBlurTextDelay) / 100.0 * (Double(settings.reqGramTextAnimationPrivateLetBlurDuration) / 1000.0),
+        scaleEnabled: settings.reqGramTextAnimationPrivateLetEnabled && settings.reqGramTextAnimationPrivateLetScaleEnabled,
+        scaleStart: CGFloat(settings.reqGramTextAnimationPrivateLetScaleStart),
+        rotateEnabled: settings.reqGramTextAnimationPrivateLetEnabled && settings.reqGramTextAnimationPrivateLetRotateEnabled,
+        rotateAngle: CGFloat(settings.reqGramTextAnimationPrivateLetRotateAngle),
+        ignoreSpaces: settings.reqGramTextAnimationPrivateLetEnabled && settings.reqGramTextAnimationPrivateLetIgnoreSpaces,
+        animateAllLines: settings.reqGramTextAnimationPrivateLetEnabled && settings.reqGramTextAnimationPrivateLetAnimateAllLines,
+        deletionParticlesEnabled: settings.reqGramTextAnimationPrivateLetEnabled && settings.reqGramTextAnimationPrivateLetDeleteAnimEnabled,
+        deletionParticleCount: settings.reqGramTextAnimationPrivateLetParticleCount,
+        deletionParticleStyle: settings.reqGramTextAnimationPrivateLetParticleStyle,
+        deletionParticleSpeed: CGFloat(settings.reqGramTextAnimationPrivateLetParticleSpeed),
+        deletionParticleSpread: CGFloat(settings.reqGramTextAnimationPrivateLetParticleSpread),
+        deletionParticleSize: CGFloat(settings.reqGramTextAnimationPrivateLetParticleSize),
+        selectionEffect: settings.reqGramTextAnimationPrivateLetEnabled ? settings.reqGramTextAnimationPrivateLetSelectionCursorEffect : 0,
+        selectionLiquidStretch: CGFloat(settings.reqGramTextAnimationPrivateLetSelectionLiquidStretch),
+         selectionLiquidSide: CGFloat(settings.reqGramTextAnimationPrivateLetSelectionLiquidSide),
+         cursorEnabled: settings.reqGramTextAnimationPrivateLetEnabled && settings.reqGramTextAnimationPrivateLetCursorEnabled,
+          cursorSpeed: CGFloat(settings.reqGramTextAnimationPrivateLetCursorSpeed),
+          cursorWidth: CGFloat(settings.reqGramTextAnimationPrivateLetCursorWidth),
+          liquidCursorEnabled: settings.reqGramTextAnimationPrivateLetEnabled && settings.reqGramTextAnimationPrivateLetLiquidCursorEnabled,
+          liquidCursorScale: CGFloat(settings.reqGramTextAnimationPrivateLetLiquidScaleFactor)
+    )
+}
 import SwiftUI
 import SGInputToolbar
 
@@ -714,6 +747,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
     private let presentationContext: ChatPresentationContext?
     
     private var tooltipController: TooltipScreen?
+    private var reqGramSettingsObserver: NSObjectProtocol?
     
     public init(context: AccountContext, presentationInterfaceState: ChatPresentationInterfaceState, presentationContext: ChatPresentationContext?, presentController: @escaping (ViewController) -> Void) {
         self.presentationInterfaceState = presentationInterfaceState
@@ -828,6 +862,11 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         self.recordMoreButton = ChatRecordingViewOnceButtonNode(icon: .recordMore)
         
         super.init()
+
+        self.reqGramSettingsObserver = NotificationCenter.default.addObserver(forName: UserDefault<Bool>.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self, let inputNode = self.richTextInputNode else { return }
+            inputNode.textAnimationConfiguration = makeChatInputTextAnimationConfiguration()
+        }
         
         self.view.addSubview(self.glassBackgroundContainer)
         
@@ -1152,6 +1191,9 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         self.sendWithReturnKeyDisposable?.dispose()
         self.tooltipController?.dismiss()
         self.currentEmojiSuggestion?.disposable.dispose()
+        if let observer = self.reqGramSettingsObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
     
     override public func didLoad() {
@@ -1220,6 +1262,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         } else {
             richTextInputNode = makeChatRichTextInputNode()
         }
+        richTextInputNode.textAnimationConfiguration = makeChatInputTextAnimationConfiguration()
         richTextInputNode.initialPrimaryLanguage = self.presentationInterfaceState?.interfaceState.inputLanguage
         var textColor: UIColor = .black
         var tintColor: UIColor = .blue

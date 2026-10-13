@@ -31,11 +31,11 @@ class ChatExternalFileGalleryItem: GalleryItem {
         
         for media in self.message.effectiveMedia {
             if let file = media as? TelegramMediaFile {
-                node.setFile(context: context, fileReference: .message(message: MessageReference(self.message), media: file))
+                node.setFile(context: context, fileReference: self.message.isAyuSyntheticDeletedMessage ? .standalone(media: file) : .message(message: MessageReference(self.message), media: file))
                 break
             } else if let webpage = media as? TelegramMediaWebpage, case let .Loaded(content) = webpage.content {
                 if let file = content.file {
-                    node.setFile(context: context, fileReference: .message(message: MessageReference(self.message), media: file))
+                    node.setFile(context: context, fileReference: self.message.isAyuSyntheticDeletedMessage ? .standalone(media: file) : .message(message: MessageReference(self.message), media: file))
                     break
                 }
             }

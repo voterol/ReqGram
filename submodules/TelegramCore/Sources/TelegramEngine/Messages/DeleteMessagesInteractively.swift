@@ -10,7 +10,7 @@ private struct EphemeralDeleteMessageRequest {
     let id: Int32
 }
 
-func _internal_deleteMessagesInteractively(account: Account, messageIds: [MessageId], type: InteractiveMessagesDeletionType, deleteAllInGroup: Bool = false) -> Signal<Void, NoError> {
+func _internal_deleteMessagesInteractively(account: Account, messageIds: [MessageId], type: InteractiveMessagesDeletionType, deleteAllInGroup: Bool = false, userInitiated: Bool = false) -> Signal<Void, NoError> {
     return account.postbox.transaction { transaction -> [EphemeralDeleteMessageRequest] in
         var ephemeralRequests: [EphemeralDeleteMessageRequest] = []
         for messageId in messageIds where messageId.namespace == Namespaces.Message.EphemeralLocal {
@@ -33,7 +33,7 @@ func _internal_deleteMessagesInteractively(account: Account, messageIds: [Messag
             }
         }
 
-        deleteMessagesInteractively(transaction: transaction, stateManager: account.stateManager, postbox: account.postbox, messageIds: messageIds, type: type, removeIfPossiblyDelivered: true)
+        deleteMessagesInteractively(transaction: transaction, accountPeerId: account.peerId, stateManager: account.stateManager, postbox: account.postbox, messageIds: messageIds, type: type, removeIfPossiblyDelivered: true, userInitiated: userInitiated)
         return ephemeralRequests
     }
     |> mapToSignal { ephemeralRequests -> Signal<Void, NoError> in
@@ -56,7 +56,7 @@ func _internal_deleteMessagesInteractively(account: Account, messageIds: [Messag
     }
 }
     
-func deleteMessagesInteractively(transaction: Transaction, stateManager: AccountStateManager?, postbox: Postbox, messageIds initialMessageIds: [MessageId], type: InteractiveMessagesDeletionType, deleteAllInGroup: Bool = false, removeIfPossiblyDelivered: Bool) {
+func deleteMessagesInteractively(transaction: Transaction, accountPeerId: PeerId, stateManager: AccountStateManager?, postbox: Postbox, messageIds initialMessageIds: [MessageId], type: InteractiveMessagesDeletionType, deleteAllInGroup: Bool = false, removeIfPossiblyDelivered: Bool, userInitiated: Bool = false) {
     var messageIds: [MessageAndThreadId] = []
     if deleteAllInGroup {
         var tempIds: [MessageId] = initialMessageIds
@@ -120,7 +120,11 @@ func deleteMessagesInteractively(transaction: Transaction, stateManager: Account
                 if id.namespace == Namespaces.Message.Local || id.namespace == Namespaces.Message.ScheduledLocal || id.namespace == Namespaces.Message.QuickReplyLocal || id.namespace == Namespaces.Message.EphemeralLocal {
                     return false
                 }
-                return true
+                // Synthetic deleted-message ids are negative and exist only in
+                // memory. Keep this core boundary defensive even if UI callers
+                // have already partitioned them.
+                guard id.id > 0 else { return false }
+                return transaction.getMessage(id)?.isAyuSyntheticDeletedMessage != true
             }
             if !remoteMessageIds.isEmpty {
                 cloudChatAddRemoveMessagesOperation(transaction: transaction, peerId: peerId, threadId: threadId, messageIds: remoteMessageIds, type: CloudChatRemoveMessagesType(type))
@@ -151,6 +155,13 @@ func deleteMessagesInteractively(transaction: Transaction, stateManager: Account
             }
         }
     }
+    // MARK: AyuGram - only a deletion explicitly confirmed in the UI may purge
+    // an archived copy or consume a keep-locally intent. This helper is also
+    // used by state reconciliation and other internal cleanup paths.
+    if userInitiated {
+        AyuHooks.didDeleteMessagesLocally(transaction: transaction, accountPeerId: accountPeerId, ids: messageIds.map(\.messageId), postbox: postbox)
+    }
+
     _internal_deleteMessages(transaction: transaction, mediaBox: postbox.mediaBox, ids: messageIds.map(\.messageId))
     
     stateManager?.notifyDeletedMessages(messageIds: messageIds.map(\.messageId))
@@ -160,9 +171,12 @@ func deleteMessagesInteractively(transaction: Transaction, stateManager: Account
     }
 }
 
-func _internal_clearHistoryInRangeInteractively(postbox: Postbox, peerId: PeerId, threadId: Int64?, minTimestamp: Int32, maxTimestamp: Int32, type: InteractiveHistoryClearingType) -> Signal<Void, NoError> {
+func _internal_clearHistoryInRangeInteractively(accountPeerId: PeerId, postbox: Postbox, peerId: PeerId, threadId: Int64?, minTimestamp: Int32, maxTimestamp: Int32, type: InteractiveHistoryClearingType) -> Signal<Void, NoError> {
     return postbox.transaction { transaction -> Void in
         if peerId.namespace == Namespaces.Peer.CloudUser || peerId.namespace == Namespaces.Peer.CloudGroup || peerId.namespace == Namespaces.Peer.CloudChannel {
+            if type != .scheduledMessages {
+                AyuHooks.willClearHistoryLocally(transaction: transaction, accountPeerId: accountPeerId, peerId: peerId, threadId: threadId, minTimestamp: minTimestamp, maxTimestamp: maxTimestamp, mediaBox: postbox.mediaBox)
+            }
             cloudChatAddClearHistoryOperation(transaction: transaction, peerId: peerId, threadId: threadId, explicitTopMessageId: nil, minTimestamp: minTimestamp, maxTimestamp: maxTimestamp, type: CloudChatClearHistoryType(type))
             if type == .scheduledMessages {
             } else {
@@ -193,9 +207,12 @@ func _internal_clearHistoryInRangeInteractively(postbox: Postbox, peerId: PeerId
     }
 }
 
-func _internal_clearHistoryInteractively(postbox: Postbox, peerId: PeerId, threadId: Int64?, type: InteractiveHistoryClearingType) -> Signal<Void, NoError> {
+func _internal_clearHistoryInteractively(accountPeerId: PeerId, postbox: Postbox, peerId: PeerId, threadId: Int64?, type: InteractiveHistoryClearingType) -> Signal<Void, NoError> {
     return postbox.transaction { transaction -> Void in
         if peerId.namespace == Namespaces.Peer.CloudUser || peerId.namespace == Namespaces.Peer.CloudGroup || peerId.namespace == Namespaces.Peer.CloudChannel {
+            if type != .scheduledMessages {
+                AyuHooks.willClearHistoryLocally(transaction: transaction, accountPeerId: accountPeerId, peerId: peerId, threadId: threadId, minTimestamp: nil, maxTimestamp: nil, mediaBox: postbox.mediaBox)
+            }
             cloudChatAddClearHistoryOperation(transaction: transaction, peerId: peerId, threadId: threadId, explicitTopMessageId: nil, minTimestamp: nil, maxTimestamp: nil, type: CloudChatClearHistoryType(type))
             if type == .scheduledMessages {
                 _internal_clearHistory(transaction: transaction, mediaBox: postbox.mediaBox, peerId: peerId, threadId: threadId, namespaces: .just(Namespaces.Message.allScheduled))

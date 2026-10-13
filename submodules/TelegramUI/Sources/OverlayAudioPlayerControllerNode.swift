@@ -1563,7 +1563,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
                                         }
                                         items.append(.action(ContextMenuActionItem(text: globalTitle, textColor: .destructive, icon: { _ in nil }, action: { c, f in
                                             c?.dismiss(completion: {
-                                                let _ = context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: .forEveryone).startStandalone()
+                                                let _ = context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: .forEveryone, userInitiated: true).startStandalone()
                                             })
                                         })))
                                     }
@@ -1579,7 +1579,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
                                         }
                                         items.append(.action(ContextMenuActionItem(text: localOptionText, textColor: .destructive, icon: { _ in nil }, action: { c, f in
                                             c?.dismiss(completion: {
-                                                let _ = context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: .forLocalPeer).startStandalone()
+                                                let _ = context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: .forLocalPeer, userInitiated: true).startStandalone()
                                             })
                                         })))
                                     }

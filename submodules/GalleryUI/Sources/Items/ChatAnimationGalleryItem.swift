@@ -35,7 +35,7 @@ class ChatAnimationGalleryItem: GalleryItem {
 
         for media in self.message.effectiveMedia {
             if let file = media as? TelegramMediaFile {
-                node.setFile(context: self.context, fileReference: .message(message: MessageReference(self.message), media: file))
+                node.setFile(context: self.context, fileReference: self.message.isAyuSyntheticDeletedMessage ? .standalone(media: file) : .message(message: MessageReference(self.message), media: file))
                 break
             }
         }

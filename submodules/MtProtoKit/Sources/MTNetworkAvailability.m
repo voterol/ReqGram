@@ -62,7 +62,9 @@ static void MTNetworkAvailabilityContextRelease(const void *info)
              zeroAddress.sin_len = sizeof(zeroAddress);
              zeroAddress.sin_family = AF_INET;
              
-             _reachability = SCNetworkReachabilityCreateWithAddress(kCFAllocatorDefault, (const struct sockaddr *)&zeroAddress);
+              #pragma clang diagnostic push
+              #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+              _reachability = SCNetworkReachabilityCreateWithAddress(kCFAllocatorDefault, (const struct sockaddr *)&zeroAddress);
              if (_reachability != NULL)
              {
                  MTNetworkAvailabilityContext *availabilityContext = [[MTNetworkAvailabilityContext alloc] init];
@@ -82,8 +84,9 @@ static void MTNetworkAvailabilityContextRelease(const void *info)
                            } queue:[MTNetworkAvailability networkAvailabilityQueue].nativeQueue];
                  [_timer start];
                  
-                 if (SCNetworkReachabilitySetCallback(_reachability, &MTAvailabilityCallback, &context))
-                     SCNetworkReachabilitySetDispatchQueue(_reachability, [MTNetworkAvailability networkAvailabilityQueue].nativeQueue);
+                  if (SCNetworkReachabilitySetCallback(_reachability, &MTAvailabilityCallback, &context))
+                      SCNetworkReachabilitySetDispatchQueue(_reachability, [MTNetworkAvailability networkAvailabilityQueue].nativeQueue);
+                  #pragma clang diagnostic pop
              }
          }];
     }
@@ -101,8 +104,11 @@ static void MTNetworkAvailabilityContextRelease(const void *info)
     [[MTNetworkAvailability networkAvailabilityQueue] dispatchOnQueue:^{
         [timer invalidate];
         
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
         SCNetworkReachabilitySetCallback(reachability, NULL, NULL);
         SCNetworkReachabilitySetDispatchQueue(reachability, NULL);
+        #pragma clang diagnostic pop
         CFRelease(reachability);
     }];
 }
@@ -126,8 +132,11 @@ static void MTNetworkAvailabilityContextRelease(const void *info)
          if (_reachability != nil)
          {
              SCNetworkReachabilityFlags currentFlags = 0;
-             if (SCNetworkReachabilityGetFlags(_reachability, &currentFlags))
-                 [self updateReachability:currentFlags notify:notify];
+              #pragma clang diagnostic push
+              #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+              if (SCNetworkReachabilityGetFlags(_reachability, &currentFlags))
+                  [self updateReachability:currentFlags notify:notify];
+              #pragma clang diagnostic pop
          }
      }];
 }

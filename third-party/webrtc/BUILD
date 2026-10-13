@@ -1,3 +1,5 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:objc_library.bzl", "objc_library")
 
 
 config_setting(
@@ -3132,6 +3134,7 @@ objc_library(
     deps = [
         "//third-party/boringssl:crypto",
         "//third-party/boringssl:ssl",
+        "//third-party/boringssl:ssl_headers",
         "//third-party/opus",
         ":opus_headers",
         "//third-party/webrtc/libsrtp",
@@ -3200,6 +3203,7 @@ cc_library(
     deps = [
         "//third-party/boringssl:crypto",
         "//third-party/boringssl:ssl",
+        "//third-party/boringssl:ssl_headers",
         "//third-party/opus",
         ":opus_headers",
         "//third-party/libyuv",

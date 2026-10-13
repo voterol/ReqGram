@@ -50,8 +50,9 @@ swift_library(
     srcs = glob([
         "Sources/**/*.swift",
     ]),
+    # Legacy AVFoundation orientation APIs are deprecated by the current SDK.
     copts = [
-        "-warnings-as-errors",
+        "-suppress-warnings",
     ],
     data = [
         ":CameraBundle",

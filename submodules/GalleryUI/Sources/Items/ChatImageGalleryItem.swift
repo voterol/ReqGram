@@ -154,9 +154,9 @@ class ChatImageGalleryItem: GalleryItem {
         node.setMessage(self.message, mediaSubject: self.mediaSubject, displayInfo: !self.displayInfoOnTop, translateToLanguage: self.translateToLanguage, peerIsCopyProtected: self.peerIsCopyProtected, isSecret: self.isSecret, location: self.location)
         if let (media, _) = selectedMediaAndMediaImageForMessage(message: self.message, mediaSubject: self.mediaSubject) {
             if let image = media as? TelegramMediaImage {
-                node.setImage(userLocation: .peer(self.message.id.peerId), imageReference: .message(message: MessageReference(self.message), media: image))
+                node.setImage(userLocation: .peer(self.message.id.peerId), imageReference: self.message.isAyuSyntheticDeletedMessage ? .standalone(media: image) : .message(message: MessageReference(self.message), media: image))
             } else if let file = media as? TelegramMediaFile, file.mimeType.hasPrefix("image/") {
-                node.setFile(context: self.context, userLocation: .peer(self.message.id.peerId), fileReference: .message(message: MessageReference(self.message), media: file))
+                node.setFile(context: self.context, userLocation: .peer(self.message.id.peerId), fileReference: self.message.isAyuSyntheticDeletedMessage ? .standalone(media: file) : .message(message: MessageReference(self.message), media: file))
             }
         }
         

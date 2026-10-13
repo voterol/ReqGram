@@ -25,6 +25,7 @@ func _internal_terminateSecretChat(transaction: Transaction, peerId: PeerId, req
 }
 
 func _internal_removePeerChat(account: Account, transaction: Transaction, mediaBox: MediaBox, peerId: PeerId, reportChatSpam: Bool, deleteGloballyIfPossible: Bool) {
+    AyuHooks.willClearHistoryLocally(transaction: transaction, accountPeerId: account.peerId, peerId: peerId, threadId: nil, minTimestamp: nil, maxTimestamp: nil, mediaBox: mediaBox)
     if let _ = transaction.getPeerChatInterfaceState(peerId) {
         transaction.setPeerChatInterfaceState(peerId, state: nil)
     }

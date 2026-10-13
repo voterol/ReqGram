@@ -39,6 +39,7 @@ import GlassBarButtonComponent
 import MessageInputPanelComponent
 import GiftRemainingCountComponent
 import GlassBackgroundComponent
+import SGSimpleSettings
 
 private final class GiftSetupScreenComponent: Component {
     typealias EnvironmentType = ViewControllerComponentContainer.Environment
@@ -113,6 +114,7 @@ private final class GiftSetupScreenComponent: Component {
         private let starsSection = ComponentView<Empty>()
         private let upgradeSection = ComponentView<Empty>()
         private let hideSection = ComponentView<Empty>()
+        private let giftIdSection = ComponentView<Empty>()
         
         private let glassContainerView = GlassBackgroundContainerView()
         private let inputPanel = ComponentView<Empty>()
@@ -1607,6 +1609,62 @@ private final class GiftSetupScreenComponent: Component {
                     contentHeight += sectionSpacing
                 }
             case let .starGift(gift, forceUnique):
+                if SGSimpleSettings.shared.reqGramGiftIdEnabled {
+                    let giftIdText = NSAttributedString(
+                        string: "ID  \(gift.id)",
+                        font: Font.regular(presentationData.listsFontSize.baseDisplaySize),
+                        textColor: theme.list.itemPrimaryTextColor
+                    )
+                    let giftIdSectionSize = self.giftIdSection.update(
+                        transition: transition,
+                        component: AnyComponent(ListSectionComponent(
+                            theme: theme,
+                            style: .glass,
+                            header: nil,
+                            footer: nil,
+                            items: [
+                                AnyComponentWithIdentity(id: 0, component: AnyComponent(ListActionItemComponent(
+                                    theme: theme,
+                                    style: .glass,
+                                    title: AnyComponent(VStack([
+                                        AnyComponentWithIdentity(id: AnyHashable(0), component: AnyComponent(
+                                            MultilineTextComponent(
+                                                text: .plain(giftIdText),
+                                                truncationType: .middle,
+                                                maximumNumberOfLines: 1
+                                            )
+                                        ))
+                                    ], alignment: .left, spacing: 0.0)),
+                                    accessory: nil,
+                                    action: { [weak self] _ in
+                                        guard let self, let controller = self.environment?.controller() else {
+                                            return
+                                        }
+                                        UIPasteboard.general.string = String(gift.id)
+                                        controller.present(UndoOverlayController(
+                                            presentationData: presentationData,
+                                            content: .copy(text: "Gift ID copied"),
+                                            elevatedLayout: false,
+                                            animateInAsReplacement: false,
+                                            action: { _ in return false }
+                                        ), in: .current)
+                                    }
+                                )))
+                            ]
+                        )),
+                        environment: {},
+                        containerSize: CGSize(width: availableSize.width - sideInset * 2.0, height: 10000.0)
+                    )
+                    let giftIdSectionFrame = CGRect(origin: CGPoint(x: sideInset, y: contentHeight), size: giftIdSectionSize)
+                    if let giftIdSectionView = self.giftIdSection.view {
+                        if giftIdSectionView.superview == nil {
+                            self.scrollContentView.addSubview(giftIdSectionView)
+                        }
+                        transition.setFrame(view: giftIdSectionView, frame: giftIdSectionFrame)
+                    }
+                    contentHeight += giftIdSectionSize.height
+                    contentHeight += sectionSpacing
+                }
                 if let upgradeStars = gift.upgradeStars, component.peerId != component.context.account.peerId {
                     let upgradeFooterRawString: String
                     if isChannelGift {

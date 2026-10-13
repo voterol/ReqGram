@@ -30,6 +30,7 @@ import MultilineTextComponent
 import MultilineTextWithEntitiesComponent
 import ShimmerEffect
 import GlassBackgroundComponent
+import AyuGram
 
 public enum ChatListItemContent {
     public final class ThreadInfo: Equatable {
@@ -916,7 +917,6 @@ private final class ChatListItemAccessibilityCustomAction: UIAccessibilityCustom
     
     init(name: String, target: Any?, selector: Selector, key: Int32) {
         self.key = key
-        
         super.init(name: name, target: target, selector: selector)
     }
 }
@@ -1433,6 +1433,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
     var credibilityIconComponent: EmojiStatusComponent?
     var statusIconView: ComponentHostView<Empty>?
     var statusIconComponent: EmojiStatusComponent?
+    private var projectBadgeStripView: ComponentHostView<Empty>?
     let hiddenPeerIconNode: ASImageNode
     let mutedIconNode: ASImageNode
     var itemTagList: ComponentView<Empty>?
@@ -2519,6 +2520,8 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
             var currentVerifiedIconContent: EmojiStatusComponent.Content?
             var currentStatusIconContent: EmojiStatusComponent.Content?
             var currentStatusIconParticleColor: UIColor?
+            var projectBadges: [AyuBadgeContent] = []
+            var projectBadgeStripWidth: CGFloat = 0.0
             var currentSecretIconImage: UIImage?
             var currentMessageTypeIcon: UIImage?
             var currentMessageTypeIconOffset: CGPoint = .zero
@@ -3535,6 +3538,16 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
     
             var isSubscription = false
             var isSecret = false
+            // Match the peer used by the row's display/avatar logic. Message
+            // rows identify a user author; ordinary rows identify the chat peer.
+            let displayedIconPeer: EnginePeer?
+            if displayAsMessage, case let .user(author) = messages.last?.author {
+                displayedIconPeer = .user(author)
+            } else if case let .chat(itemPeer) = contentPeer {
+                displayedIconPeer = itemPeer.chatOrMonoforumMainPeer
+            } else {
+                displayedIconPeer = nil
+            }
             if !isPeerGroup {
                 if case let .chatList(index) = item.index, index.messageIndex.id.peerId.namespace == Namespaces.Peer.SecretChat {
                     isSecret = true
@@ -3553,15 +3566,8 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
             if !isPeerGroup && !isAccountPeer && threadInfo == nil {
                 if displayAsMessage {
                     switch item.content {
-                    case let .peer(peerData):
-                        var iconPeer: EnginePeer?
-                        if case let .chat(itemPeer) = contentPeer, let peer = itemPeer.chatOrMonoforumMainPeer {
-                            iconPeer = peer
-                        } else {
-                            iconPeer = peerData.messages.last?.author
-                        }
-                        
-                        if let peer = iconPeer {
+                    case .peer:
+                        if let peer = displayedIconPeer {
                             if case let .peer(peerData) = item.content, peerData.customMessageListData != nil {
                                 currentCredibilityIconContent = nil
                             } else if case .savedMessagesChats = item.chatListLocation, peer.id == item.context.account.peerId {
@@ -3642,7 +3648,21 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                     titleIconsWidth += 8.0
                 }
             }
-            
+            // Project badges are independent of Telegram credibility/status.
+            if let displayedIconPeer, displayedIconPeer.id != item.context.account.peerId {
+                projectBadges = AyuBadges.emojiStatusContents(
+                    for: displayedIconPeer.id,
+                    placeholderColor: item.presentationData.theme.list.mediaPlaceholderColor,
+                    themeColor: item.presentationData.theme.list.itemAccentColor
+                )
+                if !projectBadges.isEmpty {
+                    let fullWidth = CGFloat(projectBadges.count) * 22.0 - 2.0
+                    let fittingCount = min(projectBadges.count, Int((min(72.0, fullWidth) + 2.0) / 22.0))
+                    projectBadgeStripWidth = fittingCount > 0 ? CGFloat(fittingCount) * 22.0 - 2.0 : 0.0
+                    titleIconsWidth += projectBadgeStripWidth + (titleIconsWidth.isZero ? 4.0 : 2.0)
+                }
+            }
+
             if let currentCredibilityIconContent {
                 if titleIconsWidth.isZero {
                     titleIconsWidth += 4.0
@@ -5286,6 +5306,46 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                         strongSelf.statusIconView = nil
                         statusIconView.removeFromSuperview()
                     }
+
+                    if !projectBadges.isEmpty {
+                        let stripView: ComponentHostView<Empty>
+                        if let current = strongSelf.projectBadgeStripView {
+                            stripView = current
+                        } else {
+                            stripView = ComponentHostView<Empty>()
+                            stripView.isUserInteractionEnabled = false
+                            strongSelf.projectBadgeStripView = stripView
+                            strongSelf.mainContentContainerNode.view.addSubview(stripView)
+                        }
+                        let languageCode = item.presentationData.strings.baseLanguageCode
+                        let stripSize = stripView.update(
+                            transition: ComponentTransition(transition),
+                            component: AnyComponent(ProjectBadgeStripComponent(
+                                context: item.context,
+                                badges: projectBadges,
+                                languageCode: languageCode,
+                                peerName: displayedIconPeer?.displayTitle(strings: item.presentationData.strings, displayOrder: item.presentationData.nameDisplayOrder) ?? "",
+                                placeholderColor: item.presentationData.theme.list.mediaPlaceholderColor,
+                                accentColor: item.presentationData.theme.list.itemAccentColor,
+                                // Matches the adjacent row title text, so it
+                                // contrasts with the row background in every
+                                // theme.
+                                foregroundColor: item.presentationData.theme.chatList.titleColor,
+                                isVisibleForAnimations: strongSelf.visibilityStatus,
+                                isInteractive: false,
+                                badgeAction: nil,
+                                overflowAction: nil
+                            )),
+                            environment: {},
+                            containerSize: CGSize(width: projectBadgeStripWidth, height: 20.0)
+                        )
+                        let iconOrigin = nextTitleIconOrigin
+                        transition.updateFrame(view: stripView, frame: CGRect(x: iconOrigin, y: floorToScreenPixels(titleFrame.midY - stripSize.height * 0.5), width: stripSize.width, height: stripSize.height))
+                        nextTitleIconOrigin += stripSize.width + 4.0
+                    } else if let stripView = strongSelf.projectBadgeStripView {
+                        strongSelf.projectBadgeStripView = nil
+                        stripView.removeFromSuperview()
+                    }
                     
                     if let currentCredibilityIconContent {
                         let credibilityIconView: ComponentHostView<Empty>
@@ -5513,13 +5573,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                     strongSelf.view.accessibilityLabel = strongSelf.accessibilityLabel
                     strongSelf.view.accessibilityValue = strongSelf.accessibilityValue
                     
-                    if !customActions.isEmpty {
-                        strongSelf.view.accessibilityCustomActions = customActions.map({ action -> UIAccessibilityCustomAction in
-                            return ChatListItemAccessibilityCustomAction(name: action.name, target: strongSelf, selector: #selector(strongSelf.performLocalAccessibilityCustomAction(_:)), key: action.key)
-                        })
-                    } else {
-                        strongSelf.view.accessibilityCustomActions = nil
-                    }
+                    strongSelf.updateAccessibilityCustomActions(customActions: customActions)
                     
                     strongSelf.avatarTapRecognizer?.isEnabled = item.interaction.inlineNavigationLocation == nil
                     
@@ -5863,6 +5917,13 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
         if let action = action as? ChatListItemAccessibilityCustomAction {
             self.revealOptionSelected(ItemListRevealOption(key: action.key, title: "", icon: .none, color: .black, iconColor: .white, textColor: .white), animated: false)
         }
+    }
+
+    private func updateAccessibilityCustomActions(customActions: [ChatListItemAccessibilityCustomAction]) {
+        let accessibilityActions: [UIAccessibilityCustomAction] = customActions.map { action in
+            return ChatListItemAccessibilityCustomAction(name: action.name, target: self, selector: #selector(self.performLocalAccessibilityCustomAction(_:)), key: action.key)
+        }
+        self.view.accessibilityCustomActions = accessibilityActions.isEmpty ? nil : accessibilityActions
     }
     
     override public func snapshotForReordering() -> UIView? {

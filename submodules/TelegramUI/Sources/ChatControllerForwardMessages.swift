@@ -198,7 +198,7 @@ extension ChatControllerImpl {
                                             return message.withUpdatedAttributes { attributes in
                                                 var attributes = attributes
                                                 attributes.removeAll(where: { $0 is OutgoingScheduleInfoMessageAttribute })
-                                                attributes.append(OutgoingScheduleInfoMessageAttribute(scheduleTime: Int32(Date().timeIntervalSince1970) + 10 * 24 * 60 * 60, repeatPeriod: nil))
+                                                attributes.append(OutgoingScheduleInfoMessageAttribute(scheduleTime: Int32(Date().timeIntervalSince1970) + 12, repeatPeriod: nil))
                                                 return attributes
                                             }
                                         }

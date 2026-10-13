@@ -6,6 +6,7 @@ load(
 )
 
 sgdeps = [
+    "//Swiftgram/AyuGram:AyuGram",
     "//Swiftgram/SGSettingsUI:SGSettingsUI",
     "//Swiftgram/SGConfig:SGConfig",
     "//Swiftgram/SGAPIWebSettings:SGAPIWebSettings",
@@ -24,6 +25,8 @@ sgdeps = [
     "//Swiftgram/SGProUI:SGProUI",
     "//Swiftgram/SGKeychainBackupManager:SGKeychainBackupManager",
     "//Swiftgram/SGGHSettings:SGGHSettings",
+    "//Swiftgram/SGScamRegistry:SGScamRegistry",
+    "//Swiftgram/SGScamWarningBanner:SGScamWarningBanner",
     # "//Swiftgram/SGContentAnalysis:SGContentAnalysis"
 ]
 
@@ -550,6 +553,7 @@ swift_library(
         "//submodules/TelegramUI/Components/Gifts/GiftDemoScreen",
         "//submodules/TelegramUI/Components/EmojiGameStakeScreen",
         "//submodules/TelegramUI/Components/AlertComponent",
+        "//submodules/TelegramUI/Components/AlertComponent/AlertInputFieldComponent",
         "//submodules/TelegramUI/Components/Chat/ChatAgeRestrictionAlertController",
         "//submodules/TelegramUI/Components/CocoonInfoScreen",
         "//submodules/TelegramUI/Components/ProxyServerPreviewScreen",

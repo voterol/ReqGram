@@ -5,6 +5,7 @@ new_git_repository = use_repo_rule("@bazel_tools//tools/build_defs/repo:git.bzl"
 bazel_dep(name = "bazel_features", version = "1.33.0")
 bazel_dep(name = "bazel_skylib", version = "1.8.1")
 bazel_dep(name = "platforms", version = "0.0.11")
+bazel_dep(name = "rules_cc", version = "0.2.17")
 bazel_dep(name = "rules_go", version = "0.60.0", repo_name = "io_bazel_rules_go")
 
 go_sdk = use_extension("@io_bazel_rules_go//go:extensions.bzl", "go_sdk")
@@ -48,6 +49,16 @@ local_path_override(
     module_name = "apple_support",
     path = "./build-system/bazel-rules/apple_support",
 )
+
+# The macOS bazelrc points at these repositories by their legacy apparent
+# names.  Register the local Apple C++ toolchains in the root module as well as
+# in apple_support so those names are visible to the main repository.
+apple_cc_configure = use_extension(
+    "@build_bazel_apple_support//crosstool:setup.bzl",
+    "apple_cc_configure_extension",
+)
+use_repo(apple_cc_configure, "local_config_apple_cc", "local_config_apple_cc_toolchains")
+register_toolchains("@local_config_apple_cc_toolchains//:all")
 
 # MARK: Swiftgram
 new_git_repository(

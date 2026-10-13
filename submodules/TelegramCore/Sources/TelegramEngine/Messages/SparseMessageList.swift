@@ -830,7 +830,7 @@ public final class SparseMessageCalendar {
 
             self.statePromise.set(.single(self.state))
 
-            return _internal_clearHistoryInRangeInteractively(postbox: self.account.postbox, peerId: self.peerId, threadId: self.threadId, minTimestamp: minTimestamp, maxTimestamp: maxTimestamp, type: type).start(completed: {
+            return _internal_clearHistoryInRangeInteractively(accountPeerId: self.account.peerId, postbox: self.account.postbox, peerId: self.peerId, threadId: self.threadId, minTimestamp: minTimestamp, maxTimestamp: maxTimestamp, type: type).start(completed: {
                 completion()
             })
         }

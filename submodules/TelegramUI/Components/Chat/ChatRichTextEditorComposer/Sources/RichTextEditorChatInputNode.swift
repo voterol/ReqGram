@@ -38,7 +38,28 @@ private final class HostChecklistCheckboxView: UIView, RichTextChecklistMarkerVi
 /// `ChatRichTextInputNode` backend composing the TextKit-2 `RichTextEditorView`.
 @available(iOS 13.0, *)
 public final class RichTextEditorChatInputNode: ASDisplayNode, ChatRichTextInputNode {
+    /// The editor currently uses its bounded view-level fallback. RichTextEditorView cannot safely own
+    /// per-glyph drawing because its paragraph boxes are independently laid out/virtualized.
+    public var textAnimationConfiguration = ChatInputTextAnimationConfiguration()
     private let strings: PresentationStrings
+
+    private func isPlainInsertion(from oldText: String, to newText: String) -> Bool {
+        let old = Array(oldText.utf16)
+        let new = Array(newText.utf16)
+        guard new.count > old.count, new.count - old.count <= 256 else {
+            return false
+        }
+        var prefix = 0
+        while prefix < old.count, prefix < new.count, old[prefix] == new[prefix] {
+            prefix += 1
+        }
+        var suffix = 0
+        while suffix < old.count - prefix, suffix < new.count - prefix,
+              old[old.count - 1 - suffix] == new[new.count - 1 - suffix] {
+            suffix += 1
+        }
+        return prefix + suffix == old.count
+    }
     
     private let editorView = RichTextEditorView()
     private let baseFontSize: CGFloat = 17.0
@@ -231,6 +252,19 @@ public final class RichTextEditorChatInputNode: ASDisplayNode, ChatRichTextInput
             // `chatInputTextNode(shouldChangeTextIn:)` — a delegate the native editor never invokes. Reading the
             // plain text is the existing hot-path send-counter read; the diff keeps cursor taps off the wire.
             let currentText = self.text
+            if !self.isApplyingProgrammaticContent,
+               self.textAnimationConfiguration.insertionEnabled,
+               self.isPlainInsertion(from: self.lastTypingActivityText, to: currentText) {
+                // The native editor has no public per-glyph draw callback. This fallback animates the
+                // already-committed canvas only; it never rebuilds the document or touches selection/layout.
+                let configuration = self.textAnimationConfiguration
+                self.editorView.animateInsertion(
+                    duration: configuration.duration,
+                    slideDistance: configuration.slideDistance,
+                    scaleStart: configuration.scaleEnabled ? configuration.scaleStart : 1.0,
+                    rotateAngle: configuration.rotateEnabled ? configuration.rotateAngle : 0.0
+                )
+            }
             if !self.isApplyingProgrammaticContent && currentText != self.lastTypingActivityText {
                 self.onTypingActivity?()
             }

@@ -218,6 +218,14 @@ public final class ChatMessageSelectionInputPanelNode: ChatInputPanelNode {
             }
         }
     }
+
+    public var containsSyntheticMessages = false {
+        didSet {
+            if oldValue != self.containsSyntheticMessages {
+                self.updateActions()
+            }
+        }
+    }
     
     public init(theme: PresentationTheme, strings: PresentationStrings, peerMedia: Bool = false) {
         self.theme = theme
@@ -306,6 +314,17 @@ public final class ChatMessageSelectionInputPanelNode: ChatInputPanelNode {
     }
     
     private func updateActions() {
+        if self.containsSyntheticMessages {
+            self.actions = nil
+            self.canDeleteMessagesDisposable.set(nil)
+            self.forwardButton.isEnabled = false
+            self.cloudButton.isEnabled = false
+            self.forwardHideNamesButton.isEnabled = false
+            if let layout = self.validLayout, let interfaceState = self.presentationInterfaceState {
+                let _ = self.updateLayout(width: layout.width, leftInset: layout.leftInset, rightInset: layout.rightInset, bottomInset: layout.bottomInset, additionalSideInsets: layout.additionalSideInsets, maxHeight: layout.maxHeight, maxOverlayHeight: layout.maxOverlayHeight, isSecondary: layout.isSecondary, transition: .immediate, interfaceState: interfaceState, metrics: layout.metrics, deviceMetrics: layout.deviceMetrics, isMediaInputExpanded: layout.isMediaInputExpanded)
+            }
+            return
+        }
         self.forwardButton.isEnabled = self.selectedMessages.count != 0
         // MARK: Swiftgram
         self.cloudButton.isEnabled = self.forwardButton.isEnabled
@@ -525,7 +544,22 @@ public final class ChatMessageSelectionInputPanelNode: ChatInputPanelNode {
         if self.presentationInterfaceState != interfaceState {
             self.presentationInterfaceState = interfaceState
         }
-        if let actions = self.actions {
+        if self.containsSyntheticMessages {
+            self.deleteButton.isEnabled = !self.selectedMessages.isEmpty
+            self.deleteButton.isHidden = false
+            self.reportButton.isEnabled = false
+            self.reportButton.isHidden = true
+            self.forwardButton.isImplicitlyDisabled = true
+            self.forwardButton.isHidden = true
+            self.cloudButton.isImplicitlyDisabled = true
+            self.cloudButton.isHidden = true
+            self.forwardHideNamesButton.isImplicitlyDisabled = true
+            self.forwardHideNamesButton.isHidden = true
+            self.shareButton.isImplicitlyDisabled = true
+            self.shareButton.isHidden = true
+            self.tagButton.isHidden = true
+            self.tagEditButton.isHidden = true
+        } else if let actions = self.actions {
             self.deleteButton.isEnabled = false
             self.reportButton.isEnabled = false
             self.forwardButton.isImplicitlyDisabled = !actions.options.contains(.forward)
@@ -664,7 +698,7 @@ public final class ChatMessageSelectionInputPanelNode: ChatInputPanelNode {
         //
         
         let availableWidth = width - leftInset - rightInset
-        let spacing: CGFloat = floor((availableWidth - buttonSize.width * CGFloat(buttons.count)) / CGFloat(buttons.count - 1))
+        let spacing: CGFloat = buttons.count > 1 ? floor((availableWidth - buttonSize.width * CGFloat(buttons.count)) / CGFloat(buttons.count - 1)) : 0.0
         var offset: CGFloat = leftInset
         for i in 0 ..< buttons.count {
             let button = buttons[i]

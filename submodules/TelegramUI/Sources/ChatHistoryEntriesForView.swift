@@ -12,6 +12,8 @@ import TextFormat
 import Markdown
 import Display
 import TelegramStringFormatting
+import AyuGram
+import SGSimpleSettings
 
 struct ChatHistoryEntriesForViewState {
     private var messageStableIdToLocalId: [UInt32: Int64] = [:]
@@ -220,6 +222,18 @@ func chatHistoryEntriesForView(
         }
         
         var contentTypeHint: ChatMessageEntryContentType = .generic
+
+        if SGSimpleSettings.shared.reqGramLocalEdictorEnabled,
+           let override = AyuMessageStore.shared.localTextOverride(peerId: message.id.peerId.toInt64(), accountId: context.account.peerId.toInt64(), messageId: message.id.id) {
+            // A local replacement is display-only. Do not carry the server's
+            // entity ranges over to the replacement, and provide an explicit
+            // empty entity attribute so the renderer does not auto-detect
+            // URLs/usernames in the locally edited text.
+            var attributes = message.attributes.filter { !($0 is TextEntitiesMessageAttribute) }
+            let localEntities = generateTextEntities(override, enabledTypes: [.allUrl, .mention])
+            attributes.append(TextEntitiesMessageAttribute(entities: localEntities))
+            message = message.withUpdatedText(override).withUpdatedAttributes(attributes)
+        }
         
         for media in message.media {
             if media is TelegramMediaDice {

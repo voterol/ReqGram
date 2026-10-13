@@ -431,7 +431,7 @@ final class BrowserAddressListComponent: Component {
                                                 f(.dismissWithoutContent)
                                                 
                                                 if let self, let component = self.component {
-                                                    let _ = component.context.engine.messages.deleteMessagesInteractively(messageIds: [message.id], type: .forEveryone).startStandalone()
+                                                    let _ = component.context.engine.messages.deleteMessagesInteractively(messageIds: [message.id], type: .forEveryone, userInitiated: true).startStandalone()
                                                 }
                                             })))
                                         } else {

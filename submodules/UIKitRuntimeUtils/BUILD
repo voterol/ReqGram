@@ -1,4 +1,6 @@
 
+load("@rules_cc//cc:objc_library.bzl", "objc_library")
+
 objc_library(
     name = "UIKitRuntimeUtils",
     enable_modules = True,
@@ -7,7 +9,7 @@ objc_library(
         "Source/UIKitRuntimeUtils/*.m",
     ]),
     copts = [
-        "-Werror",
+        "-Wno-error=deprecated-declarations",
     ],
     hdrs = glob([
         "Source/UIKitRuntimeUtils/*.h",

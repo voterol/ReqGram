@@ -1635,7 +1635,7 @@
                 // Define the URL
                 NSURL *url = [NSURL URLWithString:@"sg://resolve?domain=TelescopyBot&start=sgconvertdemo"];
                 // Create UIAlertController
-                UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"Convert in @TelescopyBot" message:@"by Swiftgram" preferredStyle:UIAlertControllerStyleAlert];
+                UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"Convert in @TelescopyBot" message:@"by ReqGram" preferredStyle:UIAlertControllerStyleAlert];
                 // Add an OK action with a handler to open the URL and then dismiss the parent view controller
                 UIAlertAction *okAction = [UIAlertAction actionWithTitle:TGLocalized(@"WebApp.OpenBot") style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
                     // Check if the URL can be opened

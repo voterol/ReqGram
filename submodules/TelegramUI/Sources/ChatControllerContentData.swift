@@ -1924,6 +1924,10 @@ extension ChatControllerImpl {
 
                 if let opaqueState = (combinedInitialData.initialData?.storedInterfaceState).flatMap(_internal_decodeStoredChatInterfaceState) {
                     var interfaceState = ChatInterfaceState.parse(opaqueState)
+                    if let historyScrollState = interfaceState.historyScrollState,
+                       AyuHooks.isLegacySyntheticScrollIndex(historyScrollState.messageIndex, accountPeerId: context.account.peerId, threadId: chatLocation.threadId) {
+                        interfaceState = interfaceState.withUpdatedHistoryScrollState(nil)
+                    }
 
                     var pinnedMessageId: MessageId?
                     var peerIsBlocked: Bool = false
@@ -2073,7 +2077,8 @@ extension ChatControllerImpl {
                 self.isChatLocationInfoReady.get(),
                 self.isCachedDataReady.get(),
                 historyNode.isReady,
-                initialData |> map { _ -> Bool in true },
+                initialData
+                |> map { _ -> Bool in true },
                 initialPersistentPeerDataReady
             ])
             |> map { values in

@@ -1,5 +1,7 @@
 import Foundation
 import SGSimpleSettings
+import SGScamRegistry
+import SGScamWarningBanner
 import UIKit
 import AsyncDisplayKit
 import Postbox
@@ -38,6 +40,7 @@ import SuggestPostAccessoryPanelNode
 import ChatMessageItemView
 import ChatMessageBubbleItemNode
 import ChatMessageSelectionNode
+import ChatMessageSelectionInputPanelNode
 import ManagedDiceAnimationNode
 import ChatMessageTransitionNode
 import TextFieldComponent
@@ -267,6 +270,7 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
     private var floatingTopicsPanel: (view: ComponentView<ChatSidePanelEnvironment>, component: ChatFloatingTopicsPanel)?
     private var headerPanelsView: ComponentView<Empty>?
     private var footerPanelsView: ComponentView<Empty>?
+    private var sgScamRegistryObserver: NSObjectProtocol?
     
     private var topBackgroundEdgeEffectNode: WallpaperEdgeEffectNode?
     private var bottomBackgroundEdgeEffectNode: WallpaperEdgeEffectNode?
@@ -817,6 +821,10 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
         
         super.init()
 
+        self.sgScamRegistryObserver = NotificationCenter.default.addObserver(forName: .sgScamRegistryDidChange, object: SGScamRegistryService.shared, queue: .main) { [weak self] _ in
+            self?.requestLayout(.immediate)
+        }
+
         getContentAreaInScreenSpaceImpl = { [weak self] in
             guard let strongSelf = self else {
                 return CGRect()
@@ -1042,6 +1050,9 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
     }
     
     deinit {
+        if let sgScamRegistryObserver = self.sgScamRegistryObserver {
+            NotificationCenter.default.removeObserver(sgScamRegistryObserver)
+        }
         self.interactiveEmojisDisposable?.dispose()
         self.openStickersDisposable?.dispose()
         self.displayVideoUnmuteTipDisposable?.dispose()
@@ -1430,6 +1441,19 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
         var headerPanels: [HeaderPanelContainerComponent.Panel] = []
         var footerPanels: [HeaderPanelContainerComponent.Panel] = []
         let hideTopPanels = self.controller?.hideTopPanels ?? false
+
+        if !hideTopPanels, self.chatPresentationInterfaceState.search == nil,
+           let peerId = self.chatPresentationInterfaceState.chatLocation.peerId,
+           peerId.namespace == Namespaces.Peer.CloudUser,
+           peerId != self.context.account.peerId,
+           SGScamRegistryService.shared.currentSettings().enabled,
+           SGScamRegistryService.shared.contains(peerId.id._internalGetInt64Value()) {
+            headerPanels.append(HeaderPanelContainerComponent.Panel(
+                key: "sgScamWarning",
+                orderIndex: 0,
+                component: AnyComponent(SGScamWarningBannerComponent(theme: self.chatPresentationInterfaceState.theme, languageCode: self.chatPresentationInterfaceState.strings.baseLanguageCode))
+            ))
+        }
         
         if !hideTopPanels, self.chatPresentationInterfaceState.search == nil, let headerTopicsPanel = headerTopicsPanelForChatPresentationInterfaceState(self.chatPresentationInterfaceState, context: self.context, controllerInteraction: self.controllerInteraction, interfaceInteraction: self.interfaceInteraction, force: false) {
             let panel = HeaderPanelContainerComponent.Panel(
@@ -1817,6 +1841,9 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
         var dismissedOverlayContextPanelNode: ChatInputContextPanelNode?
         // MARK: Swiftgram
         var inputPanelNodes = inputPanelForChatPresentationIntefaceState(self.chatPresentationInterfaceState, context: self.context, currentPanel: self.inputPanelNode, currentSecondaryPanel: self.secondaryInputPanelNode, textInputPanelNode: self.textInputPanelNode, chatControllerInteraction: self.controllerInteraction, interfaceInteraction: self.interfaceInteraction)
+        let selectionContainsSynthetic = self.controller?.ayuSelectionContainsSynthetic() ?? false
+        (inputPanelNodes.primary as? ChatMessageSelectionInputPanelNode)?.containsSyntheticMessages = selectionContainsSynthetic
+        (inputPanelNodes.secondary as? ChatMessageSelectionInputPanelNode)?.containsSyntheticMessages = selectionContainsSynthetic
         if SGSimpleSettings.shared.hideChannelBottomButton {
             // We still need the panel for messages multi-select or search. Likely can break in future.
             if self.chatPresentationInterfaceState.interfaceState.selectionState != nil || self.chatPresentationInterfaceState.search != nil {
@@ -4856,6 +4883,12 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
     func sendCurrentMessage(silentPosting: Bool? = nil, scheduleTime: Int32? = nil, repeatPeriod: Int32? = nil, postpone: Bool = false, messageEffect: ChatSendMessageEffect? = nil, sendWithoutFormatting: Bool = false, completion: @escaping () -> Void = {}) {
         guard let textInputPanelNode = self.inputPanelNode as? ChatTextInputPanelNode else {
             return
+        }
+        // MARK: AyuGram - force silent sending per the "send without sound"
+        // setting. An explicit caller choice always wins over the setting.
+        var silentPosting = silentPosting
+        if silentPosting == nil, SGSimpleSettings.shared.ayuShouldSendWithoutSound {
+            silentPosting = true
         }
         self.historyNode.justSentTextMessage = true
         

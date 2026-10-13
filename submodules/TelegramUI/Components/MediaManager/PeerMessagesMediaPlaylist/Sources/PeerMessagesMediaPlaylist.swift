@@ -69,6 +69,8 @@ public final class MessageMediaPlaylistItem: SharedMediaPlaylistItem {
             let fileReference: FileMediaReference
             if self.isSavedMusic, let peer = self.message.peers[self.message.id.peerId], let peerReference = PeerReference(peer) {
                 fileReference = .savedMusic(peer: peerReference, media: file)
+            } else if self.message.isAyuSyntheticDeletedMessage {
+                fileReference = .standalone(media: file)
             } else {
                 fileReference = .message(message: MessageReference(self.message), media: file)
             }

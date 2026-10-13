@@ -2,6 +2,8 @@ import Foundation
 import Postbox
 import SwiftSignalKit
 import TelegramApi
+// MARK: AyuGram
+import SGSimpleSettings
 
 private class AdMessagesHistoryContextImpl {
     final class CachedMessage: Equatable, Codable {
@@ -478,6 +480,14 @@ private class AdMessagesHistoryContextImpl {
     
     func activate() {
         if self.isActivated {
+            return
+        }
+        // MARK: AyuGram - never request sponsored messages when ads are
+        // disabled. Blocking at the request level also avoids telling the
+        // server that an ad slot was rendered.
+        if SGSimpleSettings.shared.ayuDisableAds {
+            self.isActivated = true
+            self.stateValue = State(interPostInterval: nil, startDelay: nil, betweenDelay: nil, messages: [])
             return
         }
         self.isActivated = true

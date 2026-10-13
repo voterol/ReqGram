@@ -44,6 +44,7 @@ private enum SGDebugActions: String {
 }
 
 private enum SGDebugToggles: String {
+    case reqGramDeveloperMode
     case forceImmediateShareSheet
     case legacyNotificationsFix
     case inputToolbar
@@ -61,6 +62,8 @@ private func SGDebugControllerEntries(presentationData: PresentationData) -> [SG
     var entries: [SGDebugControllerEntry] = []
     
     let id = SGItemListCounter()
+    let reqGramDeveloperMode = (try? ReqGramPluginManager.shared.policy().developerMode) ?? false
+    entries.append(.toggle(id: id.count, section: .base, settingName: .reqGramDeveloperMode, value: reqGramDeveloperMode, text: "ReqGram Developer Mode", enabled: true))
     #if DEBUG
     entries.append(.action(id: id.count, section: .base, actionType: .flexing, text: "FLEX", kind: .generic))
     entries.append(.action(id: id.count, section: .base, actionType: .fileManager, text: "FileManager", kind: .generic))
@@ -92,6 +95,18 @@ public func sgDebugController(context: AccountContext) -> ViewController {
     
     let arguments = SGItemListArguments<SGDebugToggles, AnyHashable, SGDebugOneFromManySetting, SGDebugDisclosureLink, SGDebugActions>(context: context, setBoolValue: { toggleName, value in
         switch toggleName {
+            case .reqGramDeveloperMode:
+                do {
+                    try ReqGramPluginManager.shared.setPolicy(developerMode: value)
+                } catch {
+                    presentControllerImpl?(UndoOverlayController(
+                        presentationData: context.sharedContext.currentPresentationData.with { $0 },
+                        content: .info(title: "ReqGram Developer Mode", text: error.localizedDescription, timeout: nil, customUndoText: nil),
+                        elevatedLayout: false,
+                        action: { _ in false }
+                    ), nil)
+                }
+                simplePromise.set(true)
             case .forceImmediateShareSheet:
                 SGSimpleSettings.shared.forceSystemSharing = value
             case .legacyNotificationsFix:
@@ -201,7 +216,7 @@ public func sgDebugController(context: AccountContext) -> ViewController {
         
         let entries = SGDebugControllerEntries(presentationData: presentationData)
         
-        let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("Swiftgram Debug"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
+        let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("ReqGram Debug"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, ensureVisibleItemTag: /*focusOnItemTag*/ nil, initialScrollToItem: nil /* scrollToItem*/ )
         
@@ -220,5 +235,3 @@ public func sgDebugController(context: AccountContext) -> ViewController {
     
     return controller
 }
-
-

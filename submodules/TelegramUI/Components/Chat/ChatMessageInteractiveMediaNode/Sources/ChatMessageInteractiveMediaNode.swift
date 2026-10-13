@@ -693,7 +693,7 @@ public final class ChatMessageInteractiveMediaNode: ASDisplayNode, GalleryItemTr
             switch fetchStatus {
                 case .Fetching:
                     if let context = self.context, let message = self.message, message.flags.isSending {
-                        let _ = context.engine.messages.deleteMessagesInteractively(messageIds: [message.id], type: .forEveryone).startStandalone()
+                        let _ = context.engine.messages.deleteMessagesInteractively(messageIds: [message.id], type: .forEveryone, userInitiated: true).startStandalone()
                     } else if let media = self.media, let context = self.context, let message = self.message {
                         if let media = media as? TelegramMediaFile {
                             messageMediaFileCancelInteractiveFetch(context: context, messageId: message.id, file: media)
@@ -1130,6 +1130,7 @@ public final class ChatMessageInteractiveMediaNode: ASDisplayNode, GalleryItemTr
                     context: context,
                     presentationData: presentationData,
                     edited: dateAndStatus.edited && !presentationData.isPreview,
+                    isDeleted: message.isAyuSyntheticDeletedMessage,
                     impressionCount: !presentationData.isPreview ? dateAndStatus.viewCount : nil,
                     dateText: dateAndStatus.dateText,
                     type: dateAndStatus.type,

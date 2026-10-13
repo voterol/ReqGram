@@ -96,6 +96,8 @@ public struct MediaControlContext {
 /// `ChatRichTextInputNodeImpl` (which composes the existing `ChatInputTextNode`);
 /// intended to be implemented directly by the TextKit-2 RichTextEditor later.
 public protocol ChatRichTextInputNode: AnyObject {
+    /// Optional visual insertion animation. Native rich-text editors may ignore this until parity is implemented.
+    var textAnimationConfiguration: ChatInputTextAnimationConfiguration { get set }
     /// The display node to insert into the view hierarchy and assign a frame to.
     var asNode: ASDisplayNode { get }
 
@@ -507,6 +509,11 @@ public func makeChatRichTextInputNode(disableTiling: Bool = false) -> ChatRichTe
 
 final class ChatRichTextInputNodeImpl: ASDisplayNode, ChatRichTextInputNode {
     private let textInputNodeImpl: ChatInputTextNode
+
+    var textAnimationConfiguration: ChatInputTextAnimationConfiguration {
+        get { return self.textInputNodeImpl.textAnimationConfiguration }
+        set { self.textInputNodeImpl.textAnimationConfiguration = newValue }
+    }
 
     private var dustNode: InvisibleInkDustNode?
     private var customEmojiContainerView: CustomEmojiContainerView?

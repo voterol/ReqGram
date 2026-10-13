@@ -107,8 +107,9 @@ public func chatMessageGalleryControllerData(
     synchronousLoad: Bool,
     actionInteraction: GalleryControllerActionInteraction?
 ) -> ChatMessageGalleryControllerData? {
+    let isAyuSynthetic = message.isAyuSyntheticDeletedMessage
     var standalone = standalone
-    if message.id.peerId.namespace == Namespaces.Peer.CloudUser && message.id.namespace != Namespaces.Message.Cloud {
+    if isAyuSynthetic || (message.id.peerId.namespace == Namespaces.Peer.CloudUser && message.id.namespace != Namespaces.Message.Cloud) {
         standalone = true
     }
     
@@ -292,7 +293,7 @@ public func chatMessageGalleryControllerData(
                 }
                 
                 var source = source
-                if standalone {
+                if standalone || isAyuSynthetic {
                     source = .standaloneMessage(message, nil)
                 }
                 
@@ -308,7 +309,7 @@ public func chatMessageGalleryControllerData(
                 }
             }
             
-            if let adAttribute = message.adAttribute, adAttribute.hasContentMedia {
+            if !isAyuSynthetic, let adAttribute = message.adAttribute, adAttribute.hasContentMedia {
                 let gallery = GalleryController(context: context, source: .standaloneMessage(message, mediaSubject), invertItemOrder: reverseMessageGalleryOrder, streamSingleVideo: stream, fromPlayingVideo: autoplayingVideo, landscape: landscape, timecode: nil, playbackRate: 1.0, synchronousLoad: synchronousLoad, replaceRootController: { [weak navigationController] controller, ready in
                     navigationController?.replaceTopController(controller, animated: false, ready: ready)
                 }, baseNavigationController: navigationController, actionInteraction: actionInteraction)
@@ -319,7 +320,11 @@ public func chatMessageGalleryControllerData(
                 return .secretGallery(gallery)
             } else {
                 let startState: Signal<(timecode: Double?, rate: Double), NoError>
-                if let timecode = timecode {
+                if isAyuSynthetic {
+                    // Preserved messages are in-memory objects without a Postbox
+                    // row. Never let their reused MessageId read playback state.
+                    startState = .single((timecode: timecode, rate: 1.0))
+                } else if let timecode = timecode {
                     startState = .single((timecode: timecode, rate: 1.0))
                 } else {
                     startState = mediaPlaybackStoredState(engine: context.engine, messageId: message.id)
@@ -338,7 +343,13 @@ public func chatMessageGalleryControllerData(
                 return .gallery(startState
                 |> deliverOnMainQueue
                 |> map { startState in
-                    let gallery = GalleryController(context: context, source: source ?? (standalone ? .standaloneMessage(message, mediaSubject) : .peerMessagesAtId(messageId: message.id, chatLocation: openChatLocation, customTag: chatFilterTag, chatLocationContextHolder: openChatLocationContextHolder)), invertItemOrder: reverseMessageGalleryOrder, streamSingleVideo: stream, fromPlayingVideo: autoplayingVideo, landscape: landscape, timecode: startState.timecode, playbackRate: startState.rate, synchronousLoad: synchronousLoad, replaceRootController: { [weak navigationController] controller, ready in
+                    let effectiveSource: GalleryControllerItemSource
+                    if isAyuSynthetic {
+                        effectiveSource = .standaloneMessage(message, mediaSubject)
+                    } else {
+                        effectiveSource = source ?? (standalone ? .standaloneMessage(message, mediaSubject) : .peerMessagesAtId(messageId: message.id, chatLocation: openChatLocation, customTag: chatFilterTag, chatLocationContextHolder: openChatLocationContextHolder))
+                    }
+                    let gallery = GalleryController(context: context, source: effectiveSource, invertItemOrder: reverseMessageGalleryOrder, streamSingleVideo: stream, fromPlayingVideo: autoplayingVideo, landscape: landscape, timecode: startState.timecode, playbackRate: startState.rate, synchronousLoad: synchronousLoad, replaceRootController: { [weak navigationController] controller, ready in
                         navigationController?.replaceTopController(controller, animated: false, ready: ready)
                     }, baseNavigationController: navigationController, actionInteraction: actionInteraction)
                     gallery.temporaryDoNotWaitForReady = autoplayingVideo

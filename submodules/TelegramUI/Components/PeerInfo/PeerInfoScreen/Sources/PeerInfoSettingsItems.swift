@@ -1,5 +1,7 @@
 import Foundation
 import UIKit
+import SGStrings // MARK: AyuGram
+import SGSimpleSettings // MARK: AyuGram
 import Display
 import AccountContext
 import TelegramPresentationData
@@ -230,6 +232,25 @@ func settingsItems(showProfileId: Bool, data: PeerInfoScreenData?, context: Acco
         interaction.openSettings(.swiftgram)
     }))
 
+    // MARK: AyuGram
+    if SGSimpleSettings.shared.ayuShowGhostModeInProfile {
+        items[.swiftgram]!.append(PeerInfoScreenSwitchItem(id: 2, text: i18n("AyuGram.GhostMode", presentationData.strings.baseLanguageCode), value: SGSimpleSettings.shared.ayuGhostMode, icon: PresentationResourcesSettings.ghostMode, isLocked: false, toggled: { value in
+            let settings = SGSimpleSettings.shared
+            settings.ayuGhostMode = value
+            if value {
+                settings.ayuGhostBlockReadReceipts = true
+                settings.ayuGhostBlockTyping = true
+                settings.ayuGhostBlockOnlinePresence = true
+                settings.ayuGhostBlockStoryViews = true
+            }
+        }))
+    }
+    items[.swiftgram]!.append(PeerInfoScreenDisclosureItem(id: 3, text: "AyuGram", icon: PresentationResourcesSettings.ayuGram, action: {
+        interaction.openSettings(.ayugram)
+    }))
+    items[.swiftgram]!.append(PeerInfoScreenDisclosureItem(id: 4, text: "ReqGram", icon: PresentationResourcesSettings.security, action: {
+        interaction.openSettings(.reqgram)
+    }))
     var appIndex = 1000
     if let settings = data.globalSettings {
         for bot in settings.bots {

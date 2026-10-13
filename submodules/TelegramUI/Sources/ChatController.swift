@@ -1,4 +1,6 @@
 import SGSimpleSettings
+import SGStrings
+import AyuGram
 import Foundation
 import UIKit
 import Postbox
@@ -292,6 +294,66 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     
     public var selectedMessageIds: Set<EngineMessage.Id>? {
         return self.presentationInterfaceState.interfaceState.selectionState?.selectedIds
+    }
+
+    /// Selection outlives individual history view entries. Retain the
+    /// authoritative marker while selection is active so scrolling/pagination
+    /// cannot turn a synthetic message into an apparently real one.
+    var ayuSelectedSyntheticAttributes: [MessageId: AyuSyntheticMessageAttribute] = [:]
+
+    func ayuBeginSelectionClassification(_ ids: Set<MessageId>) {
+        // Keep markers for ids that remain selected: they may already have
+        // scrolled out of the current history view since the previous update.
+        self.ayuSelectedSyntheticAttributes = self.ayuSelectedSyntheticAttributes.filter { ids.contains($0.key) }
+        for id in ids {
+            if let attribute = self.chatDisplayNode.historyNode.messageInCurrentHistoryView(id)?._asMessage().ayuSyntheticDeletedMessageAttribute {
+                self.ayuSelectedSyntheticAttributes[id] = attribute
+            }
+        }
+    }
+
+    func ayuPartitionMessageIds(_ ids: Set<MessageId>) -> (realIds: Set<MessageId>, syntheticAttributes: [AyuSyntheticMessageAttribute], unresolvedIds: Set<MessageId>) {
+        var realIds: Set<MessageId> = []
+        var syntheticAttributes: [AyuSyntheticMessageAttribute] = []
+        var unresolvedIds: Set<MessageId> = []
+        for id in ids {
+            if let attribute = self.ayuSelectedSyntheticAttributes[id] {
+                syntheticAttributes.append(attribute)
+            } else if let message = self.chatDisplayNode.historyNode.messageInCurrentHistoryView(id)?._asMessage() {
+                if let attribute = message.ayuSyntheticDeletedMessageAttribute {
+                    self.ayuSelectedSyntheticAttributes[id] = attribute
+                    syntheticAttributes.append(attribute)
+                } else {
+                    realIds.insert(id)
+                }
+            } else {
+                unresolvedIds.insert(id)
+            }
+        }
+        assert(realIds.count + syntheticAttributes.count + unresolvedIds.count == ids.count)
+        assert(Set(self.ayuSelectedSyntheticAttributes.keys).intersection(realIds).isEmpty)
+        return (realIds, syntheticAttributes, unresolvedIds)
+    }
+
+    /// Returns true when a selection is synthetic or cannot currently be
+    /// classified authoritatively. Server/Postbox actions must fail closed for
+    /// either case. No sign-based rule is used: known negative Cloud ids remain
+    /// ordinary messages, while an unavailable id is merely blocked, not purged.
+    func ayuSelectionContainsSynthetic(_ ids: Set<MessageId>? = nil) -> Bool {
+        let ids = ids ?? self.presentationInterfaceState.interfaceState.selectionState?.selectedIds ?? []
+        return ids.contains { id in
+            if self.ayuSelectedSyntheticAttributes[id] != nil {
+                return true
+            }
+            guard let message = self.chatDisplayNode.historyNode.messageInCurrentHistoryView(id)?._asMessage() else {
+                return true
+            }
+            if let attribute = message.ayuSyntheticDeletedMessageAttribute {
+                self.ayuSelectedSyntheticAttributes[id] = attribute
+                return true
+            }
+            return false
+        }
     }
     
     let chatThemePromise = Promise<ChatTheme?>()
@@ -768,7 +830,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                 return
             }
             self.updateStatusBarPresentation(animated: false)
-            
+
             var preferredGlassType: ChatPresentationInterfaceState.GlassType = self.chatBackgroundNode.contentStats?.isSaturated == true ? .clear : .default
             if !self.presentationData.theme.overallDarkAppearance {
                 preferredGlassType = .default
@@ -799,13 +861,13 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             guard let strongSelf = self else {
                 return true
             }
-            
+
             if let _ = strongSelf.videoRecorderValue {
                 return false
             }
-            
+
             strongSelf.chatDisplayNode.messageTransitionNode.dismissMessageReactionContexts()
-            
+
             if strongSelf.presentVoiceMessageDiscardAlert(action: action, performAction: false) {
                 return false
             }
@@ -878,7 +940,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             guard let self, self.isNodeLoaded, let message = self.chatDisplayNode.historyNode.messageInCurrentHistoryView(message.id)?._asMessage() else {
                 return false
             }
-            
+
             if let contextController = self.currentContextController {
                 self.present(contextController, in: .window(.root))
                 Queue.mainQueue().after(0.15) {
@@ -1725,10 +1787,18 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             guard let self else {
                 return
             }
+            // MARK: AyuGram - synthetic preserved-deleted entries have no postbox backing; block reaction context menu
+            if AyuInlineDeletedEntries.isSynthetic(message) {
+                return
+            }
             
             self.openMessageReactionContextMenu(message: EngineMessage(message), sourceView: sourceView, gesture: gesture, value: value)
         }, updateMessageReaction: { [weak self] initialMessage, reaction, force, sourceView in
             guard let strongSelf = self else {
+                return
+            }
+            // MARK: AyuGram - synthetic preserved-deleted entries have no postbox backing; block reaction updates
+            if AyuInlineDeletedEntries.isSynthetic(initialMessage) {
                 return
             }
             guard !strongSelf.presentAccountFrozenInfoIfNeeded() else {
@@ -3713,8 +3783,16 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             })
         }, openSearch: {
         }, setupReply: { [weak self] messageId in
+            // MARK: AyuGram - synthetic preserved-deleted entries have no postbox backing; block reply setup
+            if let message = self?.chatDisplayNode.historyNode.messageInCurrentHistoryView(messageId)?._asMessage(), AyuInlineDeletedEntries.isSynthetic(message) {
+                return
+            }
             self?.interfaceInteraction?.setupReplyMessage(messageId, nil, { _, f in f() })
         }, canSetupReply: { [weak self] message in
+            // MARK: AyuGram - synthetic preserved-deleted entries have no postbox backing; block swipe-to-reply
+            if AyuInlineDeletedEntries.isSynthetic(message) {
+                return .none
+            }
             if Namespaces.Message.allEphemeral.contains(message.id.namespace) {
                 if !message.flags.contains(.Incoming) {
                     return .none
@@ -3814,7 +3892,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                         return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Delete"), color: theme.actionSheet.destructiveActionTextColor)
                     }, action: { [weak self] _, f in
                         if let strongSelf = self {
-                            let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: [id], type: .forLocalPeer).startStandalone()
+                            let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: [id], type: .forLocalPeer, userInitiated: true).startStandalone()
                         }
                         f(.dismissWithoutContent)
                     })))
@@ -3946,7 +4024,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                         return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Delete"), color: theme.actionSheet.destructiveActionTextColor)
                     }, action: { [weak self] controller, f in
                         if let strongSelf = self {
-                            let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: [id], type: .forLocalPeer).startStandalone()
+                            let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: [id], type: .forLocalPeer, userInitiated: true).startStandalone()
                         }
                         f(.dismissWithoutContent)
                     })))
@@ -5998,7 +6076,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                 
                 let items: Signal<[ContextMenuItem], NoError>
                 switch chatLocation {
-                case .peer:
+                case let .peer(chatPeerId):
                     items = context.engine.data.get(
                         TelegramEngine.EngineData.Item.Peer.CanViewStats(id: peer.id)
                     )
@@ -6030,6 +6108,23 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                                     statsController = channelStatsController(context: context, updatedPresentationData: strongSelf.updatedPresentationData, peerId: peer.id)
                                 }
                                 strongSelf.push(statsController)
+                            })))
+                        }
+                        let savedDeletedMessages = AyuMessageStore.shared.deletedMessages(peerId: chatPeerId.toInt64(), accountId: context.account.peerId.toInt64()).filter {
+                            !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !$0.media.isEmpty
+                        }
+                        if SGSimpleSettings.shared.ayuSaveDeletedMessages || !savedDeletedMessages.isEmpty {
+                            items.append(.action(ContextMenuActionItem(text: "AyuGram.SavedDeleted.Title".i18n(strongSelf.presentationData.strings.baseLanguageCode), icon: { theme in
+                                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Calendar"), color: theme.actionSheet.primaryTextColor)
+                            }, action: { _, f in
+                                f(.dismissWithoutContent)
+                                guard let self else {
+                                    return
+                                }
+                                let captureProtected = self.presentationInterfaceState.copyProtectionEnabled
+                                    || self.presentationInterfaceState.myCopyProtectionEnabled
+                                    || chatPeerId.namespace == Namespaces.Peer.SecretChat
+                                self.push(ayuSavedDeletedMessagesController(context: context, peerId: chatPeerId, captureProtected: captureProtected))
                             })))
                         }
                         items.append(.action(ContextMenuActionItem(text: strongSelf.presentationData.strings.Conversation_Search, icon: { theme in
@@ -9029,8 +9124,26 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         }
     }
     
-    func shouldDivertMessagesToScheduled(targetPeer: EnginePeer? = nil, messages: [EnqueueMessage]) -> Signal<Bool, NoError> {
-        return .single(false)
+    func shouldDivertMessagesToScheduled(targetPeer: EnginePeer? = nil, messages: [EnqueueMessage], scheduleTime: Int32? = nil) -> Signal<Bool, NoError> {
+        let destinationPeerId = targetPeer?.id ?? self.chatLocation.peerId
+        let containsForward = messages.contains { message in
+            if case .forward = message {
+                return true
+            }
+            return false
+        }
+        let containsSchedule = messages.contains { message in
+            message.attributes.contains { $0 is OutgoingScheduleInfoMessageAttribute }
+        }
+        let canDivert = SGSimpleSettings.shared.isAyuGhostActive
+            && SGSimpleSettings.shared.ayuGhostUseScheduledMessages
+            && targetPeer == nil
+            && self.presentationInterfaceState.subject != .scheduledMessages
+            && destinationPeerId?.namespace != Namespaces.Peer.SecretChat
+            && !containsForward
+            && !containsSchedule
+            && scheduleTime == nil
+        return .single(canDivert)
     }
     
     func sendMessages(_ messages: [EnqueueMessage], media: Bool = false, postpone: Bool = false, commit: Bool = false) {
@@ -9057,7 +9170,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                     return message.withUpdatedAttributes { attributes in
                         var attributes = attributes
                         attributes.removeAll(where: { $0 is OutgoingScheduleInfoMessageAttribute })
-                        attributes.append(OutgoingScheduleInfoMessageAttribute(scheduleTime: Int32(Date().timeIntervalSince1970) + 10 * 24 * 60 * 60, repeatPeriod: nil))
+                        attributes.append(OutgoingScheduleInfoMessageAttribute(scheduleTime: Int32(Date().timeIntervalSince1970) + 12, repeatPeriod: nil))
                         return attributes
                     }
                 }
@@ -9146,7 +9259,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                 return
             }
             
-            let _ = (strongSelf.shouldDivertMessagesToScheduled(messages: items.map(\.message))
+            let _ = (strongSelf.shouldDivertMessagesToScheduled(messages: items.map(\.message), scheduleTime: scheduleTime)
             |> deliverOnMainQueue).startStandalone(next: { shouldDivert in
                 guard let strongSelf = self else {
                     return

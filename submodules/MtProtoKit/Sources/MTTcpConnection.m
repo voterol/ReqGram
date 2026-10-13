@@ -9,6 +9,7 @@
 #import <netinet/in.h>
 #import <arpa/inet.h>
 #import <CommonCrypto/CommonDigest.h>
+#import <os/log.h>
 #import <CommonCrypto/CommonHMac.h>
 #import <Security/SecRandom.h>
 
@@ -1262,6 +1263,9 @@ struct ctr_state {
                             }
                             
                             if (effectiveSecret) {
+                                uint8_t secretDigest[CC_SHA256_DIGEST_LENGTH];
+                                CC_SHA256(effectiveSecret.bytes, (CC_LONG)effectiveSecret.length, secretDigest);
+                                os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_INFO, "tgws mtproto_control secret_fp=%02x%02x%02x%02x%02x%02x%02x%02x secret_len=%lu", secretDigest[0], secretDigest[1], secretDigest[2], secretDigest[3], secretDigest[4], secretDigest[5], secretDigest[6], secretDigest[7], (unsigned long)effectiveSecret.length);
                                 NSMutableData *aesKeyData = [[NSMutableData alloc] init];
                                 [aesKeyData appendData:aesKey];
                                 if (effectiveSecret.length == 16) {

@@ -280,6 +280,51 @@ BOOL _fileIsSymbolicLink(const unz_file_info *fileInfo);
     return [self unzipFileAtPath:path toDestination:destination preserveAttributes:preserveAttributes overwrite:overwrite nestedZipLevel:0 password:password error:error delegate:delegate progressHandler:progressHandler completionHandler:completionHandler];
 }
 
++ (NSDictionary<NSString *, NSData *> *)reqGramPluginContentsAtPath:(NSString *)path {
+    unzFile zip = unzOpen(path.fileSystemRepresentation);
+    if (!zip) return nil;
+    NSMutableDictionary *contents = [NSMutableDictionary dictionary];
+    NSMutableSet *foldedNames = [NSMutableSet set];
+    NSUInteger total = 0;
+    int ret = unzGoToFirstFile(zip);
+    BOOL valid = ret == UNZ_OK;
+    while (valid && ret == UNZ_OK) {
+        unz_file_info info = {0};
+        if (contents.count >= 512 || unzGetCurrentFileInfo(zip, &info, NULL, 0, NULL, 0, NULL, 0) != UNZ_OK ||
+            info.size_filename == 0 || info.size_filename > 1024 || info.uncompressed_size > 8 * 1024 * 1024 ||
+            (info.flag & 1) || (((info.external_fa >> 16) & 0170000) != 0 && ((info.external_fa >> 16) & 0170000) != 0100000)) {
+            valid = NO; break;
+        }
+        char name[1025] = {0};
+        if (unzGetCurrentFileInfo(zip, &info, name, sizeof(name), NULL, 0, NULL, 0) != UNZ_OK || memchr(name, 0, info.size_filename)) { valid = NO; break; }
+        NSString *key = [[NSString alloc] initWithBytes:name length:info.size_filename encoding:NSUTF8StringEncoding];
+        if (!key || [key containsString:@"\\"] || [key containsString:@":"] ||
+            !([key hasSuffix:@".py"] || [key hasSuffix:@".json"]) || [foldedNames containsObject:key.lowercaseString]) { valid = NO; break; }
+        for (NSString *part in [key componentsSeparatedByString:@"/"]) {
+            if (!part.length || [part isEqual:@"."] || [part isEqual:@".."]) valid = NO;
+        }
+        if (!valid || unzOpenCurrentFile(zip) != UNZ_OK) { valid = NO; break; }
+        NSMutableData *data = [NSMutableData data];
+        unsigned char buffer[4096];
+        int count;
+        while ((count = unzReadCurrentFile(zip, buffer, sizeof(buffer))) > 0) {
+            total += count;
+            if (data.length + count > info.uncompressed_size || total > 32 * 1024 * 1024) { valid = NO; break; }
+            [data appendBytes:buffer length:count];
+        }
+        int closed = unzCloseCurrentFile(zip);
+        // minizip's close path does not reliably reject an incorrect CRC for
+        // empty stored entries. Verify the returned bytes independently too.
+        if (!valid || count < 0 || closed != UNZ_OK || data.length != info.uncompressed_size ||
+            crc32(0, data.bytes, (uInt)data.length) != info.crc) { valid = NO; break; }
+        contents[key] = data;
+        [foldedNames addObject:key.lowercaseString];
+        ret = unzGoToNextFile(zip);
+    }
+    unzClose(zip);
+    return valid && ret == MZ_END_OF_LIST ? contents : nil;
+}
+
 + (NSArray<SSZipEntry *> * _Nullable)getEntriesForFileAtPath:(NSString *)path {
     if (path.length == 0) {
         return nil;

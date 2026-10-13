@@ -118,6 +118,9 @@ let colorViolet = UIColor(rgb: 0x5E5CE6)
 
 public struct PresentationResourcesSettings {
     public static let swiftgram = renderSettingsIcon(name: "SwiftgramSettings", scaleFactor: 30.0 / 512.0)
+    public static let ayuGram = renderSettingsIcon(name: "AyuGramSettings", scaleFactor: 30.0 / 128.0)
+    public static let reqGram = renderSettingsIcon(name: "ReqGramSettings", scaleFactor: 30.0 / 2116.0)
+    public static let ghostMode = renderSettingsIcon(name: "Avatar/DeletedIcon")
     public static let swiftgramPro = renderSettingsIcon(name: "SwiftgramPro", scaleFactor: 30.0 / 256.0)
     public static let proxy = renderSettingsIcon(name: "Item List/Icons/Proxy", backgroundColors: [colorGreen])
     public static let savedMessages = renderSettingsIcon(name: "Item List/Icons/SavedMessages", backgroundColors: [colorBlue])

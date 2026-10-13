@@ -219,6 +219,17 @@
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
 			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER).custom</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>sg</string>
+				<string>reqgram</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLName</key>
 			<string>$(PRODUCT_BUNDLE_IDENTIFIER).ton</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
@@ -232,6 +243,7 @@
 	<false/>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
+		<string>spotify</string>
 		<string>instagram</string>
 		<string>comgooglemaps-x-callback</string>
 		<string>foursquare</string>

@@ -1,3 +1,4 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 ffmpeg_header_paths = [
     "libavutil/hwcontext.h",
@@ -277,7 +278,11 @@ genrule(
         elif [ "$(TARGET_CPU)" == "k8" ] || [ "$(TARGET_CPU)" == "x86_64" ]; then
             BUILD_ARCH="linux_x86_64"
         elif [ "$(TARGET_CPU)" == "aarch64" ] || [ "$(TARGET_CPU)" == "arm64" ]; then
-            BUILD_ARCH="linux_arm64"
+            if [ "$$(uname -s)" == "Darwin" ]; then
+                BUILD_ARCH="sim_arm64"
+            else
+                BUILD_ARCH="linux_arm64"
+            fi
         else
             echo "Unsupported architecture $(TARGET_CPU)"
         fi

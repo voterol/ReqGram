@@ -167,7 +167,7 @@ final class AutomaticBusinessMessageSetupChatContents: ChatCustomContentsProtoco
         }
 
         func deleteMessages(ids: [EngineMessage.Id]) {
-            let _ = self.context.engine.messages.deleteMessagesInteractively(messageIds: ids, type: .forEveryone).startStandalone()
+            let _ = self.context.engine.messages.deleteMessagesInteractively(messageIds: ids, type: .forEveryone, userInitiated: true).startStandalone()
         }
         
         func editMessage(id: EngineMessage.Id, text: String, media: RequestEditMessageMedia, entities: TextEntitiesMessageAttribute?, webpagePreviewAttribute: WebpagePreviewMessageAttribute?, disableUrlPreview: Bool) {

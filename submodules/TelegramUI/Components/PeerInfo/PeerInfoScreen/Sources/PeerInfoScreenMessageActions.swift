@@ -37,7 +37,7 @@ extension PeerInfoScreenNode {
                             actionSheet?.dismissAnimated()
                             if let strongSelf = self {
                                 strongSelf.headerNode.navigationButtonContainer.performAction?(.selectionDone, nil, nil)
-                                let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: .forEveryone).startStandalone()
+                                let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: .forEveryone, userInitiated: true).startStandalone()
                             }
                         }))
                     }
@@ -54,7 +54,7 @@ extension PeerInfoScreenNode {
                             actionSheet?.dismissAnimated()
                             if let strongSelf = self {
                                 strongSelf.headerNode.navigationButtonContainer.performAction?(.selectionDone, nil, nil)
-                                let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: .forLocalPeer).startStandalone()
+                                let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: .forLocalPeer, userInitiated: true).startStandalone()
                             }
                         }))
                     }

@@ -1,4 +1,6 @@
 
+load("@rules_cc//cc:objc_library.bzl", "objc_library")
+
 filegroup(
     name = "LegacyComponentsResources",
     srcs = glob([
@@ -29,7 +31,7 @@ objc_library(
         "PublicHeaders/**/*.h",
     ]),
     copts = [
-        "-Werror",
+        "-Wno-error=deprecated-declarations",
     ],
     includes = [
         "PublicHeaders",

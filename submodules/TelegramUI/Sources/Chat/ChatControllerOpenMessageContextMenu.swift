@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import Postbox
 import SwiftSignalKit
 import TelegramCore
 import AsyncDisplayKit
@@ -18,6 +19,11 @@ import TopMessageReactions
 import TelegramNotices
 import PresentationDataUtils
 import ChatPresentationInterfaceState
+import TextFormat
+import SGStrings
+import SGSimpleSettings
+import ChatMessagePaymentAlertController
+import UndoUI
 
 extension ChatControllerImpl {
     func openMessageContextMenu(message: EngineMessage, selectAll: Bool, node: ASDisplayNode, frame: CGRect, anyRecognizer: UIGestureRecognizer?, location: CGPoint?) -> Void {
@@ -25,6 +31,15 @@ extension ChatControllerImpl {
             return
         }
         let presentationData = self.presentationData
+
+        // Synthetic preserved messages deliberately bypass the ordinary menu's
+        // capability queries: those queries resolve MessageIds through Postbox.
+        // Use a stable location presentation and expose only operations whose
+        // inputs are the in-memory message itself.
+        if message._asMessage().isAyuSyntheticDeletedMessage {
+            self.openAyuSyntheticMessageContextMenu(message: message, node: node, anyRecognizer: anyRecognizer, location: location)
+            return
+        }
         
         self.dismissAllTooltips()
         
@@ -63,6 +78,32 @@ extension ChatControllerImpl {
                 var (allowedReactions, _) = allowedReactionsAndStars
                 
                 var actions = actions
+                // Native UI context only: never query history or expose a group to plugins.
+                func eligible(_ raw: EngineRawMessage) -> Bool {
+                    return raw.id.namespace == Namespaces.Message.Cloud && raw.id.peerId.namespace != Namespaces.Peer.SecretChat
+                        && !raw.isAyuSyntheticDeletedMessage && !raw.isCopyProtected() && !raw.containsSecretMedia
+                        && raw.media.isEmpty && !raw.text.isEmpty && raw.adAttribute == nil
+                        && !raw.attributes.contains(where: { $0 is AutoremoveTimeoutMessageAttribute || $0 is AutoclearTimeoutMessageAttribute })
+                }
+                // selectAll is native grouped-bubble scope, not multi-selection.
+                if messages.count == 1, self.presentationInterfaceState.interfaceState.selectionState == nil, eligible(message._asMessage()),
+                   !self.presentationInterfaceState.copyProtectionEnabled, !self.presentationInterfaceState.myCopyProtectionEnabled,
+                   case let .list(items) = actions.content {
+                    let account = "account_\(self.context.account.id.int64)"
+                    let pluginItems: [ContextMenuItem] = ReqGramMessageActions.shared.actions(account: account).map { action in
+                        return .action(ContextMenuActionItem(text: action.title, textLayout: .multiline, icon: { _ in nil }, action: { [weak self] _, finish in
+                            finish(.default)
+                            guard let self, !self.presentationInterfaceState.copyProtectionEnabled,
+                                  !self.presentationInterfaceState.myCopyProtectionEnabled,
+                                  self.presentationInterfaceState.interfaceState.selectionState == nil,
+                                  let current = self.chatDisplayNode.historyNode.messageGroupInCurrentHistoryView(message.id),
+                                  current.count == 1, let selected = current.first, selected.id == message.id, eligible(selected) else { return }
+                            ReqGramMessageActions.shared.tap(action, account: account, peer: String(selected.id.peerId.toInt64()),
+                                namespace: String(selected.id.namespace), message: String(selected.id.id), text: selected.text)
+                        }))
+                    }
+                    if !pluginItems.isEmpty { actions.content = .list(items + [.separator] + pluginItems) }
+                }
                 switch actions.content {
                 case let .list(itemList):
                     if itemList.isEmpty {
@@ -636,6 +677,268 @@ extension ChatControllerImpl {
                 self.window?.presentInGlobalOverlay(controller)
             })
         }
+    }
+
+    private func openAyuSyntheticMessageContextMenu(message: EngineMessage, node: ASDisplayNode, anyRecognizer: UIGestureRecognizer?, location: CGPoint?) {
+        guard let interfaceInteraction = self.interfaceInteraction else {
+            return
+        }
+        let rawMessage = message._asMessage()
+        var items: [ContextMenuItem] = []
+        let canCopyContent = !rawMessage.isCopyProtected() && !self.presentationInterfaceState.copyProtectionEnabled && !self.presentationInterfaceState.myCopyProtectionEnabled
+        if !rawMessage.text.isEmpty && canCopyContent {
+            items.append(.action(ContextMenuActionItem(text: self.presentationData.strings.Conversation_ContextMenuCopy, icon: { theme in
+                generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Copy"), color: theme.actionSheet.primaryTextColor)
+            }, action: { [weak self] controller, _ in
+                UIPasteboard.general.string = rawMessage.text
+                controller?.dismiss()
+                self?.controllerInteraction?.displayUndo(.copy(text: self?.presentationData.strings.Conversation_TextCopied ?? ""))
+            })))
+        }
+        if !rawMessage.text.isEmpty && canCopyContent && self.presentationInterfaceState.interfaceState.editMessage == nil {
+            items.append(.action(ContextMenuActionItem(text: self.presentationData.strings.Conversation_ContextMenuReply, icon: { theme in
+                generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Reply"), color: theme.actionSheet.primaryTextColor)
+            }, action: { [weak self] controller, _ in
+                controller?.dismiss()
+                self?.ayuInsertSyntheticMessageAsQuote(rawMessage, editable: false)
+            })))
+            items.append(.action(ContextMenuActionItem(text: "AyuGram.Deleted.ReplyAsQuote".i18n(self.presentationData.strings.baseLanguageCode), icon: { theme in
+                generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Reply"), color: theme.actionSheet.primaryTextColor)
+            }, action: { [weak self] controller, _ in
+                controller?.dismiss()
+                self?.ayuInsertSyntheticMessageAsQuote(rawMessage, editable: true)
+            })))
+        }
+        if canCopyContent && (!rawMessage.text.isEmpty || rawMessage.media.contains(where: { $0 is TelegramMediaImage || $0 is TelegramMediaFile })) {
+            items.append(.action(ContextMenuActionItem(text: "AyuGram.Deleted.ForwardContent".i18n(self.presentationData.strings.baseLanguageCode), icon: { theme in
+                generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Forward"), color: theme.actionSheet.primaryTextColor)
+            }, action: { [weak self] controller, _ in
+                controller?.dismiss()
+                self?.ayuForwardSyntheticMessageContent(rawMessage)
+            })))
+        }
+        items.append(.action(ContextMenuActionItem(text: self.presentationData.strings.Conversation_ContextMenuSelect, icon: { theme in
+            generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Select"), color: theme.actionSheet.primaryTextColor)
+        }, action: { _, f in
+            interfaceInteraction.beginMessageSelection([rawMessage.id], { transition in
+                f(.custom(transition))
+            })
+        })))
+        items.append(.separator)
+        items.append(.action(ContextMenuActionItem(text: self.presentationData.strings.Conversation_ContextMenuDelete, textColor: .destructive, icon: { theme in
+            generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Delete"), color: theme.actionSheet.destructiveActionTextColor)
+        }, action: { controller, f in
+            interfaceInteraction.deleteMessages([rawMessage], controller, f)
+        })))
+
+        // An extracted source observes its MessageId through Postbox and would
+        // immediately dismiss for this in-memory-only message. Anchor the menu
+        // to the gesture (or the bubble center) without extracting the bubble.
+        let anchor = location ?? CGPoint(x: node.bounds.midX, y: node.bounds.midY)
+        let source: ContextContentSource = .location(ChatMessageContextLocationContentSource(controller: self, location: node.view.convert(anchor, to: nil)))
+        self.canReadHistory.set(false)
+        let controller = makeContextController(presentationData: self.presentationData, source: source, items: .single(ContextController.Items(content: .list(items))), recognizer: anyRecognizer as? TapLongTapOrDoubleTapGestureRecognizer, gesture: anyRecognizer as? ContextGesture, disableScreenshots: self.presentationInterfaceState.copyProtectionEnabled || self.presentationInterfaceState.myCopyProtectionEnabled || self.chatLocation.peerId?.namespace == Namespaces.Peer.SecretChat, hideReactionPanelTail: true)
+        controller.dismissed = { [weak self] in self?.canReadHistory.set(true) }
+        self.currentContextController = controller
+        self.window?.presentInGlobalOverlay(controller)
+    }
+
+    private func ayuInsertSyntheticMessageAsQuote(_ message: EngineRawMessage, editable: Bool) {
+        guard self.presentationInterfaceState.interfaceState.editMessage == nil,
+              !message.isCopyProtected(),
+              !self.presentationInterfaceState.copyProtectionEnabled,
+              !self.presentationInterfaceState.myCopyProtectionEnabled else {
+            return
+        }
+        let entities = editable ? ayuSafeSyntheticTextEntities(message) : []
+        let appliedText = chatInputStateStringWithAppliedEntities(message.text, entities: entities)
+        guard appliedText.length != 0 else {
+            return
+        }
+        let quotedText = NSMutableAttributedString(attributedString: appliedText)
+        quotedText.addAttribute(ChatTextInputAttributes.block, value: ChatTextInputTextQuoteAttribute(kind: .quote, isCollapsed: false), range: NSRange(location: 0, length: quotedText.length))
+
+        self.updateChatPresentationInterfaceState(animated: true, interactive: true, { state in
+            let existingText = state.interfaceState.composeInputState.inputText
+            let result = NSMutableAttributedString(attributedString: quotedText)
+            if result.length != 0 {
+                result.append(NSAttributedString(string: "\n"))
+            }
+            result.append(existingText)
+            return state.updatedInputMode({ _ in .text }).updatedInterfaceState({ interfaceState in
+                interfaceState
+                    .withUpdatedReplyMessageSubject(nil)
+                    .withUpdatedForwardMessageIds(nil)
+                    .withUpdatedForwardOptionsState(nil)
+                    .withUpdatedComposeInputState(ChatTextInputState(inputText: result, selectionRange: result.length ..< result.length))
+            })
+        })
+        if !self.chatDisplayNode.ensureInputViewFocused() {
+            DispatchQueue.main.async { [weak self] in
+                let _ = self?.chatDisplayNode.ensureInputViewFocused()
+            }
+        }
+    }
+
+    private func ayuForwardSyntheticMessageContent(_ message: EngineRawMessage) {
+        guard !message.isCopyProtected(),
+              !self.presentationInterfaceState.copyProtectionEnabled,
+              !self.presentationInterfaceState.myCopyProtectionEnabled else {
+            return
+        }
+        let supportedMedia = message.media.compactMap { media -> Media? in
+            if media is TelegramMediaImage || media is TelegramMediaFile {
+                return media
+            }
+            return nil
+        }
+        let omittedCount = message.media.count - supportedMedia.count
+        guard !message.text.isEmpty || !supportedMedia.isEmpty else {
+            self.present(textAlertController(context: self.context, title: nil, text: "AyuGram.Deleted.ContentUnavailable".i18n(self.presentationData.strings.baseLanguageCode), actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+            return
+        }
+
+        let openPicker: () -> Void = { [weak self] in
+            guard let self else {
+                return
+            }
+            let filter: ChatListNodePeersFilter = [.onlyWriteable, .excludeDisabled, .doNotSearchMessages]
+            let controller = self.context.sharedContext.makePeerSelectionController(PeerSelectionControllerParams(context: self.context, updatedPresentationData: self.updatedPresentationData, filter: filter, hasFilters: true, title: "AyuGram.Deleted.ForwardContentPicker".i18n(self.presentationData.strings.baseLanguageCode), multipleSelection: false, selectForumThreads: true))
+            var didSelectDestination = false
+            controller.peerSelected = { [weak self, weak controller] peer, threadId in
+                guard let self, !didSelectDestination else {
+                    return
+                }
+                didSelectDestination = true
+                var outgoing: [EnqueueMessage] = []
+                if !message.text.isEmpty {
+                    let entities = ayuSafeSyntheticTextEntities(message)
+                    let inputText = chatInputStateStringWithAppliedEntities(message.text, entities: entities)
+                    for textPart in breakChatInputText(inputText) where textPart.length != 0 {
+                        let partEntities = generateChatInputTextEntities(textPart)
+                        let attributes: [EngineMessage.Attribute] = partEntities.isEmpty ? [] : [TextEntitiesMessageAttribute(entities: partEntities)]
+                        outgoing.append(.message(text: textPart.string, attributes: attributes, inlineStickers: [:], mediaReference: nil, threadId: threadId, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: []))
+                    }
+                }
+                for media in supportedMedia {
+                    outgoing.append(.message(text: "", attributes: [], inlineStickers: [:], mediaReference: .standalone(media: media), threadId: threadId, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: []))
+                }
+                guard !outgoing.isEmpty else {
+                    return
+                }
+                let _ = (self.context.engine.data.get(
+                    TelegramEngine.EngineData.Item.Peer.SendPaidMessageStars(id: peer.id),
+                    TelegramEngine.EngineData.Item.Peer.RenderedPeer(id: peer.id)
+                )
+                |> deliverOnMainQueue).startStandalone(next: { [weak self, weak controller] sendPaidMessageStars, renderedPeer in
+                    guard let self else {
+                        return
+                    }
+                    let proceed: (StarsAmount?) -> Void = { [weak self, weak controller] paidAmount in
+                        guard let self else {
+                            return
+                        }
+                        var outgoing = outgoing
+                        if let paidAmount {
+                            outgoing = outgoing.map { message in
+                                message.withUpdatedAttributes { attributes in
+                                    var attributes = attributes
+                                    attributes.removeAll(where: { $0 is PaidStarsMessageAttribute })
+                                    attributes.append(PaidStarsMessageAttribute(stars: paidAmount, postponeSending: false))
+                                    return attributes
+                                }
+                            }
+                        }
+                        controller?.dismiss()
+                        let expectedCount = outgoing.count
+                        let _ = (enqueueMessages(account: self.context.account, peerId: peer.id, messages: outgoing)
+                        |> deliverOnMainQueue).startStandalone(next: { [weak self] messageIds in
+                            guard let self else {
+                                return
+                            }
+                            guard messageIds.count == expectedCount, messageIds.allSatisfy({ $0 != nil }) else {
+                                self.present(textAlertController(context: self.context, title: nil, text: self.presentationData.strings.Login_UnknownError, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                                return
+                            }
+                            self.present(UndoOverlayController(presentationData: self.presentationData, content: .succeed(text: "AyuGram.Deleted.ContentSent".i18n(self.presentationData.strings.baseLanguageCode), timeout: nil, customUndoText: nil), elevatedLayout: false, action: { _ in false }), in: .current)
+                        })
+                    }
+                    if let sendPaidMessageStars, let renderedPeer {
+                        let paymentController = chatMessagePaymentAlertController(
+                            context: nil,
+                            presentationData: self.presentationData,
+                            updatedPresentationData: nil,
+                            peers: [renderedPeer],
+                            count: Int32(outgoing.count),
+                            amount: sendPaidMessageStars,
+                            totalAmount: nil,
+                            hasCheck: false,
+                            navigationController: self.navigationController as? NavigationController,
+                            completion: { _ in
+                                proceed(sendPaidMessageStars)
+                            }
+                        )
+                        self.present(paymentController, in: .window(.root))
+                    } else {
+                        proceed(nil)
+                    }
+                })
+            }
+            self.push(controller)
+        }
+
+        if omittedCount != 0 {
+            self.present(textAlertController(context: self.context, title: nil, text: "AyuGram.Deleted.UnsupportedMediaOmitted".i18n(self.presentationData.strings.baseLanguageCode), actions: [
+                TextAlertAction(type: .genericAction, title: self.presentationData.strings.Common_Cancel, action: {}),
+                TextAlertAction(type: .defaultAction, title: "AyuGram.Deleted.ContinueContentCopy".i18n(self.presentationData.strings.baseLanguageCode), action: openPicker)
+            ]), in: .window(.root))
+        } else {
+            openPicker()
+        }
+    }
+}
+
+private func ayuSafeSyntheticTextEntities(_ message: EngineRawMessage) -> [MessageTextEntity] {
+    let textLength = (message.text as NSString).length
+    let source = (message.attributes.first(where: { $0 is TextEntitiesMessageAttribute }) as? TextEntitiesMessageAttribute)?.entities ?? []
+    return source.compactMap { entity in
+        guard entity.range.lowerBound >= 0, entity.range.upperBound <= textLength, !entity.range.isEmpty else {
+            return nil
+        }
+        switch entity.type {
+        case .Bold, .Italic, .Code, .Pre, .Strikethrough, .BlockQuote, .Underline, .Spoiler, .FormattedDate:
+            return entity
+        case .Url:
+            let range = NSRange(location: entity.range.lowerBound, length: entity.range.count)
+            guard ayuIsSafeSyntheticUrl((message.text as NSString).substring(with: range)) else {
+                return nil
+            }
+            return entity
+        case let .TextUrl(url):
+            guard ayuIsSafeSyntheticUrl(url) else {
+                return nil
+            }
+            return entity
+        case .Unknown, .Mention, .Hashtag, .BotCommand, .Email, .PhoneNumber, .BankCard, .TextMention, .CustomEmoji, .Custom:
+            return nil
+        }
+    }
+}
+
+private func ayuIsSafeSyntheticUrl(_ value: String) -> Bool {
+    guard !value.isEmpty,
+          value.unicodeScalars.allSatisfy({ !CharacterSet.whitespacesAndNewlines.contains($0) && !CharacterSet.controlCharacters.contains($0) }),
+          let components = URLComponents(string: value),
+          let scheme = components.scheme?.lowercased() else {
+        return false
+    }
+    switch scheme {
+    case "http", "https":
+        return components.host?.isEmpty == false
+    case "tg":
+        return components.host?.isEmpty == false || !components.path.isEmpty
+    default:
+        return false
     }
 }
 

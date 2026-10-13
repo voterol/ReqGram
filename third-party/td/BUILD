@@ -2,6 +2,8 @@ load(
     "//third-party/boringssl:BUILD.generated.bzl",
     "crypto_headers",
 )
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:objc_library.bzl", "objc_library")
 
 headers = [
     "td/e2e/e2e_api.h",
@@ -36,7 +38,7 @@ genrule(
 
     if [ "$(TARGET_CPU)" == "ios_arm64" ]; then
         BUILD_ARCH="arm64"
-    elif [ "$(TARGET_CPU)" == "ios_sim_arm64" ]; then
+    elif [ "$(TARGET_CPU)" == "ios_sim_arm64" ] || [ "$(TARGET_CPU)" == "aarch64" ]; then
         BUILD_ARCH="sim_arm64"
     elif [ "$(TARGET_CPU)" == "darwin_arm64" ]; then
         BUILD_ARCH="macos_arm64"

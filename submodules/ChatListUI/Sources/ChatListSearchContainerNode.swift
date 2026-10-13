@@ -1469,7 +1469,7 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
                             items.append(ActionSheetButtonItem(title: globalTitle, color: .destructive, action: { [weak actionSheet] in
                                 actionSheet?.dismissAnimated()
                                 if let strongSelf = self {
-                                    let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: .forEveryone).startStandalone()
+                                    let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: .forEveryone, userInitiated: true).startStandalone()
                                     
                                     strongSelf.updateState { state in
                                         return state.withUpdatedSelectedMessageIds(nil)
@@ -1485,7 +1485,7 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
                             items.append(ActionSheetButtonItem(title: localOptionText, color: .destructive, action: { [weak actionSheet] in
                                 actionSheet?.dismissAnimated()
                                 if let strongSelf = self {
-                                    let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: .forLocalPeer).startStandalone()
+                                    let _ = strongSelf.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: .forLocalPeer, userInitiated: true).startStandalone()
                                     
                                     strongSelf.updateState { state in
                                         return state.withUpdatedSelectedMessageIds(nil)

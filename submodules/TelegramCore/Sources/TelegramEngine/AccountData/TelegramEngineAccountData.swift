@@ -2,10 +2,11 @@ import Foundation
 import SwiftSignalKit
 import Postbox
 import TelegramApi
+import SGSimpleSettings
 
 public extension TelegramEngine {
     final class AccountData {
-        private let account: Account
+        let account: Account
 
         init(account: Account) {
             self.account = account
@@ -123,6 +124,17 @@ public extension TelegramEngine {
             } else {
                 apiEmojiStatus = .emojiStatusEmpty
             }
+
+            if SGSimpleSettings.shared.ayuLocalPremium {
+                return self.account.postbox.transaction { transaction -> Void in
+                    if let file, let patternFile {
+                        transaction.storeMediaIfNotPresent(media: file)
+                        transaction.storeMediaIfNotPresent(media: patternFile)
+                    }
+                    setLocalEmojiStatusOverride(transaction: transaction, status: emojiStatus)
+                }
+                |> ignoreValues
+            }
             
             let remoteApply = self.account.network.request(Api.functions.account.updateEmojiStatus(emojiStatus: apiEmojiStatus))
             |> `catch` { _ -> Signal<Api.Bool, NoError> in
@@ -149,6 +161,20 @@ public extension TelegramEngine {
         
         public func setEmojiStatus(file: TelegramMediaFile?, expirationDate: Int32?) -> Signal<Never, NoError> {
             let peerId = self.account.peerId
+
+            if SGSimpleSettings.shared.ayuLocalPremium {
+                return self.account.postbox.transaction { transaction -> Void in
+                    if let file {
+                        transaction.storeMediaIfNotPresent(media: file)
+                        if let entry = CodableEntry(RecentMediaItem(file)) {
+                            let itemEntry = OrderedItemListEntry(id: RecentMediaItemId(file.fileId).rawValue, contents: entry)
+                            transaction.addOrMoveToFirstPositionOrderedItemListItem(collectionId: Namespaces.OrderedItemList.CloudRecentStatusEmoji, item: itemEntry, removeTailIfCountExceeds: 32)
+                        }
+                    }
+                    setLocalEmojiStatusOverride(transaction: transaction, status: file.flatMap { PeerEmojiStatus(content: .emoji(fileId: $0.fileId.id), expirationDate: expirationDate) })
+                }
+                |> ignoreValues
+            }
             
             let remoteApply = self.account.network.request(Api.functions.account.updateEmojiStatus(emojiStatus: file.flatMap({ file in
                 var flags: Int32 = 0

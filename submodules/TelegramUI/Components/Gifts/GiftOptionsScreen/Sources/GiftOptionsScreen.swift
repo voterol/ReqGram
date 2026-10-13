@@ -28,6 +28,112 @@ import GiftViewScreen
 import UndoUI
 import EdgeEffect
 import GlassBarButtonComponent
+import SGSimpleSettings
+import PromptUI
+
+private struct ReqGramDeletedGiftRecord: Decodable, Equatable {
+    let id: Int64
+    let price: Int64
+    let sticker_number: Int32?
+    let debug_name: String?
+}
+
+/// Resolves a gift ID without inventing catalog data. The server catalog is
+/// preferred; the fallback is limited to the deleted-gift metadata and its
+/// matching item in the local sticker pack.
+public func resolveStarGiftById(context: AccountContext, giftId: Int64) -> Signal<StarGift.Gift?, NoError> {
+    return context.engine.payments.cachedStarGifts()
+    |> map { gifts in
+        gifts?.first(where: { $0.giftId == giftId }).flatMap { gift in
+            if case let .generic(value) = gift {
+                // Gift-by-ID is intentionally a fixed-price flow. Preserve
+                // the server metadata and artwork, but do not surface a
+                // stale catalog price in the composer.
+                return StarGift.Gift(
+                    id: value.id,
+                    title: value.title,
+                    file: value.file,
+                    price: 50,
+                    convertStars: 50,
+                    availability: value.availability,
+                    soldOut: value.soldOut,
+                    flags: value.flags,
+                    upgradeStars: value.upgradeStars,
+                    releasedBy: value.releasedBy,
+                    perUserLimit: value.perUserLimit,
+                    lockedUntilDate: value.lockedUntilDate,
+                    auctionSlug: value.auctionSlug,
+                    auctionGiftsPerRound: value.auctionGiftsPerRound,
+                    auctionStartDate: value.auctionStartDate,
+                    upgradeVariantsCount: value.upgradeVariantsCount,
+                    background: value.background
+                )
+            }
+            return nil
+        }
+    }
+    |> mapToSignal { gift -> Signal<StarGift.Gift?, NoError> in
+        // A complete server gift remains authoritative. Only synthesize the
+        // local form when the cached catalog does not contain the ID.
+        if let gift {
+            return .single(gift)
+        }
+        guard SGSimpleSettings.shared.reqGramDeletedGiftSenderEnabled,
+              let url = URL(string: "https://raw.githubusercontent.com/binbash-0/DeletedGifts-Plugin/refs/heads/main/gift_list.json") else {
+            return .single(gift)
+        }
+
+        let promise = Promise<ReqGramDeletedGiftRecord?>()
+        let task = URLSession.shared.dataTask(with: url) { data, response, _ in
+            guard let data, let response = response as? HTTPURLResponse,
+                  (200..<300).contains(response.statusCode) else {
+                promise.set(.single(nil))
+                return
+            }
+            struct Payload: Decodable { let gifts: [ReqGramDeletedGiftRecord] }
+            let record = (try? JSONDecoder().decode(Payload.self, from: data))?.gifts.first(where: {
+                $0.id == giftId && $0.id > 0 && ($0.sticker_number ?? 0) > 0
+            })
+            promise.set(.single(record))
+        }
+        task.resume()
+
+        return promise.get() |> mapToSignal { record -> Signal<StarGift.Gift?, NoError> in
+            guard let record, let stickerNumber = record.sticker_number else {
+                return .single(gift)
+            }
+            return context.engine.stickers.loadedStickerPack(
+                reference: .name("DeletedGiftsStickers"),
+                forceActualized: false
+            ) |> map { result in
+                guard case let .result(_, items, _) = result,
+                      stickerNumber <= Int32(items.count) else {
+                    return gift
+                }
+                let file = items[Int(stickerNumber - 1)].file._parse()
+                return StarGift.Gift(
+                    id: record.id,
+                    title: record.debug_name ?? "Gift \(record.id)",
+                    file: file,
+                    price: 50,
+                    convertStars: 50,
+                    availability: nil,
+                    soldOut: nil,
+                    flags: [],
+                    upgradeStars: nil,
+                    releasedBy: nil,
+                    perUserLimit: nil,
+                    lockedUntilDate: nil,
+                    auctionSlug: nil,
+                    auctionGiftsPerRound: nil,
+                    auctionStartDate: nil,
+                    upgradeVariantsCount: nil,
+                    background: nil
+                )
+            }
+        }
+    }
+}
 
 final class GiftOptionsScreenComponent: Component {
     typealias EnvironmentType = ViewControllerComponentContainer.Environment
@@ -751,6 +857,72 @@ final class GiftOptionsScreenComponent: Component {
                                 }
                             }
                             itemTransition.setFrame(view: itemView, frame: itemFrame)
+                        }
+                    }
+                    itemFrame.origin.x += itemFrame.width + optionSpacing
+                    if itemFrame.maxX > availableWidth {
+                        itemFrame.origin.x = sideInset
+                        itemFrame.origin.y += starsOptionSize.height + optionSpacing
+                    }
+                }
+
+                // This is an action, not a catalog gift. Keep it outside the
+                // StarGift array so it can never be confused with a server
+                // gift (or accidentally participate in gift filtering).
+                if SGSimpleSettings.shared.reqGramSendGiftByIdEnabled {
+                    let itemId = AnyHashable("reqgram.sendGiftById")
+                    validIds.append(itemId)
+                    if visibleBounds.intersects(itemFrame) {
+                        let visibleItem: ComponentView<Empty>
+                        if let current = self.starsItems[itemId] {
+                            visibleItem = current
+                        } else {
+                            visibleItem = ComponentView()
+                            self.starsItems[itemId] = visibleItem
+                        }
+                        let _ = visibleItem.update(
+                            transition: transition,
+                            component: AnyComponent(PlainButtonComponent(
+                                content: AnyComponent(GiftItemComponent(
+                                    context: component.context,
+                                    style: .glass,
+                                    theme: theme,
+                                    strings: environment.strings,
+                                    peer: nil,
+                                    subject: .premium(months: 1, price: "⭐"),
+                                    ribbon: GiftItemComponent.Ribbon(text: "⭐", color: .orange),
+                                    outline: .orange,
+                                    isLoading: false,
+                                    isSoldOut: false,
+                                    isDateLocked: false
+                                )),
+                                effectAlignment: .center,
+                                action: { [weak self] in
+                                    guard let self, let component = self.component,
+                                          let controller = self.environment?.controller() else { return }
+                                    controller.present(promptController(
+                                        context: component.context,
+                                        text: "Gift ID",
+                                        value: nil,
+                                        placeholder: "Enter gift ID",
+                                        apply: { value in
+                                            guard let value, let giftId = Int64(value.trimmingCharacters(in: .whitespacesAndNewlines)), giftId > 0 else { return }
+                                            if let giftController = component.context.sharedContext.makeStarGiftByIdController(context: component.context, giftId: giftId, onError: {}) {
+                                                controller.push(giftController)
+                                            }
+                                        }
+                                    ), in: .window(.root))
+                                },
+                                animateAlpha: false
+                            )),
+                            environment: {},
+                            containerSize: starsOptionSize
+                        )
+                        if let itemView = visibleItem.view {
+                            if itemView.superview == nil {
+                                self.scrollView.addSubview(itemView)
+                            }
+                            transition.setFrame(view: itemView, frame: itemFrame)
                         }
                     }
                     itemFrame.origin.x += itemFrame.width + optionSpacing
@@ -1743,6 +1915,7 @@ final class GiftOptionsScreenComponent: Component {
     
     final class State: ComponentState {
         private let context: AccountContext
+        private let peerId: EnginePeer.Id
         private var disposable: Disposable?
         private var updateDisposable: Disposable?
         
@@ -1750,6 +1923,11 @@ final class GiftOptionsScreenComponent: Component {
         fileprivate var disallowedGifts: TelegramDisallowedGifts?
         fileprivate var premiumProducts: [PremiumGiftProduct]?
         fileprivate var starGifts: [StarGift]?
+        private var serverStarGifts: [StarGift]?
+        private var deletedGiftRecords: [ReqGramDeletedGiftRecord] = []
+        private var deletedGiftsTask: URLSessionDataTask?
+        private var deletedGiftsStickerPackDisposable: Disposable?
+        private var deletedGiftsStickerFiles: [Int32: TelegramMediaFile] = [:]
         fileprivate var starGiftsVersion: Int = 0
         
         fileprivate let starGiftsContext: ProfileGiftsContext
@@ -1761,6 +1939,7 @@ final class GiftOptionsScreenComponent: Component {
             premiumOptions: [CachedPremiumGiftOption]
         ) {
             self.context = context
+            self.peerId = peerId
             
             self.starGiftsContext = ProfileGiftsContext(account: context.account, peerId: context.account.peerId, filter: [.unique, .displayed, .hidden])
             
@@ -1861,54 +2040,180 @@ final class GiftOptionsScreenComponent: Component {
                     }
                 }
                 
-                var filteredStarGifts = starGifts
-                if peerId.namespace == Namespaces.Peer.CloudChannel {
-                    filteredStarGifts = filteredStarGifts?.filter { gift in
-                        if case let .generic(gift) = gift, let availability = gift.availability, availability.resale == 0 {
+                self.serverStarGifts = starGifts
+                // Keep the visible catalog derived from the latest native snapshot.
+                self.rebuildDeletedGiftCatalog(peerId: self.peerId)
+                self.updated()
+            })
+            self.updateDisposable = self.context.engine.payments.keepStarGiftsUpdated().start()
+            self.loadDeletedGiftsIfNeeded()
+            self.loadDeletedGiftsStickerPackIfNeeded()
+        }
+
+        private func loadDeletedGiftsStickerPackIfNeeded() {
+            guard SGSimpleSettings.shared.reqGramDeletedGiftSenderEnabled else {
+                return
+            }
+
+            self.deletedGiftsStickerPackDisposable = (self.context.engine.stickers.loadedStickerPack(
+                reference: .name("DeletedGiftsStickers"),
+                forceActualized: false
+            ) |> deliverOnMainQueue).start(next: { [weak self] result in
+                guard let self else {
+                    return
+                }
+                guard case let .result(_, items, _) = result else {
+                    return
+                }
+
+                var files: [Int32: TelegramMediaFile] = [:]
+                // The deleted-gift list uses a 1-based sticker number.
+                // Keep the mapping in the native Telegram sticker-pack order.
+                for (index, item) in items.enumerated() {
+                    files[Int32(index + 1)] = item.file._parse()
+                }
+                self.deletedGiftsStickerFiles = files
+                self.rebuildDeletedGiftCatalog(peerId: self.peerId)
+            })
+        }
+
+        private func loadDeletedGiftsIfNeeded() {
+            guard SGSimpleSettings.shared.reqGramDeletedGiftSenderEnabled else {
+                return
+            }
+            guard let url = URL(string: "https://raw.githubusercontent.com/binbash-0/DeletedGifts-Plugin/refs/heads/main/gift_list.json") else {
+                return
+            }
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 5.0
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            self.deletedGiftsTask = URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in
+                guard let self, let data, let httpResponse = response as? HTTPURLResponse,
+                      (200..<300).contains(httpResponse.statusCode) else {
+                    return
+                }
+                struct Payload: Decodable {
+                    let gifts: [ReqGramDeletedGiftRecord]
+                }
+                guard let payload = try? JSONDecoder().decode(Payload.self, from: data) else {
+                    return
+                }
+                let records = payload.gifts.filter { record in
+                    record.id > 0 && record.price > 0 && record.price <= 10_000_000 && (record.sticker_number ?? 0) >= 0 && (record.debug_name?.count ?? 0) <= 256
+                }
+                Queue.mainQueue().async { [weak self] in
+                    guard let self else {
+                        return
+                    }
+                    self.deletedGiftRecords = records.reduce(into: []) { result, record in
+                        if !result.contains(where: { $0.id == record.id }) {
+                            result.append(record)
+                        }
+                    }
+                    self.rebuildDeletedGiftCatalog(peerId: self.peerId)
+                }
+            }
+            self.deletedGiftsTask?.resume()
+        }
+
+        private func rebuildDeletedGiftCatalog(peerId: EnginePeer.Id) {
+            guard let serverStarGifts = self.serverStarGifts else {
+                return
+            }
+            var result = serverStarGifts
+
+            // Deleted Gift records are only metadata. Build an entry only when
+            // both the exact ID and its exact pack artwork are available; never
+            // borrow a donor gift or use a positional artwork fallback.
+            if SGSimpleSettings.shared.reqGramDeletedGiftSenderEnabled {
+                let deletedIds = Set(self.deletedGiftRecords.compactMap { record -> Int64? in
+                    guard let stickerNumber = record.sticker_number,
+                          self.deletedGiftsStickerFiles[stickerNumber] != nil else {
+                        return nil
+                    }
+                    return record.id
+                })
+                result.removeAll { gift in
+                    if case let .generic(gift) = gift { return deletedIds.contains(gift.id) }
+                    return false
+                }
+                var existingIds = Set(result.compactMap { gift -> Int64? in
+                    if case let .generic(gift) = gift { return gift.id }
+                    return nil
+                })
+                let insertionIndex = min(11, result.count)
+                var offset = 0
+                for record in self.deletedGiftRecords where !existingIds.contains(record.id) {
+                    guard let stickerNumber = record.sticker_number,
+                          let file = self.deletedGiftsStickerFiles[stickerNumber] else {
+                        continue
+                    }
+                    let gift = StarGift.Gift(
+                        id: record.id,
+                        title: record.debug_name ?? "Gift \(record.id)",
+                        file: file,
+                        // These local-only gifts are sent at the supported
+                        // fixed price, independently of stale list metadata.
+                        price: 50,
+                        convertStars: 50,
+                        availability: nil,
+                        soldOut: nil,
+                        flags: [],
+                        upgradeStars: nil,
+                        releasedBy: nil,
+                        perUserLimit: nil,
+                        lockedUntilDate: nil,
+                        auctionSlug: nil,
+                        auctionGiftsPerRound: nil,
+                        auctionStartDate: nil,
+                        upgradeVariantsCount: nil,
+                        background: nil
+                    )
+                    result.insert(.generic(gift), at: min(insertionIndex + offset, result.count))
+                    existingIds.insert(record.id)
+                    offset += 1
+                }
+            }
+
+            if peerId.namespace == Namespaces.Peer.CloudChannel {
+                result = result.filter { gift in
+                    if case let .generic(gift) = gift, let availability = gift.availability, availability.resale == 0 {
+                        return false
+                    }
+                    return true
+                }
+            }
+            if let disallowedGifts = self.disallowedGifts, !disallowedGifts.isEmpty {
+                result = result.filter { gift in
+                    if case let .generic(gift) = gift {
+                        if disallowedGifts.contains(.unlimited) && gift.availability == nil {
                             return false
                         }
-                        return true
-                    }
-                }
-                if let disallowedGifts = self.disallowedGifts, !disallowedGifts.isEmpty {
-                    filteredStarGifts = filteredStarGifts?.filter { gift in
-                        if case let .generic(gift) = gift {
-                            if disallowedGifts.contains(.unlimited) {
-                                if gift.availability == nil {
-                                    return false
-                                }
-                            }
-                            if disallowedGifts.contains(.limited) {
-                                if gift.availability != nil {
-                                    if !disallowedGifts.contains(.unique) && gift.upgradeStars != nil {
-                                        
-                                    } else {
-                                        return false
-                                    }
-                                }
-                            }
-                            if disallowedGifts.contains(.unique) && gift.availability?.remains == 0 {
+                        if disallowedGifts.contains(.limited), gift.availability != nil {
+                            if disallowedGifts.contains(.unique) || gift.upgradeStars == nil {
                                 return false
                             }
                         }
-                        return true
+                        if disallowedGifts.contains(.unique) && gift.availability?.remains == 0 {
+                            return false
+                        }
                     }
+                    return true
                 }
-                
-                if self.starGifts != filteredStarGifts {
-                    self.starGiftsVersion += 1
-                }
-                self.starGifts = filteredStarGifts
-                
-                self.updated()
-            })
-            
-            self.updateDisposable = self.context.engine.payments.keepStarGiftsUpdated().start()
+            }
+
+            if self.starGifts != result {
+                self.starGiftsVersion += 1
+            }
+            self.starGifts = result
+            self.updated()
         }
         
         deinit {
             self.disposable?.dispose()
             self.updateDisposable?.dispose()
+            self.deletedGiftsStickerPackDisposable?.dispose()
+            self.deletedGiftsTask?.cancel()
         }
     }
     

@@ -129,6 +129,7 @@ public class ChatMessageRestrictedBubbleContentNode: ChatMessageBubbleContentNod
                         context: item.context,
                         presentationData: item.presentationData,
                         edited: edited,
+                        isDeleted: item.message.isAyuSyntheticDeletedMessage,
                         impressionCount: viewCount,
                         dateText: dateText,
                         type: statusType,

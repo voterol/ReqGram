@@ -1,3 +1,4 @@
+load("@rules_cc//cc:objc_library.bzl", "objc_library")
 
 objc_library(
     name = "BuildConfigExtra",
@@ -9,6 +10,7 @@ objc_library(
     ], allow_empty=True),
     copts = [
         "-Werror",
+        "-Wno-error=deprecated-declarations",
     ],
     hdrs = glob([
         "PublicHeaders/**/*.h",

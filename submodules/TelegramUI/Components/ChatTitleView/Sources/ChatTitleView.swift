@@ -1,4 +1,5 @@
 import Foundation
+import AyuGram
 import UIKit
 import AsyncDisplayKit
 import Display
@@ -205,6 +206,7 @@ public final class ChatTitleView: UIView, NavigationBarTitleView {
     public let titleCredibilityIconView: ComponentHostView<Empty>
     public let titleVerifiedIconView: ComponentHostView<Empty>
     public let titleStatusIconView: ComponentHostView<Empty>
+    private let projectBadgeStripView: ComponentHostView<Empty>
     public let activityNode: ChatTitleActivityNode
     
     private let button: HighlightTrackingButtonNode
@@ -221,6 +223,9 @@ public final class ChatTitleView: UIView, NavigationBarTitleView {
     private var titleCredibilityIcon: ChatTitleCredibilityIcon = .none
     private var titleVerifiedIcon: ChatTitleCredibilityIcon = .none
     private var titleStatusIcon: ChatTitleCredibilityIcon = .none
+    private var projectBadges: [AyuBadgeContent] = []
+    private var projectBadgePeerName = ""
+    private var ayuRemoteConfigObservation: AyuRemoteConfig.Observation?
     
     private var presenceManager: PeerPresenceStatusManager?
     
@@ -269,6 +274,8 @@ public final class ChatTitleView: UIView, NavigationBarTitleView {
                 var titleCredibilityIcon: ChatTitleCredibilityIcon = .none
                 var titleVerifiedIcon: ChatTitleCredibilityIcon = .none
                 var titleStatusIcon: ChatTitleCredibilityIcon = .none
+                var projectBadges: [AyuBadgeContent] = []
+                var projectBadgePeerName = ""
                 var isEnabled = true
                 switch titleContent {
                     case let .peer(peerView, customTitle, _, _, isScheduledMessages, isMuted, _, hidePeerStatus, isEnabledValue):
@@ -303,6 +310,12 @@ public final class ChatTitleView: UIView, NavigationBarTitleView {
                                     }
                                 }
                                 if peer.id != self.context.account.peerId {
+                                    projectBadgePeerName = EnginePeer(peer).displayTitle(strings: self.strings, displayOrder: self.nameDisplayOrder)
+                                    projectBadges = AyuBadges.emojiStatusContents(
+                                        for: peer.id,
+                                        placeholderColor: titleTheme.list.mediaPlaceholderColor,
+                                        themeColor: titleTheme.list.itemAccentColor
+                                    )
                                     let premiumConfiguration = PremiumConfiguration.with(appConfiguration: self.context.currentAppConfiguration.with { $0 })
                                     if peer.isFake {
                                         titleCredibilityIcon = .fake
@@ -317,9 +330,9 @@ public final class ChatTitleView: UIView, NavigationBarTitleView {
                                     if peer.isVerified {
                                         titleCredibilityIcon = .verified
                                     }
-                                    if let verificationIconFileId = peer.verificationIconFileId {
-                                        titleVerifiedIcon = .emojiStatus(PeerEmojiStatus(content: .emoji(fileId: verificationIconFileId), expirationDate: nil))
-                                    }
+                                     if let verificationIconFileId = peer.verificationIconFileId {
+                                         titleVerifiedIcon = .emojiStatus(PeerEmojiStatus(content: .emoji(fileId: verificationIconFileId), expirationDate: nil))
+                                     }
                                 }
                             }
                             if peerView.peerId.namespace == Namespaces.Peer.SecretChat {
@@ -460,6 +473,12 @@ public final class ChatTitleView: UIView, NavigationBarTitleView {
                 
                 if titleStatusIcon != self.titleStatusIcon {
                     self.titleStatusIcon = titleStatusIcon
+                    updated = true
+                }
+
+                if projectBadges != self.projectBadges {
+                self.projectBadges = projectBadges
+                self.projectBadgePeerName = projectBadgePeerName
                     updated = true
                 }
                 
@@ -642,10 +661,20 @@ public final class ChatTitleView: UIView, NavigationBarTitleView {
                                     } else if let peer = peerView.peer {
                                         let timestamp = CFAbsoluteTimeGetCurrent() + NSTimeIntervalSince1970
                                         let userPresence: TelegramUserPresence
-                                        if let presence = peerView.peerPresences[peer.id] as? TelegramUserPresence {
-                                            userPresence = presence
-                                            self.presenceManager?.reset(presence: EnginePeer.Presence(presence))
-                                        } else {
+                                         if let presence = peerView.peerPresences[peer.id] as? TelegramUserPresence {
+                                             userPresence = presence
+                                             self.presenceManager?.reset(presence: EnginePeer.Presence(presence))
+                                             // AyuGram records only presence already delivered by Telegram.
+                                             // No message content or synthetic read state is involved.
+                                             let activityAt: Int64?
+                                             switch presence.status {
+                                             case let .present(until):
+                                                 activityAt = Int64(until)
+                                             default:
+                                                 activityAt = presence.lastActivity > 0 ? Int64(presence.lastActivity) : nil
+                                             }
+                                             AyuActivityHistory.shared.recordPresence(accountId: self.context.account.peerId.toInt64(), peerId: peer.id.toInt64(), activityAt: activityAt, state: String(describing: presence.status))
+                                         } else {
                                             userPresence = TelegramUserPresence(status: .none, lastActivity: 0)
                                         }
                                         let (string, activity) = stringAndActivityForUserPresence(strings: self.strings, dateTimeFormat: self.dateTimeFormat, presence: EnginePeer.Presence(userPresence), relativeTo: Int32(timestamp))
@@ -793,11 +822,21 @@ public final class ChatTitleView: UIView, NavigationBarTitleView {
         
         self.titleStatusIconView = ComponentHostView()
         self.titleStatusIconView.isUserInteractionEnabled = false
+
+        self.projectBadgeStripView = ComponentHostView()
+        self.projectBadgeStripView.isUserInteractionEnabled = false
         
         self.activityNode = ChatTitleActivityNode()
         self.button = HighlightTrackingButtonNode()
         
         super.init(frame: CGRect())
+
+        self.ayuRemoteConfigObservation = AyuRemoteConfig.shared.observe { [weak self] _ in
+            guard let self, let titleContent = self.titleContent else { return }
+            // Re-run title decoration resolution without changing peer/chat state.
+            self.titleContent = titleContent
+        }
+        AyuRemoteConfig.shared.startIfNeeded()
         
         self.isAccessibilityElement = true
         self.accessibilityTraits = .header
@@ -808,6 +847,7 @@ public final class ChatTitleView: UIView, NavigationBarTitleView {
         self.contentContainer.view.addSubview(self.titleContainerView)
         self.contentContainer.addSubnode(self.activityNode)
         self.addSubnode(self.button)
+        self.addSubview(self.projectBadgeStripView)
         
         self.presenceManager = PeerPresenceStatusManager(update: { [weak self] in
             let _ = self?.updateStatus()
@@ -882,6 +922,7 @@ public final class ChatTitleView: UIView, NavigationBarTitleView {
         var credibilityIconWidth: CGFloat = 0.0
         var verifiedIconWidth: CGFloat = 0.0
         var statusIconWidth: CGFloat = 0.0
+        var projectBadgeStripSize: CGSize = .zero
         
         if let image = self.titleLeftIconNode.image {
             if self.titleLeftIconNode.supernode == nil {
@@ -1005,6 +1046,38 @@ public final class ChatTitleView: UIView, NavigationBarTitleView {
                 self.titleStatusIconView.removeFromSuperview()
             }
         }
+
+        if !self.projectBadges.isEmpty {
+            let languageCode = self.strings.baseLanguageCode
+            projectBadgeStripSize = self.projectBadgeStripView.update(
+                transition: ComponentTransition(transition),
+                component: AnyComponent(ProjectBadgeStripComponent(
+                    context: self.context,
+                    badges: self.projectBadges,
+                    languageCode: languageCode,
+                    peerName: self.projectBadgePeerName,
+                    placeholderColor: self.theme.list.mediaPlaceholderColor,
+                    accentColor: self.theme.list.itemAccentColor,
+                    // Matches the adjacent navigation-bar title text, so it
+                    // contrasts with the navigation bar in every theme.
+                    foregroundColor: self.theme.rootController.navigationBar.primaryTextColor,
+                    isVisibleForAnimations: true,
+                    isInteractive: false,
+                    badgeAction: nil,
+                    overflowAction: nil
+                )),
+                environment: {},
+                containerSize: CGSize(width: min(72.0, max(0.0, size.width * 0.3)), height: 20.0)
+            )
+            if projectBadgeStripSize.width > 0.0 {
+                statusIconWidth += projectBadgeStripSize.width + 3.0
+                self.projectBadgeStripView.isHidden = false
+            } else {
+                self.projectBadgeStripView.isHidden = true
+            }
+        } else {
+            self.projectBadgeStripView.isHidden = true
+        }
         
         if let image = self.titleRightIconNode.image {
             if self.titleRightIconNode.supernode == nil {
@@ -1084,6 +1157,17 @@ public final class ChatTitleView: UIView, NavigationBarTitleView {
         
         self.titleStatusIconView.frame = CGRect(origin: CGPoint(x: nextIconX - titleStatusSize.width, y: floor((titleFrame.height - titleStatusSize.height) / 2.0)), size: titleStatusSize)
         nextIconX -= titleStatusSize.width
+
+        if projectBadgeStripSize.width > 0.0 {
+            let stripFrame = CGRect(
+                x: titleFrame.minX + nextIconX - projectBadgeStripSize.width - 3.0,
+                y: titleFrame.minY + floor((titleFrame.height - projectBadgeStripSize.height) / 2.0),
+                width: projectBadgeStripSize.width,
+                height: projectBadgeStripSize.height
+            )
+            titleTransition.updateFrame(view: self.projectBadgeStripView, frame: stripFrame)
+            self.bringSubviewToFront(self.projectBadgeStripView)
+        }
     
         if let image = self.titleRightIconNode.image {
             self.titleRightIconNode.frame = CGRect(origin: CGPoint(x: titleFrame.width + 3.0 + UIScreenPixel, y: 6.0), size: image.size)

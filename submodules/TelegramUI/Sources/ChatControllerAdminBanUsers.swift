@@ -1,5 +1,9 @@
 import Foundation
 import UIKit
+// MARK: AyuGram
+import SGSimpleSettings
+import SGStrings
+import AyuGram
 import TelegramPresentationData
 import AccountContext
 import TelegramCore
@@ -77,7 +81,7 @@ extension ChatControllerImpl {
                     let _ = self.context.engine.messages.deleteReaction(messageId: messageId, authorId: reactionPeerId).startStandalone()
                 }
             } else {
-                let _ = self.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: .forEveryone).startStandalone()
+                let _ = self.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: .forEveryone, userInitiated: true).startStandalone()
             }
             
             for authorId in result.deleteAllFromPeers {
@@ -411,7 +415,21 @@ extension ChatControllerImpl {
         }))
     }
         
-    func beginDeleteMessagesWithUndo(messageIds: Set<EngineMessage.Id>, type: InteractiveMessagesDeletionType) {
+    func beginDeleteMessagesWithUndo(messageIds: Set<EngineMessage.Id>, type: InteractiveMessagesDeletionType, ayuKeepLocally: Bool = false, ayuSyntheticAttributes: [AyuSyntheticMessageAttribute] = []) {
+        let commitDelete: () -> Void = { [context = self.context] in
+            // Register at the actual engine commit, not when the undo overlay
+            // is presented: an arbitrarily delayed commit must not expire the
+            // user's keep-locally choice.
+            if ayuKeepLocally {
+                AyuDeleteIntent.registerKeepLocally(accountPeerId: context.account.peerId, ids: Array(messageIds))
+            }
+            for attribute in ayuSyntheticAttributes {
+                AyuMessageStore.shared.removeDeletedIdentity(accountId: attribute.accountId, peerId: attribute.peerId, threadId: attribute.threadId, messageId: attribute.originalMessageId)
+            }
+            if !messageIds.isEmpty {
+                let _ = context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: type, userInitiated: true).startStandalone()
+            }
+        }
         var deleteImmediately = false
         if case .forEveryone = type {
             deleteImmediately = true
@@ -422,7 +440,7 @@ extension ChatControllerImpl {
         }
         
         if deleteImmediately {
-            let _ = self.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: type).startStandalone()
+            commitDelete()
             return
         }
         
@@ -434,7 +452,7 @@ extension ChatControllerImpl {
                 return false
             }
             if value == .commit {
-                let _ = self.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: type).startStandalone()
+                commitDelete()
                 return true
             } else if value == .undo {
                 self.chatDisplayNode.historyNode.ignoreMessageIds = Set()
@@ -444,7 +462,7 @@ extension ChatControllerImpl {
         }), in: .current)
     }
     
-    func presentDeleteMessageOptions(messageIds: Set<EngineMessage.Id>, options: ChatAvailableMessageActionOptions, contextController: ContextControllerProtocol?, sourceView: UIView? = nil, completion: @escaping (ContextMenuActionResult) -> Void) {
+    func presentDeleteMessageOptions(messageIds: Set<EngineMessage.Id>, options: ChatAvailableMessageActionOptions, contextController: ContextControllerProtocol?, sourceView: UIView? = nil, ayuSyntheticAttributes: [AyuSyntheticMessageAttribute] = [], completion: @escaping (ContextMenuActionResult) -> Void) {
         let _ = (self.context.engine.data.get(
             EngineDataMap(messageIds.map(TelegramEngine.EngineData.Item.Messages.Message.init(id:)))
         )
@@ -477,7 +495,7 @@ extension ChatControllerImpl {
                                 guard let self else {
                                     return
                                 }
-                                self.beginDeleteMessagesWithUndo(messageIds: messageIds, type: .forEveryone)
+                                self.beginDeleteMessagesWithUndo(messageIds: messageIds, type: .forEveryone, ayuSyntheticAttributes: ayuSyntheticAttributes)
                             }),
                             TextAlertAction(type: .genericAction, title: self.presentationData.strings.Common_Cancel, action: {})
                         ],
@@ -541,7 +559,7 @@ extension ChatControllerImpl {
                                 guard let self else {
                                     return
                                 }
-                                self.beginDeleteMessagesWithUndo(messageIds: messageIds, type: .forEveryone)
+                                self.beginDeleteMessagesWithUndo(messageIds: messageIds, type: .forEveryone, ayuSyntheticAttributes: ayuSyntheticAttributes)
                             }),
                             TextAlertAction(type: .genericAction, title: self.presentationData.strings.Common_Cancel, action: {})
                         ],
@@ -572,19 +590,38 @@ extension ChatControllerImpl {
             var contextItems: [ContextMenuItem] = []
             var canDisplayContextMenu = true
 
+            // MARK: AyuGram - "keep locally": preserve the archived copy of a
+            // message the user deletes themselves. Only meaningful when message
+            // preservation is on, so the row is hidden otherwise.
+            var ayuKeepLocally = SGSimpleSettings.shared.ayuKeepDeletedOnOwnDelete
+            let ayuKeepLocallyAvailable = SGSimpleSettings.shared.ayuSaveDeletedMessages
+            if ayuKeepLocallyAvailable {
+                // The context-menu variant has no switch row, so the sheet is
+                // the only place this can be offered.
+                canDisplayContextMenu = false
+                items.append(ActionSheetSwitchItem(
+                    title: "AyuGram.Delete.KeepLocally".i18n(self.presentationData.strings.baseLanguageCode),
+                    isOn: ayuKeepLocally,
+                    action: { value in
+                        ayuKeepLocally = value
+                        // Remember the choice so it is the default next time.
+                        SGSimpleSettings.shared.ayuKeepDeletedOnOwnDelete = value
+                    }
+                ))
+            }
             if options.contains(.cancelSending) {
                 contextItems.append(.action(ContextMenuActionItem(text: self.presentationData.strings.Conversation_ContextMenuCancelSending, textColor: .destructive, icon: { _ in nil }, action: { [weak self] _, f in
                     f(.dismissWithoutContent)
                     if let strongSelf = self {
                         strongSelf.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState { $0.withoutSelectionState() } })
-                        strongSelf.beginDeleteMessagesWithUndo(messageIds: messageIds, type: .forEveryone)
+                        strongSelf.beginDeleteMessagesWithUndo(messageIds: messageIds, type: .forEveryone, ayuKeepLocally: ayuKeepLocallyAvailable && ayuKeepLocally, ayuSyntheticAttributes: ayuSyntheticAttributes)
                     }
                 })))
                 items.append(ActionSheetButtonItem(title: self.presentationData.strings.Conversation_ContextMenuCancelSending, color: .destructive, action: { [weak self, weak actionSheet] in
                     actionSheet?.dismissAnimated()
                     if let strongSelf = self {
                         strongSelf.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState { $0.withoutSelectionState() } })
-                        strongSelf.beginDeleteMessagesWithUndo(messageIds: messageIds, type: .forEveryone)
+                        strongSelf.beginDeleteMessagesWithUndo(messageIds: messageIds, type: .forEveryone, ayuKeepLocally: ayuKeepLocallyAvailable && ayuKeepLocally, ayuSyntheticAttributes: ayuSyntheticAttributes)
                     }
                 }))
             }
@@ -619,7 +656,7 @@ extension ChatControllerImpl {
                         let commit = {
                             strongSelf.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState { $0.withoutSelectionState() } })
                             
-                            strongSelf.beginDeleteMessagesWithUndo(messageIds: messageIds, type: .forEveryone)
+                            strongSelf.beginDeleteMessagesWithUndo(messageIds: messageIds, type: .forEveryone, ayuKeepLocally: ayuKeepLocallyAvailable && ayuKeepLocally, ayuSyntheticAttributes: ayuSyntheticAttributes)
                         }
                         if let giveaway {
                             let currentTime = Int32(CFAbsoluteTimeGetCurrent() + kCFAbsoluteTimeIntervalSince1970)
@@ -655,7 +692,7 @@ extension ChatControllerImpl {
                     if let strongSelf = self {
                         strongSelf.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState { $0.withoutSelectionState() } })
                         
-                        strongSelf.beginDeleteMessagesWithUndo(messageIds: messageIds, type: .forEveryone)
+                        strongSelf.beginDeleteMessagesWithUndo(messageIds: messageIds, type: .forEveryone, ayuKeepLocally: ayuKeepLocallyAvailable && ayuKeepLocally, ayuSyntheticAttributes: ayuSyntheticAttributes)
                     }
                 }))
             }
@@ -690,7 +727,7 @@ extension ChatControllerImpl {
                             guard let strongSelf = self else {
                                 return
                             }
-                            strongSelf.beginDeleteMessagesWithUndo(messageIds: messageIds, type: unsendPersonalMessages ? .forEveryone : .forLocalPeer)
+                            strongSelf.beginDeleteMessagesWithUndo(messageIds: messageIds, type: unsendPersonalMessages ? .forEveryone : .forLocalPeer, ayuKeepLocally: ayuKeepLocallyAvailable && ayuKeepLocally, ayuSyntheticAttributes: ayuSyntheticAttributes)
                         }
                         
                         if "".isEmpty {
@@ -710,7 +747,7 @@ extension ChatControllerImpl {
                     if let strongSelf = self {
                         strongSelf.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState { $0.withoutSelectionState() } })
                         
-                        strongSelf.beginDeleteMessagesWithUndo(messageIds: messageIds, type: unsendPersonalMessages ? .forEveryone : .forLocalPeer)
+                        strongSelf.beginDeleteMessagesWithUndo(messageIds: messageIds, type: unsendPersonalMessages ? .forEveryone : .forLocalPeer, ayuKeepLocally: ayuKeepLocallyAvailable && ayuKeepLocally, ayuSyntheticAttributes: ayuSyntheticAttributes)
                     }
                 }))
             }
@@ -745,6 +782,37 @@ extension ChatControllerImpl {
                 }
             }
         })
+    }
+
+    func presentAyuSyntheticDeleteConfirmation(attributes: [AyuSyntheticMessageAttribute], contextController: ContextControllerProtocol?, completion: @escaping (ContextMenuActionResult) -> Void) {
+        guard !attributes.isEmpty else {
+            completion(.default)
+            return
+        }
+        let presentConfirmation = { [weak self] in
+            guard let self else { return }
+            let actionSheet = ActionSheetController(presentationData: self.presentationData)
+            actionSheet.setItemGroups([
+                ActionSheetItemGroup(items: [
+                    ActionSheetTextItem(title: self.presentationData.strings.Chat_DeleteMessagesConfirmation(Int32(attributes.count))),
+                    ActionSheetButtonItem(title: self.presentationData.strings.Conversation_ContextMenuDelete, color: .destructive, action: { [weak self, weak actionSheet] in
+                        actionSheet?.dismissAnimated()
+                        for attribute in attributes {
+                            AyuMessageStore.shared.removeDeletedIdentity(accountId: attribute.accountId, peerId: attribute.peerId, threadId: attribute.threadId, messageId: attribute.originalMessageId)
+                        }
+                        self?.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState { $0.withoutSelectionState() } })
+                    })
+                ]),
+                ActionSheetItemGroup(items: [ActionSheetButtonItem(title: self.presentationData.strings.Common_Cancel, action: { [weak actionSheet] in actionSheet?.dismissAnimated() })])
+            ])
+            self.present(actionSheet, in: .window(.root), with: ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
+            completion(.dismissWithoutContent)
+        }
+        if let contextController {
+            contextController.dismiss(completion: presentConfirmation)
+        } else {
+            presentConfirmation()
+        }
     }
     
     func presentClearCacheSuggestion() {

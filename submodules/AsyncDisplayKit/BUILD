@@ -1,3 +1,5 @@
+load("@rules_cc//cc:objc_library.bzl", "objc_library")
+
 public_headers = glob([
   "Source/PublicHeaders/AsyncDisplayKit/*.h",
 ])
@@ -16,6 +18,7 @@ objc_library(
     ], allow_empty=True) + private_headers,
     copts = [
         "-Werror",
+        "-Wno-error=deprecated-declarations",
     ],
     cxxopts = [
         "-Werror",
