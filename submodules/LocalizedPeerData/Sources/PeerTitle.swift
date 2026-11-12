@@ -2,10 +2,42 @@ import Foundation
 import TelegramCore
 import TelegramPresentationData
 import TelegramUIPreferences
+import SGSimpleSettings
 //import PhoneNumberFormat
+
+private func sgFilterZalgoIfNeeded(_ text: String) -> String {
+    guard SGSimpleSettings.shared.ayuFilterZalgo, !text.isEmpty else {
+        return text
+    }
+    let maxCombiningMarksInARow = 2
+    var result = String.UnicodeScalarView()
+    var run = 0
+    for scalar in text.unicodeScalars {
+        if CharacterSet.nonBaseCharacters.contains(scalar) {
+            run += 1
+            if run > maxCombiningMarksInARow {
+                continue
+            }
+        } else {
+            run = 0
+        }
+        result.append(scalar)
+    }
+    return String(result)
+}
 
 public extension EnginePeer {
     var compactDisplayTitle: String {
+        return sgFilterZalgoIfNeeded(self.unfilteredCompactDisplayTitle)
+    }
+
+    func displayTitle(strings: PresentationStrings, displayOrder: PresentationPersonNameOrder) -> String {
+        return sgFilterZalgoIfNeeded(self.unfilteredDisplayTitle(strings: strings, displayOrder: displayOrder))
+    }
+}
+
+extension EnginePeer {
+    private var unfilteredCompactDisplayTitle: String {
         switch self {
         case let .user(user):
             if let firstName = user.firstName, !firstName.isEmpty {
@@ -28,7 +60,7 @@ public extension EnginePeer {
         }
     }
 
-    func displayTitle(strings: PresentationStrings, displayOrder: PresentationPersonNameOrder) -> String {
+    private func unfilteredDisplayTitle(strings: PresentationStrings, displayOrder: PresentationPersonNameOrder) -> String {
         switch self {
         case let .user(user):
             if user.id.isReplies {

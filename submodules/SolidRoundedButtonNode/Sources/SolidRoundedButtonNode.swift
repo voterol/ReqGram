@@ -1,4 +1,5 @@
 import Foundation
+import LottieSettings
 import UIKit
 import AsyncDisplayKit
 import Display
@@ -262,7 +263,7 @@ public final class SolidRoundedButtonNode: ASDisplayNode {
                     self.animationNode?.removeFromSupernode()
                     self.animationNode = nil
                     
-                    let animationNode = SimpleAnimationNode(animationName: animation, size: CGSize(width: 30.0, height: 30.0))
+                    let animationNode = SimpleAnimationNode(animationName: animation, size: CGSize(width: 30.0, height: 30.0), lottieSettings: .noAccountFallback)
                     animationNode.customColor = self.theme.foregroundColor
                     animationNode.isUserInteractionEnabled = false
                     self.addSubnode(animationNode)
@@ -275,7 +276,11 @@ public final class SolidRoundedButtonNode: ASDisplayNode {
                     if self.isShimmering {
                         self.animationTimer?.invalidate()
                         
-                        Queue.mainQueue().after(1.25) {
+                        Queue.mainQueue().after(1.25) { [weak self] in
+                            guard let self else {
+                                return
+                            }
+
                             self.animationNode?.play()
                             
                             let timer = SwiftSignalKit.Timer(timeout: self.animationLoopTime, repeat: true, completion: { [weak self] in
@@ -819,6 +824,11 @@ public final class SolidRoundedButtonNode: ASDisplayNode {
                 chromeView.image = GlassBackgroundView.generateForegroundImage(size: CGSize(width: 26.0 * 2.0, height: 26.0 * 2.0), isDark: self.theme.backgroundColor.lightness < 0.4, fillColor: .clear)
             }
             chromeTransition.updateFrame(view: chromeView, frame: CGRect(origin: .zero, size: buttonSize))
+        } else if let chromeView = self.chromeView {
+            // MARK: ReqGram - drop a chrome overlay created before the legacy override became
+            // active. No-op when the override is off, since `glass == false` never creates one.
+            self.chromeView = nil
+            chromeView.removeFromSuperview()
         }
         
         return buttonSize.height
@@ -1031,7 +1041,7 @@ public final class SolidRoundedButtonView: UIView {
                     self.animationNode?.view.removeFromSuperview()
                     self.animationNode = nil
                     
-                    let animationNode = SimpleAnimationNode(animationName: animation, size: CGSize(width: 30.0, height: 30.0))
+                    let animationNode = SimpleAnimationNode(animationName: animation, size: CGSize(width: 30.0, height: 30.0), lottieSettings: .noAccountFallback)
                     animationNode.customColor = self.theme.foregroundColor
                     animationNode.isUserInteractionEnabled = false
                     self.addSubview(animationNode.view)
@@ -1044,7 +1054,11 @@ public final class SolidRoundedButtonView: UIView {
                     if self.gloss {
                         self.animationTimer?.invalidate()
                         
-                        Queue.mainQueue().after(1.25) {
+                        Queue.mainQueue().after(1.25) { [weak self] in
+                            guard let self else {
+                                return
+                            }
+
                             self.animationNode?.play()
                             
                             let timer = SwiftSignalKit.Timer(timeout: self.animationLoopTime, repeat: true, completion: { [weak self] in

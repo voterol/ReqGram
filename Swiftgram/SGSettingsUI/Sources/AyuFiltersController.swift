@@ -49,7 +49,7 @@ private func ayuFiltersEntries(presentationData: PresentationData, filters: [Ayu
     }
 
     entries.append(.action(id: id.count, section: .add, actionType: .add, text: i18n("AyuGram.Filters.Add", lang), kind: .generic))
-    entries.append(.notice(id: id.count, section: .add, text: i18n("AyuGram.Filters.Notice", lang)))
+    sgAppendNotice(to: &entries, counter: id, section: .add, text: i18n("AyuGram.Filters.Notice", lang))
 
     return entries
 }
@@ -200,8 +200,9 @@ public func ayuFiltersController(context: AccountContext) -> ViewController {
         }
     )
 
-    let signal = combineLatest(context.sharedContext.presentationData, simplePromise.get())
-    |> map { presentationData, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    // `sgSimpleSettingsChangedSignal` re-renders when compact descriptions are toggled elsewhere.
+    let signal = combineLatest(context.sharedContext.presentationData, simplePromise.get(), sgSimpleSettingsChangedSignal)
+    |> map { presentationData, _, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let entries = ayuFiltersEntries(presentationData: presentationData, filters: AyuFilters.shared.filters)
 
         let controllerState = ItemListControllerState(

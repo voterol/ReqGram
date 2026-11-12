@@ -1,5 +1,7 @@
 import Foundation
 import UIKit
+import CoreImage
+import CoreImage.CIFilterBuiltins
 import AsyncDisplayKit
 import Display
 import AppBundle
@@ -455,18 +457,73 @@ private final class ChatInputTextContainer: NSTextContainer {
 }
 
 private final class ChatInputLegacyLayoutManager: NSLayoutManager {
+    /// Per-animated-character state, resolved ONCE when the animation starts.
+    /// Keeping this out of `drawGlyphs` is what removes the per-frame
+    /// `NSString.substring` / `CharacterSet` / `lineFragmentRect` work.
+    private struct AnimatedGlyph {
+        let glyphRange: NSRange
+        /// Character range this glyph came from, used to match non-glyph decorations
+        /// (custom emoji subviews) to the same timeline.
+        let characterRange: NSRange
+        /// Staggered sequence position, so the easing does not depend on glyph indices.
+        let ordinal: Int
+        /// Rotation/scale pivot in container coordinates (origin is added at draw time).
+        let center: CGPoint
+        /// Untransformed ink box, used to size the offscreen blur tile.
+        let bounds: CGRect
+    }
+
     var animationConfiguration = ChatInputTextAnimationConfiguration() {
         didSet {
+            if oldValue == animationConfiguration {
+                return
+            }
             if !animationConfiguration.insertionEnabled || UIAccessibility.isReduceMotionEnabled {
-                self.insertionRange = nil
+                self.clearInsertionAnimation()
             }
         }
     }
-    private var insertionRange: NSRange?
-    private var insertionStartTime: CFTimeInterval = 0.0
-    private var animationInvalidation: DispatchWorkItem?
-    var invalidateDisplay: (() -> Void)?
 
+    private var insertionRange: NSRange?
+    /// Recorded during didProcessEditing; geometry is resolved on the next tick so
+    /// we never force layout inside a text-storage edit transaction.
+    private var pendingInsertionRange: NSRange?
+    /// Re-entrancy guard for geometry resolution (which can trigger layout).
+    private var isResolvingInsertion = false
+    /// Re-entrancy guard for the offscreen blur tile (nested drawGlyphs).
+    private var isRenderingBlurTile = false
+
+    /// Number of discrete blur steps the continuous radius is quantised to.
+    private static let blurLevelCount = 6
+
+    private struct BlurCacheKey: Hashable {
+        let glyphLocation: Int
+        let level: Int
+    }
+    private struct BlurCacheEntry {
+        let image: CGImage
+        let rect: CGRect
+    }
+    /// Memoised blur tiles for the current insertion only; dropped on clear.
+    private var blurCache: [BlurCacheKey: BlurCacheEntry?] = [:]
+    private var insertionStartTime: CFTimeInterval = 0.0
+    /// Resolved animated glyphs for the current insertion, ordered by glyph index.
+    private var animatedGlyphs: [AnimatedGlyph] = []
+    /// Union of the animated ink boxes; the repaint damage rect we hand back.
+    private var animatedDamageRect: CGRect = .null
+    private var animatedCharacterRange: NSRange?
+    private var currentLifetime: TimeInterval = 0.0
+    /// Shared, vsync-aligned driver. Held only while an animation is in flight.
+    private var animationLink: SharedDisplayLinkDriver.Link?
+
+    /// Repaint request scoped to the animating characters instead of the whole document.
+    var invalidateDisplay: ((NSRange, CGRect) -> Void)?
+
+    /// True only while glyphs are actually mid-flight. `drawGlyphs` uses this to
+    /// decide whether it may take the plain `super` fast path.
+    private var isAnimating: Bool {
+        return self.insertionRange != nil && !self.animatedGlyphs.isEmpty
+    }
 
     override init() {
         super.init()
@@ -478,34 +535,168 @@ private final class ChatInputLegacyLayoutManager: NSLayoutManager {
 
     func beginInsertionAnimation(forCharacterRange range: NSRange) {
         guard animationConfiguration.insertionEnabled, !UIAccessibility.isReduceMotionEnabled, range.length > 0, range.length <= 64 else {
-            insertionRange = nil
+            self.clearInsertionAnimation()
             return
         }
-        insertionRange = range
-        insertionStartTime = CACurrentMediaTime()
-        animationInvalidation?.cancel()
-        self.scheduleAnimationTick()
+        // This runs inside NSTextStorage's didProcessEditing. Forcing layout here
+        // would be re-entrant layout during an edit transaction, so only the request
+        // is recorded; glyph geometry is resolved on the next tick once TextKit has
+        // finished its own layout pass.
+        self.clearInsertionAnimation()
+        self.pendingInsertionRange = range
+        self.insertionStartTime = CACurrentMediaTime()
+        self.startAnimationLink()
     }
 
-    private func scheduleAnimationTick() {
-        let workItem = DispatchWorkItem { [weak self] in
-            guard let self, self.insertionRange != nil else { return }
-            self.invalidateDisplay?()
-            if CACurrentMediaTime() - self.insertionStartTime < self.animationLifetime {
-                self.scheduleAnimationTick()
-            } else {
-                self.clearInsertionAnimation()
+    /// Resolves glyph geometry for a recorded insertion. Returns false when the
+    /// insertion cannot be animated, in which case all animation state is cleared.
+    @discardableResult
+    private func resolvePendingInsertion() -> Bool {
+        guard let range = self.pendingInsertionRange else {
+            return false
+        }
+        // boundingRect/lineFragmentRect below can trigger layout. Guard against
+        // re-entering this from a nested drawGlyphs caused by that layout.
+        if self.isResolvingInsertion {
+            return false
+        }
+        self.isResolvingInsertion = true
+        defer { self.isResolvingInsertion = false }
+        self.pendingInsertionRange = nil
+
+        guard animationConfiguration.insertionEnabled, !UIAccessibility.isReduceMotionEnabled else {
+            self.clearInsertionAnimation()
+            return false
+        }
+        guard let textContainer = self.textContainers.first, let textStorage = self.textStorage else {
+            self.clearInsertionAnimation()
+            return false
+        }
+
+        let clampedRange = NSIntersectionRange(range, NSRange(location: 0, length: textStorage.length))
+        guard clampedRange.length > 0 else {
+            self.clearInsertionAnimation()
+            return false
+        }
+
+        let insertedGlyphRange = self.glyphRange(forCharacterRange: clampedRange, actualCharacterRange: nil)
+        guard insertedGlyphRange.length > 0, insertedGlyphRange.location != NSNotFound else {
+            self.clearInsertionAnimation()
+            return false
+        }
+
+        // Resolve the "first line only" gate once, against the first inserted glyph.
+        let firstLineMinY = self.lineFragmentRect(forGlyphAt: insertedGlyphRange.location, effectiveRange: nil).minY
+
+        // One NSString bridge for the whole insertion rather than one per glyph per frame.
+        let nsString = textStorage.string as NSString
+        let whitespace = CharacterSet.whitespacesAndNewlines
+
+        var glyphs: [AnimatedGlyph] = []
+        glyphs.reserveCapacity(insertedGlyphRange.length)
+        var damage = CGRect.null
+        var ordinal = 0
+
+        for glyphIndex in insertedGlyphRange.lowerBound ..< insertedGlyphRange.upperBound {
+            let characterRange = self.characterRange(forGlyphRange: NSRange(location: glyphIndex, length: 1), actualGlyphRange: nil)
+            guard characterRange.location != NSNotFound,
+                  NSMaxRange(characterRange) <= nsString.length,
+                  NSIntersectionRange(characterRange, clampedRange).length > 0 else {
+                continue
+            }
+
+            if animationConfiguration.ignoreSpaces {
+                let substring = nsString.substring(with: characterRange)
+                let isSpace = !substring.isEmpty && substring.unicodeScalars.allSatisfy { whitespace.contains($0) }
+                if isSpace {
+                    continue
+                }
+            }
+
+            if !animationConfiguration.animateAllLines {
+                if self.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil).minY != firstLineMinY {
+                    continue
+                }
+            }
+
+            let glyphRange = NSRange(location: glyphIndex, length: 1)
+            let bounds = self.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+            guard bounds.width.isFinite, bounds.height.isFinite, !bounds.isNull else {
+                continue
+            }
+
+            glyphs.append(AnimatedGlyph(
+                glyphRange: glyphRange,
+                characterRange: characterRange,
+                ordinal: ordinal,
+                center: CGPoint(x: bounds.midX, y: bounds.midY),
+                bounds: bounds
+            ))
+            ordinal += 1
+            damage = damage.isNull ? bounds : damage.union(bounds)
+        }
+
+        guard !glyphs.isEmpty else {
+            self.clearInsertionAnimation()
+            return false
+        }
+
+        self.insertionRange = clampedRange
+        self.animatedCharacterRange = clampedRange
+        self.animatedGlyphs = glyphs
+        self.currentLifetime = self.lifetime(forAnimatedCount: glyphs.count)
+
+        // Slide/blur push ink outside the glyph box; grow the damage rect so the
+        // in-flight pixels are actually inside the invalidated region.
+        let bleed = max(animationConfiguration.slideDistance, animationConfiguration.blurEnabled ? animationConfiguration.blurRadius : 0.0) + 4.0
+        self.animatedDamageRect = damage.isNull ? .null : damage.insetBy(dx: -bleed, dy: -bleed)
+
+        self.startAnimationLink()
+        return true
+    }
+
+    private func startAnimationLink() {
+        if self.animationLink != nil {
+            return
+        }
+        // `.max` lets the shared driver raise the CADisplayLink frame-rate range to
+        // 120Hz on ProMotion; it falls back to the panel rate elsewhere.
+        self.animationLink = SharedDisplayLinkDriver.shared.add(framesPerSecond: .max, { [weak self] _ in
+            self?.animationTick()
+        })
+    }
+
+    private func animationTick() {
+        // First tick after an edit: TextKit has finished its layout pass by now, so
+        // glyph geometry is safe to read.
+        if self.pendingInsertionRange != nil {
+            if !self.resolvePendingInsertion() {
+                return
             }
         }
-        animationInvalidation = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.016, execute: workItem)
+        guard self.isAnimating else {
+            self.clearInsertionAnimation()
+            return
+        }
+        if CACurrentMediaTime() - self.insertionStartTime >= self.currentLifetime {
+            // Repaint once more unanimated so the final frame is the settled text.
+            let range = self.animatedCharacterRange
+            let rect = self.animatedDamageRect
+            self.clearInsertionAnimation()
+            if let range {
+                self.invalidateDisplay?(range, rect)
+            }
+            return
+        }
+        if let range = self.animatedCharacterRange {
+            self.invalidateDisplay?(range, self.animatedDamageRect)
+        }
     }
 
-    private var animationLifetime: TimeInterval {
+    private func lifetime(forAnimatedCount count: Int) -> TimeInterval {
         let baseDuration = max(animationConfiguration.duration, 0.001)
-        let characterCount = insertionRange?.length ?? 1
         let stagger = min(0.045, baseDuration * 0.35)
-        let sequenceDuration = stagger * Double(max(0, characterCount - 1))
+        let sequenceDuration = stagger * Double(max(0, count - 1))
         guard animationConfiguration.blurEnabled else {
             return sequenceDuration + baseDuration
         }
@@ -513,13 +704,49 @@ private final class ChatInputLegacyLayoutManager: NSLayoutManager {
     }
 
     func clearInsertionAnimation() {
-        insertionRange = nil
-        animationInvalidation?.cancel()
-        animationInvalidation = nil
+        self.insertionRange = nil
+        self.pendingInsertionRange = nil
+        self.animatedCharacterRange = nil
+        self.animatedGlyphs = []
+        self.animatedDamageRect = .null
+        self.currentLifetime = 0.0
+        self.blurCache = [:]
+        self.animationLink?.invalidate()
+        self.animationLink = nil
+    }
+
+    /// Insertion-animation progress for a character range, so decorations that are
+    /// NOT glyphs (custom emoji, which are real subviews) can ride the exact same
+    /// stagger + easing as the drawn text instead of popping in instantly.
+    /// Returns nil when the range is not animating.
+    func insertionProgress(forCharacterRange range: NSRange) -> CGFloat? {
+        guard self.isAnimating, animationConfiguration.insertionEnabled, !UIAccessibility.isReduceMotionEnabled else {
+            return nil
+        }
+        guard let glyph = self.animatedGlyphs.first(where: { NSIntersectionRange($0.characterRange, range).length > 0 }) else {
+            return nil
+        }
+        let duration = max(animationConfiguration.duration, 0.001)
+        let stagger = min(0.045, duration * 0.35)
+        let characterElapsed = (CACurrentMediaTime() - self.insertionStartTime) - stagger * Double(glyph.ordinal)
+        if characterElapsed <= 0.0 {
+            return 0.0
+        }
+        let linear = min(1.0, max(0.0, characterElapsed / duration))
+        return CGFloat(1.0 - pow(1.0 - linear, 3.0))
+    }
+
+    /// Slide offset the drawn glyphs currently have, so emoji match exactly.
+    var insertionSlideDistance: CGFloat {
+        return animationConfiguration.slideDistance
+    }
+
+    var insertionScaleStart: CGFloat? {
+        return animationConfiguration.scaleEnabled ? animationConfiguration.scaleStart : nil
     }
 
     deinit {
-        animationInvalidation?.cancel()
+        self.animationLink?.invalidate()
     }
     
     override func notShownAttribute(forGlyphAt glyphIndex: Int) -> Bool {
@@ -527,87 +754,265 @@ private final class ChatInputLegacyLayoutManager: NSLayoutManager {
     }
     
     override func drawGlyphs(forGlyphRange glyphsToShow: NSRange, at origin: CGPoint) {
+        // If an insertion was recorded but not yet resolved, resolve it here. Draw is
+        // outside the edit transaction and layout is settled, so this is safe and it
+        // avoids a one-frame flash of fully-opaque text before the first tick.
+        if self.pendingInsertionRange != nil, !self.isRenderingBlurTile {
+            self.resolvePendingInsertion()
+        }
+        // Fast path: no animation in flight, the feature is off, or we are rendering
+        // the offscreen blur tile (which calls back in here and must draw the glyph
+        // plainly, with no transform or recursion). This must stay byte-for-byte
+        // equivalent to the stock renderer — it is what every user with the feature
+        // disabled (the default) hits on every keystroke.
+        guard self.isAnimating, !self.isRenderingBlurTile,
+              animationConfiguration.insertionEnabled, !UIAccessibility.isReduceMotionEnabled else {
+            super.drawGlyphs(forGlyphRange: glyphsToShow, at: origin)
+            return
+        }
         guard let context = UIGraphicsGetCurrentContext() else {
             super.drawGlyphs(forGlyphRange: glyphsToShow, at: origin)
             return
         }
-        guard let insertionRange, animationConfiguration.insertionEnabled, !UIAccessibility.isReduceMotionEnabled else {
+
+        let elapsed = CACurrentMediaTime() - self.insertionStartTime
+        if elapsed >= self.currentLifetime {
+            self.clearInsertionAnimation()
             super.drawGlyphs(forGlyphRange: glyphsToShow, at: origin)
             return
         }
-        let elapsed = CACurrentMediaTime() - insertionStartTime
-        if elapsed >= animationLifetime {
-            clearInsertionAnimation()
+
+        // Only the glyphs resolved at animation start are special-cased, and only
+        // those that intersect the range the text system asked us to draw.
+        var pending = self.animatedGlyphs.filter {
+            NSIntersectionRange($0.glyphRange, glyphsToShow).length > 0
+        }
+        guard !pending.isEmpty else {
             super.drawGlyphs(forGlyphRange: glyphsToShow, at: origin)
             return
         }
-        var unanimatedRange: NSRange? = nil
-        let stagger = min(0.045, animationConfiguration.duration * 0.35)
-        let firstInsertedGlyph = insertionRange.location < numberOfGlyphs ? glyphIndexForCharacter(at: insertionRange.location) : NSNotFound
-        let firstInsertedLine: CGFloat? = firstInsertedGlyph == NSNotFound ? nil : lineFragmentRect(forGlyphAt: firstInsertedGlyph, effectiveRange: nil).minY
-        let flushUnanimated: () -> Void = {
-            if let range = unanimatedRange {
-                super.drawGlyphs(forGlyphRange: range, at: origin)
-                unanimatedRange = nil
+        pending.sort { $0.glyphRange.location < $1.glyphRange.location }
+
+        let duration = max(animationConfiguration.duration, 0.001)
+        let stagger = min(0.045, duration * 0.35)
+
+        // Draw every non-animating glyph in as few batched runs as possible, instead
+        // of one save/restore + drawGlyphs call per glyph.
+        var cursor = glyphsToShow.lowerBound
+        for glyph in pending {
+            if glyph.glyphRange.location > cursor {
+                super.drawGlyphs(forGlyphRange: NSRange(location: cursor, length: glyph.glyphRange.location - cursor), at: origin)
             }
-        }
-        for glyphIndex in glyphsToShow.lowerBound ..< glyphsToShow.upperBound {
-            let characterRange = characterRange(forGlyphRange: NSRange(location: glyphIndex, length: 1), actualGlyphRange: nil)
-            let character: String
-            if let textStorage, characterRange.location != NSNotFound {
-                character = (textStorage.string as NSString).substring(with: characterRange)
-            } else {
-                character = ""
-            }
-            let isSpace = character.unicodeScalars.allSatisfy { CharacterSet.whitespacesAndNewlines.contains($0) }
-            let isInserted = characterRange.location != NSNotFound && NSIntersectionRange(characterRange, insertionRange).length > 0 &&
-                (!animationConfiguration.ignoreSpaces || !isSpace) &&
-                (animationConfiguration.animateAllLines || firstInsertedLine.map { lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil).minY == $0 } == true)
-            if !isInserted {
-                if let range = unanimatedRange {
-                    if range.location + range.length == glyphIndex {
-                        unanimatedRange = NSRange(location: range.location, length: range.length + 1)
-                    } else {
-                        flushUnanimated()
-                        unanimatedRange = NSRange(location: glyphIndex, length: 1)
-                    }
-                } else {
-                    unanimatedRange = NSRange(location: glyphIndex, length: 1)
-                }
+
+            let characterElapsed = elapsed - stagger * Double(glyph.ordinal)
+            if characterElapsed <= 0.0 {
+                // Not started yet: fully hidden. Skipping the draw is both correct
+                // and cheaper than drawing at alpha 0.
+                cursor = max(cursor, NSMaxRange(glyph.glyphRange))
                 continue
             }
-            flushUnanimated()
-            let animationOrdinal = max(0, characterRange.location - insertionRange.location)
-            let characterElapsed = elapsed - stagger * Double(animationOrdinal)
-            let progress = CGFloat(min(1.0, max(0.0, characterElapsed / max(animationConfiguration.duration, 0.001))))
-            let blurProgress = CGFloat(min(1.0, max(0.0, (characterElapsed - max(animationConfiguration.blurTextDelay, 0.0)) / max(animationConfiguration.blurDuration, 0.001))))
-            context.saveGState()
-            let glyphRect: CGRect
-            if let textContainer = textContainers.first {
-                glyphRect = boundingRect(forGlyphRange: NSRange(location: glyphIndex, length: 1), in: textContainer)
-            } else {
-                glyphRect = .zero
-            }
-            let center = CGPoint(x: glyphRect.midX + origin.x, y: glyphRect.midY + origin.y)
-            context.translateBy(x: center.x, y: center.y)
-            if animationConfiguration.scaleEnabled {
-                let start = animationConfiguration.scaleStart
-                context.scaleBy(x: start + (1.0 - start) * progress, y: start + (1.0 - start) * progress)
-            }
-            if animationConfiguration.rotateEnabled {
-                context.rotate(by: (animationConfiguration.rotateAngle * .pi / 180.0) * (1.0 - progress))
-            }
-            context.translateBy(x: -center.x, y: -center.y)
-            context.setAlpha(progress)
-            if animationConfiguration.blurEnabled {
-                // Core Graphics' shadow is a blur-style approximation, not a true text blur.
-                context.setShadow(offset: .zero, blur: animationConfiguration.blurRadius * (1.0 - blurProgress), color: UIColor.black.withAlphaComponent(0.16).cgColor)
-            }
-            context.translateBy(x: 0.0, y: animationConfiguration.slideDistance * (1.0 - progress))
-            super.drawGlyphs(forGlyphRange: NSRange(location: glyphIndex, length: 1), at: origin)
-            context.restoreGState()
+
+            let linear = min(1.0, max(0.0, characterElapsed / duration))
+            // easeOutCubic — matches the preview item and CAMediaTimingFunction(.easeOut)
+            // far better than the previous linear ramp, which is a large part of why
+            // the effect read as "cheap".
+            let progress = CGFloat(1.0 - pow(1.0 - linear, 3.0))
+
+            self.drawAnimatingGlyph(glyph, progress: progress, characterElapsed: characterElapsed, origin: origin, context: context)
+            cursor = max(cursor, NSMaxRange(glyph.glyphRange))
         }
-        flushUnanimated()
+        if cursor < glyphsToShow.upperBound {
+            super.drawGlyphs(forGlyphRange: NSRange(location: cursor, length: glyphsToShow.upperBound - cursor), at: origin)
+        }
+    }
+
+    private func drawAnimatingGlyph(_ glyph: AnimatedGlyph, progress: CGFloat, characterElapsed: TimeInterval, origin: CGPoint, context: CGContext) {
+        let blurRadius: CGFloat
+        if animationConfiguration.blurEnabled {
+            let blurElapsed = characterElapsed - max(animationConfiguration.blurTextDelay, 0.0)
+            let blurLinear = min(1.0, max(0.0, blurElapsed / max(animationConfiguration.blurDuration, 0.001)))
+            let eased = CGFloat(1.0 - pow(1.0 - blurLinear, 3.0))
+            blurRadius = animationConfiguration.blurRadius * (1.0 - eased)
+        } else {
+            blurRadius = 0.0
+        }
+
+        context.saveGState()
+        defer { context.restoreGState() }
+
+        let center = CGPoint(x: glyph.center.x + origin.x, y: glyph.center.y + origin.y)
+
+        context.setAlpha(progress)
+        context.translateBy(x: 0.0, y: animationConfiguration.slideDistance * (1.0 - progress))
+        context.translateBy(x: center.x, y: center.y)
+        if animationConfiguration.scaleEnabled {
+            let start = animationConfiguration.scaleStart
+            let scale = start + (1.0 - start) * progress
+            if scale > 0.001 {
+                context.scaleBy(x: scale, y: scale)
+            }
+        }
+        if animationConfiguration.rotateEnabled {
+            context.rotate(by: (animationConfiguration.rotateAngle * .pi / 180.0) * (1.0 - progress))
+        }
+        context.translateBy(x: -center.x, y: -center.y)
+
+        // A real blur, not a drop shadow: rasterise the single glyph into a small
+        // tile and run a true Gaussian over it. Below ~0.4pt the blur is visually
+        // indistinguishable from sharp text, so draw directly and skip the tile.
+        guard blurRadius > 0.4, let blurred = self.blurredGlyphImage(glyph, blurRadius: blurRadius) else {
+            super.drawGlyphs(forGlyphRange: glyph.glyphRange, at: origin)
+            return
+        }
+        context.draw(blurred.image, in: blurred.rect.offsetBy(dx: origin.x, dy: origin.y))
+    }
+
+    /// Renders one glyph into a small offscreen tile and Gaussian-blurs it.
+    ///
+    /// Blur radius is quantised to `blurLevelCount` steps and memoised per
+    /// (glyph, step). A Core Image render is therefore done at most
+    /// `glyphs x blurLevelCount` times for an ENTIRE insertion, instead of once per
+    /// glyph per frame — which at 120Hz would be an order of magnitude more work and
+    /// is what would actually make this lag. Quantisation is invisible because alpha
+    /// and offset still animate continuously underneath.
+    private func blurredGlyphImage(_ glyph: AnimatedGlyph, blurRadius: CGFloat) -> (image: CGImage, rect: CGRect)? {
+        let maxRadius = max(animationConfiguration.blurRadius, 0.001)
+        let step = max(1, min(Self.blurLevelCount, Int(ceil(blurRadius / maxRadius * CGFloat(Self.blurLevelCount)))))
+        let quantisedRadius = maxRadius * CGFloat(step) / CGFloat(Self.blurLevelCount)
+
+        let cacheKey = BlurCacheKey(glyphLocation: glyph.glyphRange.location, level: step)
+        if let cached = self.blurCache[cacheKey] {
+            return cached.flatMap { entry in (entry.image, entry.rect) }
+        }
+
+        let computed = self.renderBlurredGlyph(glyph, blurRadius: quantisedRadius)
+        // Negative results are cached too, so a glyph that cannot be blurred does not
+        // retry the whole pipeline every frame.
+        self.blurCache[cacheKey] = computed.map { BlurCacheEntry(image: $0.image, rect: $0.rect) }
+        return computed
+    }
+
+    private func renderBlurredGlyph(_ glyph: AnimatedGlyph, blurRadius: CGFloat) -> (image: CGImage, rect: CGRect)? {
+        let pad = ceil(blurRadius * 3.0) + 2.0
+        let tileRect = glyph.bounds.insetBy(dx: -pad, dy: -pad)
+        guard tileRect.width > 0.0, tileRect.height > 0.0,
+              tileRect.width < 512.0, tileRect.height < 512.0 else {
+            return nil
+        }
+
+        let scale = min(UIScreen.main.scale, 2.0)
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.scale = scale
+        format.opaque = false
+
+        // Re-entrancy guard: drawing into the tile calls back into drawGlyphs.
+        if self.isRenderingBlurTile {
+            return nil
+        }
+        self.isRenderingBlurTile = true
+        let renderer = UIGraphicsImageRenderer(size: tileRect.size, format: format)
+        let tile = renderer.image { _ in
+            // Shift the glyph so its blurred ink lands inside the tile.
+            super.drawGlyphs(forGlyphRange: glyph.glyphRange, at: CGPoint(x: -tileRect.minX, y: -tileRect.minY))
+        }
+        self.isRenderingBlurTile = false
+
+        guard let tileCG = tile.cgImage else {
+            return nil
+        }
+
+        // Deterministic CPU blur (three box passes ≈ Gaussian). The tiles are
+        // tiny (one glyph plus padding), so this costs microseconds — unlike
+        // the shared GPU CIContext, which stutters on the simulator and was
+        // the main source of dropped frames while blur was enabled.
+        let pixelRadius = max(1, Int((blurRadius * scale).rounded()))
+        guard let blurred = Self.boxBlurred(image: tileCG, radius: pixelRadius) else {
+            return nil
+        }
+        return (blurred, tileRect)
+    }
+
+    /// Pure-CPU box blur of a small RGBA tile: three horizontal+vertical box
+    /// passes approximate a Gaussian closely. Premultiplied alpha is blurred
+    /// as-is, which is the correct compositing behavior.
+    private static func boxBlurred(image: CGImage, radius: Int) -> CGImage? {
+        let width = image.width
+        let height = image.height
+        guard width > 0, height > 0, width * height <= 512 * 512 else {
+            return image
+        }
+        let space = CGColorSpaceCreateDeviceRGB()
+        let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        let drawn: Bool = bytes.withUnsafeMutableBytes { buffer -> Bool in
+            guard let base = buffer.baseAddress,
+                  let context = CGContext(data: base, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4, space: space, bitmapInfo: bitmapInfo) else {
+                return false
+            }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard drawn else {
+            return nil
+        }
+
+        var src = bytes
+        var dst = [UInt8](repeating: 0, count: bytes.count)
+        for _ in 0 ..< 3 {
+            Self.boxPass(&src, &dst, width: width, height: height, radius: radius, horizontal: true)
+            swap(&src, &dst)
+            Self.boxPass(&src, &dst, width: width, height: height, radius: radius, horizontal: false)
+            swap(&src, &dst)
+        }
+
+        let result = src.withUnsafeMutableBytes { buffer -> CGImage? in
+            guard let base = buffer.baseAddress,
+                  let context = CGContext(data: base, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4, space: space, bitmapInfo: bitmapInfo) else {
+                return nil
+            }
+            return context.makeImage()
+        }
+        return result
+    }
+
+    /// One horizontal or vertical box pass with clamped edges, using a
+    /// running sum per channel so the cost is linear in pixels.
+    private static func boxPass(_ src: inout [UInt8], _ dst: inout [UInt8], width: Int, height: Int, radius: Int, horizontal: Bool) {
+        let outer = horizontal ? height : width
+        let inner = horizontal ? width : height
+        let div = radius * 2 + 1
+        func offset(_ o: Int, _ i: Int) -> Int {
+            if horizontal {
+                return (o * inner + i) * 4
+            }
+            return (i * outer + o) * 4
+        }
+        for o in 0 ..< outer {
+            var sums = [Int](repeating: 0, count: 4)
+            for i in -radius ... radius {
+                let ci = min(max(i, 0), inner - 1)
+                let base = offset(o, ci)
+                sums[0] += Int(src[base])
+                sums[1] += Int(src[base + 1])
+                sums[2] += Int(src[base + 2])
+                sums[3] += Int(src[base + 3])
+            }
+            for i in 0 ..< inner {
+                let base = offset(o, i)
+                dst[base] = UInt8(sums[0] / div)
+                dst[base + 1] = UInt8(sums[1] / div)
+                dst[base + 2] = UInt8(sums[2] / div)
+                dst[base + 3] = UInt8(sums[3] / div)
+                let add = min(i + radius + 1, inner - 1)
+                let sub = max(i - radius, 0)
+                let addBase = offset(o, add)
+                let subBase = offset(o, sub)
+                sums[0] += Int(src[addBase]) - Int(src[subBase])
+                sums[1] += Int(src[addBase + 1]) - Int(src[subBase + 1])
+                sums[2] += Int(src[addBase + 2]) - Int(src[subBase + 2])
+                sums[3] += Int(src[addBase + 3]) - Int(src[subBase + 3])
+            }
+        }
     }
 }
 
@@ -633,9 +1038,12 @@ private protocol ChatInputTextInternal: AnyObject {
     var defaultTextContainerInset: UIEdgeInsets { get set }
     
     var updateDisplayElements: (() -> Void)? { get set }
+    var invalidateAnimationRect: ((CGRect) -> Void)? { get set }
     var attributedString: NSAttributedString? { get }
     var animationConfiguration: ChatInputTextAnimationConfiguration { get set }
     func deletionRect(for characterRange: NSRange) -> CGRect
+    /// Shared insertion timeline for non-glyph decorations. nil = not animating.
+    func insertionAnimationState(forCharacterRange range: NSRange) -> (progress: CGFloat, slideDistance: CGFloat, scaleStart: CGFloat?)?
     
     func invalidateLayout()
     func setAttributedString(attributedString: NSAttributedString)
@@ -647,6 +1055,7 @@ private protocol ChatInputTextInternal: AnyObject {
 
 private extension ChatInputTextInternal {
     func deletionRect(for characterRange: NSRange) -> CGRect { return .null }
+    func insertionAnimationState(forCharacterRange range: NSRange) -> (progress: CGFloat, slideDistance: CGFloat, scaleStart: CGFloat?)? { return nil }
 }
 
 private final class ChatInputTextLegacyInternal: NSObject, ChatInputTextInternal, NSLayoutManagerDelegate, NSTextStorageDelegate {
@@ -658,6 +1067,11 @@ private final class ChatInputTextLegacyInternal: NSObject, ChatInputTextInternal
     
     var updateDisplayElements: (() -> Void)?
 
+    /// Set by the hosting view. Invoked per animation frame with the damage rect in
+    /// container coordinates, so the view can repaint only the animating pixels and
+    /// skip the full `updateTextElements()` + `setNeedsDisplay()` pass.
+    var invalidateAnimationRect: ((CGRect) -> Void)?
+
     var animationConfiguration: ChatInputTextAnimationConfiguration {
         get { return self.customLayoutManager.animationConfiguration }
         set { self.customLayoutManager.animationConfiguration = newValue }
@@ -667,6 +1081,13 @@ private final class ChatInputTextLegacyInternal: NSObject, ChatInputTextInternal
         let glyphRange = self.customLayoutManager.glyphRange(forCharacterRange: characterRange, actualCharacterRange: nil)
         guard glyphRange.length > 0 else { return .null }
         return self.customLayoutManager.boundingRect(forGlyphRange: glyphRange, in: self.textContainer)
+    }
+
+    func insertionAnimationState(forCharacterRange range: NSRange) -> (progress: CGFloat, slideDistance: CGFloat, scaleStart: CGFloat?)? {
+        guard let progress = self.customLayoutManager.insertionProgress(forCharacterRange: range) else {
+            return nil
+        }
+        return (progress, self.customLayoutManager.insertionSlideDistance, self.customLayoutManager.insertionScaleStart)
     }
     
     var attributedString: NSAttributedString? {
@@ -687,10 +1108,16 @@ private final class ChatInputTextLegacyInternal: NSObject, ChatInputTextInternal
         
         self.customLayoutManager.delegate = self
         self.customTextStorage.delegate = self
-        self.customLayoutManager.invalidateDisplay = { [weak self] in
+        self.customLayoutManager.invalidateDisplay = { [weak self] characterRange, damageRect in
             guard let self else { return }
-            self.customLayoutManager.invalidateDisplay(forCharacterRange: NSRange(location: 0, length: self.customTextStorage.length))
-            self.updateDisplayElements?()
+            // Scope the repaint to the animating characters instead of the whole
+            // document. `damageRect` is passed to the view so it can invalidate just
+            // the affected pixels rather than its full bounds.
+            let clamped = NSIntersectionRange(characterRange, NSRange(location: 0, length: self.customTextStorage.length))
+            if clamped.length > 0 {
+                self.customLayoutManager.invalidateDisplay(forCharacterRange: clamped)
+            }
+            self.invalidateAnimationRect?(damageRect)
         }
     }
     
@@ -938,6 +1365,8 @@ private final class ChatInputTextNewInternal: NSObject, ChatInputTextInternal, N
     var defaultTextContainerInset: UIEdgeInsets = UIEdgeInsets()
     
     var updateDisplayElements: (() -> Void)?
+    /// The TextKit 2 path does not run the legacy insertion animation.
+    var invalidateAnimationRect: ((CGRect) -> Void)?
     
     var attributedString: NSAttributedString? {
         return self.contentStorage.attributedString
@@ -1201,13 +1630,19 @@ public final class ChatInputTextCollapsedQuoteAttachmentImpl: NSTextAttachment, 
 private final class ChatInputSelectionOverlayView: UIView {
     private let selectionLayer = CAShapeLayer()
     private let cursorLayer = CAShapeLayer()
-    private var displayLink: CADisplayLink?
+    // Driven by the shared 120Hz-capable driver (same one the glyph-insertion
+    // animation uses) instead of a standalone CADisplayLink, so the caret never
+    // falls back to a lower, inconsistent refresh rate on ProMotion devices.
+    private var animationLink: SharedDisplayLinkDriver.Link?
     private var displayedCaret = CGPoint.zero
     private var targetCaret = CGPoint.zero
-    private var cursorSpeed: CGFloat = 30.0
+    // Points-per-second, constant-velocity travel speed. Deliberately NOT an
+    // exponential-decay factor: decay makes the caret sprint at the start of a
+    // move and crawl at the end, which reads as stutter. A constant speed makes
+    // every jump - short or long - look like the same smooth, even motion.
+    private var cursorVelocity: CGFloat = 640.0
     private var liquidEnabled = false
     private var liquidScale: CGFloat = 15.0
-    private var lastTimestamp: CFTimeInterval?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1219,30 +1654,52 @@ private final class ChatInputSelectionOverlayView: UIView {
         self.layer.addSublayer(self.cursorLayer)
     }
 
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 
-    deinit { displayLink?.invalidate() }
+    deinit { self.animationLink?.invalidate() }
 
-    private func tick(_ displayLink: CADisplayLink) {
-        let distance = hypot(targetCaret.x - displayedCaret.x, targetCaret.y - displayedCaret.y)
-        let delta = min(max(displayLink.timestamp - (lastTimestamp ?? displayLink.timestamp), 0.0), 1.0 / 30.0)
-        lastTimestamp = displayLink.timestamp
-        let amount = min(1.0, 1.0 - CGFloat(exp(-(7.0 + cursorSpeed / 7.5) * delta)))
-        // Treat a wrapped line as a new visual segment instead of drawing a diagonal teleport.
-        let lineWrap = abs(targetCaret.y - displayedCaret.y) > max(12.0, cursorLayer.bounds.height * 0.8)
-        let step = lineWrap ? 1.0 : amount
-        displayedCaret.x += (targetCaret.x - displayedCaret.x) * step
-        displayedCaret.y += (targetCaret.y - displayedCaret.y) * step
+    private func startAnimationLink() {
+        guard self.animationLink == nil else { return }
+        self.animationLink = SharedDisplayLinkDriver.shared.add(framesPerSecond: .max) { [weak self] dt in
+            self?.tick(dt)
+        }
+    }
+
+    private func stopAnimationLink() {
+        self.animationLink?.invalidate()
+        self.animationLink = nil
+    }
+
+    private func tick(_ frameDuration: CGFloat) {
+        // Clamp against large gaps (e.g. after the run loop was briefly starved)
+        // so a single resumed frame cannot make the caret jump far past its target.
+        let delta = min(max(frameDuration, 0.0), 1.0 / 20.0)
+        let dx = targetCaret.x - displayedCaret.x
+        let dy = targetCaret.y - displayedCaret.y
+        let distance = hypot(dx, dy)
+        if distance <= 0.5 || delta <= 0.0 {
+            displayedCaret = targetCaret
+            cursorLayer.position = displayedCaret
+            cursorLayer.transform = CATransform3DIdentity
+            self.stopAnimationLink()
+            return
+        }
+        let travel = min(distance, cursorVelocity * delta)
+        let fraction = travel / distance
+        displayedCaret.x += dx * fraction
+        displayedCaret.y += dy * fraction
         cursorLayer.position = displayedCaret
         if liquidEnabled {
-            cursorLayer.transform = CATransform3DMakeScale(1.0, 1.0 + liquidScale / 100.0 * min(1.0, distance / 40.0), 1.0)
+            let remaining = hypot(targetCaret.x - displayedCaret.x, targetCaret.y - displayedCaret.y)
+            cursorLayer.transform = CATransform3DMakeScale(1.0, 1.0 + liquidScale / 100.0 * min(1.0, remaining / 40.0), 1.0)
         }
-        if distance < 0.25 {
-            cursorLayer.position = targetCaret
+        if hypot(targetCaret.x - displayedCaret.x, targetCaret.y - displayedCaret.y) <= 0.5 {
+            displayedCaret = targetCaret
+            cursorLayer.position = displayedCaret
             cursorLayer.transform = CATransform3DIdentity
-            self.displayLink?.invalidate()
-            self.displayLink = nil
-            lastTimestamp = nil
+            self.stopAnimationLink()
         }
     }
 
@@ -1299,14 +1756,16 @@ private final class ChatInputSelectionOverlayView: UIView {
     func updateCaret(_ rect: CGRect, color: UIColor, configuration: ChatInputTextAnimationConfiguration, animated: Bool) {
         guard configuration.cursorEnabled, !rect.isNull else {
             cursorLayer.isHidden = true
-            displayLink?.invalidate()
-            displayLink = nil
-            lastTimestamp = nil
+            self.stopAnimationLink()
             return
         }
         cursorLayer.isHidden = false
         cursorLayer.backgroundColor = color.cgColor
-        cursorSpeed = configuration.cursorSpeed
+        // Map the 1...100 "speed" setting to a constant points-per-second velocity.
+        // This keeps the caret's motion rate uniform for a given setting value,
+        // regardless of how far a single jump is - unlike the previous exponential
+        // decay, where the same setting produced a fast start and a slow, draggy tail.
+        cursorVelocity = 200.0 + configuration.cursorSpeed * 20.0
         liquidEnabled = configuration.liquidCursorEnabled
         liquidScale = configuration.liquidCursorScale
         cursorLayer.cornerRadius = configuration.cursorWidth * 0.5
@@ -1319,11 +1778,8 @@ private final class ChatInputSelectionOverlayView: UIView {
             cursorLayer.transform = CATransform3DIdentity
         }
         if displayedCaret == .zero || !animated { displayedCaret = targetCaret; cursorLayer.position = displayedCaret }
-        else if displayLink == nil {
-            lastTimestamp = nil
-            let link = CADisplayLink(target: DisplayLinkTarget { [weak self] link in self?.tick(link) }, selector: #selector(DisplayLinkTarget.event(_:)))
-            link.add(to: .main, forMode: .common)
-            displayLink = link
+        else if self.animationLink == nil {
+            self.startAnimationLink()
         }
     }
 }
@@ -1398,7 +1854,39 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
                 let selectedRange = self.selectedRange
                 let preserveSelectedRange = selectedRange.location != self.textStorage.length
                 
-                super.attributedText = value ?? NSAttributedString()
+                // UTF-16 code units, which is what the in-place write below walks. Swift's `==`
+                // compares canonical equivalence, so precomposed "é" equalled "e" + U+0301 and the
+                // attribute walk ran past (or short of) the storage (`HarnessLegacyNormalizationSetTests`).
+                let sameCharacters = (self.textStorage.string as NSString).isEqual(to: value?.string ?? "")
+                if self.appliesTextInPlace || sameCharacters {
+                    // A programmatic `attributedText` set clears UITextView's undo stack
+                    // (`-[UITextInputController _textStorageDidProcessEditing:]` calls
+                    // `removeAllActions` for it), so write through the text storage instead: always
+                    // inside `performUndoableTextChange`, and for ANY write that leaves the characters
+                    // alone. The second half is what keeps the history across the host's echoes: the
+                    // chat pushes its input state back on every selection change, the node decorates
+                    // the storage after each set (`refreshDecorationFromStoredConfig`), so the next
+                    // echo's freshly built string differs in attributes alone — and it used to be a full
+                    // set that wiped every step, a Quote/Code command's included, on the first caret
+                    // move after it (composer harness, 2026-09-23,
+                    // `HarnessLegacyBlockFormatUndoAfterTypingTests`).
+                    let value = value ?? NSAttributedString()
+                    self.textStorage.beginEditing()
+                    if sameCharacters {
+                        // Attributes only, so the edit is reported as one (a character edit from
+                        // outside the input controller drops UIKit's typing steps).
+                        value.enumerateAttributes(in: NSRange(location: 0, length: value.length), options: [], using: { attributes, range, _ in
+                            self.textStorage.setAttributes(attributes, range: range)
+                        })
+                    } else {
+                        // A character change still drops UIKit's earlier typing steps (measured:
+                        // replacing only the differing span does too); the step itself is kept.
+                        self.textStorage.setAttributedString(value)
+                    }
+                    self.textStorage.endEditing()
+                } else {
+                    super.attributedText = value ?? NSAttributedString()
+                }
                 
                 if preserveSelectedRange {
                     self.isPreservingSelection = true
@@ -1414,6 +1902,67 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
     fileprivate var isPreservingSelection: Bool = false
     fileprivate var isPreservingText: Bool = false
     
+    /// While set, `attributedText` writes go through the text storage in place (see the setter).
+    private var appliesTextInPlace: Bool = false
+    
+    /// Runs `body` — a programmatic change of this view's text, typically a host command whose new
+    /// state comes back through `attributedText` (a Format command, pushed back by the chat's
+    /// `updateInputTextState`) — as ONE step on the view's own undo manager, keeping the steps
+    /// already on it. Undo restores the text and selection from before `body`, redo the ones after;
+    /// each restore is reported as a user edit (`textViewDidChange`) so the host re-reads the state,
+    /// and the host's echo of it is applied in place too. A `body` that changes nothing registers
+    /// nothing.
+    ///
+    /// Why not simply `attributedText =`: a programmatic set clears UITextView's undo stack, which
+    /// made every legacy Format command both un-undoable and a wipe of the typing history before it.
+    /// Writing through the text storage leaves the stack alone, and restoring the exact pre-command
+    /// text on undo keeps every older step consistent with the text it expects.
+    ///
+    /// Re-entrant: a call inside another one runs `body` and leaves the registering to the outer
+    /// call, so a command wrapped at two levels (the Format menu around the chat's own
+    /// `performUndoableInputChange`) is still ONE step.
+    public func performUndoableTextChange(_ body: () -> Void) {
+        if self.appliesTextInPlace {
+            body()
+            return
+        }
+        let before = NSAttributedString(attributedString: self.attributedText ?? NSAttributedString())
+        let beforeSelection = self.selectedRange
+        let previous = self.appliesTextInPlace
+        self.appliesTextInPlace = true
+        body()
+        self.appliesTextInPlace = previous
+        let after = self.attributedText ?? NSAttributedString()
+        if before.isEqual(to: after) {
+            return
+        }
+        self.registerTextRestore(text: before, selection: beforeSelection)
+    }
+    
+    private func registerTextRestore(text: NSAttributedString, selection: NSRange) {
+        guard let undoManager = self.undoManager else {
+            return
+        }
+        undoManager.registerUndo(withTarget: self, handler: { target in
+            target.restoreText(text, selection: selection)
+        })
+    }
+    
+    private func restoreText(_ text: NSAttributedString, selection: NSRange) {
+        let current = NSAttributedString(attributedString: self.attributedText ?? NSAttributedString())
+        let currentSelection = self.selectedRange
+        let previous = self.appliesTextInPlace
+        self.appliesTextInPlace = true
+        self.attributedText = text
+        let length = self.textStorage.length
+        let location = min(selection.location, length)
+        self.selectedRange = NSRange(location: location, length: min(selection.length, length - location))
+        self.textViewDidChange(self)
+        self.appliesTextInPlace = previous
+        // Registered while the undo manager is undoing (redoing), this lands on the redo (undo) stack.
+        self.registerTextRestore(text: current, selection: currentSelection)
+    }
+    
     public weak var customDelegate: ChatInputTextNodeDelegate?
     
     public var theme: Theme? {
@@ -1426,6 +1975,10 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
     
     public var toggleQuoteCollapse: ((NSRange) -> Void)?
     public var onUpdateLayout: (() -> Void)?
+    /// Fired once per insertion-animation frame. Intended ONLY for cheap per-frame
+    /// work on decorations that are subviews rather than glyphs (custom emoji).
+    /// Must not trigger layout or rect recomputation.
+    public var onInsertionAnimationFrame: (() -> Void)?
         
     private let displayInternal: ChatInputTextInternal
     private let measureInternal: ChatInputTextInternal
@@ -1437,14 +1990,17 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
             return self.textAnimationConfigurationValue
         }
         set {
-            if self.textAnimationConfigurationValue != newValue {
-                self.textAnimationConfigurationValue = newValue
-                self.displayInternal.invalidateLayout()
-            } else {
-                self.textAnimationConfigurationValue = newValue
+            // The settings observer fires on EVERY app-wide UserDefaults write, so an
+            // unchanged config must cost nothing: no relayout, no repaint, no overlay
+            // recompute.
+            if self.textAnimationConfigurationValue == newValue {
+                return
             }
+            self.textAnimationConfigurationValue = newValue
             self.displayInternal.animationConfiguration = newValue
-            self.measureInternal.animationConfiguration = newValue
+            // measureInternal is deliberately NOT given the animation config: height
+            // measurement must never animate or it jitters the panel height.
+            self.displayInternal.invalidateLayout()
             self.setNeedsDisplay()
             self.updateSelectionOverlay(animated: false)
         }
@@ -1453,17 +2009,86 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
     // Kept above the text renderer and outside UIKit's selection/caret machinery.
     // This is intentionally a one-shot, small CAEmitterLayer rather than a custom
     // text view animation so deletion cannot interfere with input or selection.
+    //
+    // The emitter's own `frame` is clipped to the deleted-text rect (plus a
+    // small margin) with `masksToBounds = true` so particles can never
+    // visually paint over the caret, the selection highlight, or unrelated
+    // text - the emitter used to be sized to the entire overlay view, which
+    // let fast-moving particles travel across the whole input.
     private var deletionParticleLayer: CAEmitterLayer?
+    /// Timestamp of the previous deletion, used to distinguish a held backspace
+    /// (rapid repeats) from isolated presses for the particle effect.
+    private var lastDeletionTimestamp: TimeInterval = 0.0
+    // The cell is created once and its properties are mutated in place on every
+    // subsequent burst. Reassigning `emitter.emitterCells` forces Core Animation's
+    // render server to tear down and rebuild the whole particle system; during a
+    // held/fast backspace this function runs once per deleted character, so doing
+    // that unconditionally on every call was the dominant cause of the jank/lag.
+    private var deletionParticleCell: CAEmitterCell?
+    private var deletionParticleStopWorkItem: DispatchWorkItem?
+    private var deletionParticleRemoveWorkItem: DispatchWorkItem?
     private let selectionOverlayView = ChatInputSelectionOverlayView()
     private var nativeTintColor: UIColor?
 
+    /// Inputs that fully determine the overlay. `updateSelectionOverlay` is called
+    /// from layoutSubviews AND setContentOffset (i.e. during every scroll frame), so
+    /// it must not call the expensive UIKit geometry APIs unless something changed.
+    private struct SelectionOverlayState: Equatable {
+        var bounds: CGRect
+        var contentOffset: CGPoint
+        var contentSize: CGSize
+        var selectedRange: NSRange
+        /// Guards the case where the text changes but the selection does not
+        /// (programmatic replacement), which still moves the caret.
+        var textLength: Int
+        var isFirstResponder: Bool
+        var hasMarkedText: Bool
+        var configuration: ChatInputTextAnimationConfiguration
+    }
+    private var lastSelectionOverlayState: SelectionOverlayState?
+
+    /// Repaints only the pixels an in-flight insertion animation touches.
+    /// `rect` is in text-container coordinates.
+    private func setNeedsDisplayInAnimationRect(_ rect: CGRect) {
+        guard !rect.isNull, !rect.isInfinite,
+              rect.origin.x.isFinite, rect.origin.y.isFinite,
+              rect.size.width.isFinite, rect.size.height.isFinite else {
+            self.setNeedsDisplay()
+            return
+        }
+        let viewRect = rect.offsetBy(dx: self.textContainerInset.left, dy: self.textContainerInset.top)
+        let clipped = viewRect.intersection(CGRect(origin: .zero, size: self.contentSize))
+        if clipped.isNull || clipped.isEmpty {
+            return
+        }
+        self.setNeedsDisplay(clipped)
+    }
+
     private func updateSelectionOverlay(animated: Bool) {
+        let configuration = self.textAnimationConfigurationValue
+        let hasMarkedText = self.markedTextRange != nil
+
+        let state = SelectionOverlayState(
+            bounds: self.bounds,
+            contentOffset: self.contentOffset,
+            contentSize: self.contentSize,
+            selectedRange: self.selectedRange,
+            textLength: self.displayInternal.attributedString?.length ?? 0,
+            isFirstResponder: self.isFirstResponder,
+            hasMarkedText: hasMarkedText,
+            configuration: configuration
+        )
+        // An animated call is an explicit request for a visible transition, so it is
+        // never skipped; the idempotent layout/scroll-driven calls are.
+        if !animated, self.lastSelectionOverlayState == state {
+            return
+        }
+        self.lastSelectionOverlayState = state
+
         // The overlay is a subview of the scroll view. Its frame is therefore in
         // the text view's content coordinate space; converting the UIKit rects is
         // important when textContainerInset, zooming, or scrolling are involved.
         self.selectionOverlayView.frame = self.bounds
-        let configuration = self.textAnimationConfigurationValue
-        let hasMarkedText = self.markedTextRange != nil
         let hasSelection = self.selectedRange.length != 0
         var selectionRects: [CGRect] = []
         if self.isFirstResponder, !hasMarkedText, hasSelection, let range = self.selectedTextRange {
@@ -1503,53 +2128,132 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
         rect = rect.offsetBy(dx: self.textContainerInset.left, dy: self.textContainerInset.top)
         rect = self.selectionOverlayView.convert(rect, from: self)
         guard rect.isNull == false, rect.intersects(self.selectionOverlayView.bounds) else { return }
+        // Clip to what is actually on-screen before using it as the mask rect below.
+        rect = rect.intersection(self.selectionOverlayView.bounds)
+        guard !rect.isEmpty else { return }
 
-        self.deletionParticleLayer?.removeFromSuperlayer()
-        let emitter = CAEmitterLayer()
-        emitter.frame = self.selectionOverlayView.bounds
-        emitter.emitterShape = .rectangle
-        emitter.emitterMode = .surface
-        emitter.emitterPosition = CGPoint(x: rect.midX, y: rect.midY)
-        emitter.emitterSize = CGSize(width: max(4.0, rect.width), height: max(4.0, rect.height))
-        emitter.renderMode = .oldestLast
+        // Clip the whole effect to the deleted-text rect (plus a small margin)
+        // instead of the entire overlay view. The overlay also hosts the live
+        // caret and selection-highlight layers, so a full-view-sized emitter
+        // let particles visually travel across the caret and unrelated text;
+        // only the birth location was constrained before, not where the
+        // layer was actually allowed to paint.
+        let margin: CGFloat = 6.0
+        let maskFrame = rect.insetBy(dx: -margin, dy: -margin).intersection(self.selectionOverlayView.bounds)
+        guard !maskFrame.isEmpty else { return }
+
+        // Reuse one emitter layer AND one cell across bursts. Reassigning
+        // `emitterCells` on an already-running emitter forces Core Animation's
+        // render server to tear down and rebuild the whole particle system;
+        // fast/held backspacing invokes this once per deleted character, so
+        // doing that unconditionally on every call (as before) was the
+        // dominant cause of the visible stutter. From here on, only geometry
+        // is re-set each call - the cell's own parameters are mutated in
+        // place instead of being replaced.
+        let emitter: CAEmitterLayer
+        let cell: CAEmitterCell
+        if let currentEmitter = self.deletionParticleLayer, let currentCell = self.deletionParticleCell {
+            emitter = currentEmitter
+            cell = currentCell
+        } else {
+            emitter = CAEmitterLayer()
+            emitter.emitterShape = .rectangle
+            emitter.emitterMode = .surface
+            emitter.renderMode = .oldestLast
+            // Hard-clip the layer's own painted region to its frame so the
+            // mask below is not just advisory.
+            emitter.masksToBounds = true
+            cell = CAEmitterCell()
+            cell.contents = Self.deletionParticleImage.cgImage
+            emitter.emitterCells = [cell]
+            self.selectionOverlayView.layer.addSublayer(emitter)
+            self.deletionParticleLayer = emitter
+            self.deletionParticleCell = cell
+        }
+
+        // This is a bare CALayer sublayer, not a UIView's own `.layer`, so it has
+        // no delegate to answer Core Animation's implicit-action lookup the way
+        // UIKit wires up for view-backed layers. Without this, every property
+        // write below (frame/emitterPosition/emitterSize/birthRate) implicitly
+        // animates with CA's default ~0.25s curve; during fast/held backspacing
+        // a new burst's geometry/birthRate change would still be interpolating
+        // from the previous call when the next one landed, stacking overlapping
+        // transitions - the actual mechanism behind both the reported stutter
+        // and the mask rect appearing to drift/smear instead of snapping.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+
+        emitter.frame = maskFrame
+        // emitterPosition/emitterSize are expressed in the emitter layer's own
+        // coordinate space. That space now starts at maskFrame.origin instead
+        // of (0, 0) in the overlay view, so the deletion rect has to be
+        // re-expressed relative to the (now much smaller) frame.
+        let localRect = rect.offsetBy(dx: -maskFrame.origin.x, dy: -maskFrame.origin.y)
+        emitter.emitterPosition = CGPoint(x: localRect.midX, y: localRect.midY)
+        emitter.emitterSize = CGSize(width: max(4.0, localRect.width), height: max(4.0, localRect.height))
         emitter.seed = UInt32.random(in: 0 ... UInt32.max)
 
-        let cell = CAEmitterCell()
-        cell.contents = Self.deletionParticleImage.cgImage
-        cell.birthRate = Float(self.textAnimationConfigurationValue.deletionParticleCount) / 0.08
-        cell.lifetime = 0.55
-        cell.lifetimeRange = 0.12
-        cell.velocity = 12.0 + 0.6 * CGFloat(self.textAnimationConfigurationValue.deletionParticleSpeed)
-        cell.velocityRange = 4.0 + 0.4 * CGFloat(self.textAnimationConfigurationValue.deletionParticleSpread)
+        let configuration = self.textAnimationConfigurationValue
+        // Deliberately ~10x subtler than the original burst: at most one or two
+        // small, short-lived motes per deleted character instead of a spray.
+        cell.birthRate = Float(max(1, configuration.deletionParticleCount / 10)) / 0.08
+        cell.lifetime = 0.3
+        cell.lifetimeRange = 0.08
+        cell.velocity = 8.0 + 0.3 * CGFloat(configuration.deletionParticleSpeed)
+        cell.velocityRange = 3.0 + 0.25 * CGFloat(configuration.deletionParticleSpread)
         cell.emissionLongitude = -.pi / 2.0
-        cell.emissionRange = .pi * 2.0 * CGFloat(self.textAnimationConfigurationValue.deletionParticleSpread) / 100.0
-        let particleScale = 0.15 + 0.009 * CGFloat(self.textAnimationConfigurationValue.deletionParticleSize)
+        cell.emissionRange = .pi * 2.0 * CGFloat(configuration.deletionParticleSpread) / 100.0
+        let particleScale = 0.07 + 0.0045 * CGFloat(configuration.deletionParticleSize)
         cell.scale = particleScale
-        cell.scaleRange = particleScale * 0.45
-        switch self.textAnimationConfigurationValue.deletionParticleStyle {
+        cell.scaleRange = particleScale * 0.35
+        // Shrinking the particle in step with its fade reads as a soft
+        // dissolve instead of a flat shape blinking out; same total
+        // lifetime as before, just a less cheap-looking exit.
+        cell.scaleSpeed = -particleScale / CGFloat(cell.lifetime)
+        // The cell is reused across calls, so every branch (including the
+        // default) must set contents explicitly - otherwise switching the
+        // style setting back to "dot" after a burst already rendered
+        // "square"/"star" would silently keep showing the old shape.
+        switch configuration.deletionParticleStyle {
         case 1:
             cell.contents = Self.deletionParticleSquareImage.cgImage
         case 2:
             cell.contents = Self.deletionParticleStarImage.cgImage
         default:
-            break
+            cell.contents = Self.deletionParticleImage.cgImage
         }
-        cell.alphaSpeed = -1.55
-        cell.spinRange = 1.2
-        cell.yAcceleration = 8.0
-        emitter.emitterCells = [cell]
-        self.selectionOverlayView.layer.addSublayer(emitter)
-        self.deletionParticleLayer = emitter
+        cell.alphaSpeed = -2.4
+        cell.spinRange = 0.8
+        cell.yAcceleration = 6.0
+        emitter.birthRate = 1.0
+        CATransaction.commit()
+
+        // Both teardown steps are tracked so a new burst cancels the pending ones
+        // instead of having them fight over a shared layer.
+        self.deletionParticleStopWorkItem?.cancel()
+        self.deletionParticleRemoveWorkItem?.cancel()
 
         // A zero birth rate after the initial burst prevents a repeating effect.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak emitter] in
-            emitter?.birthRate = 0.0
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self, weak emitter] in
+        let stopItem = DispatchWorkItem { [weak self] in
             guard let self, self.deletionParticleLayer === emitter else { return }
-            emitter?.removeFromSuperlayer()
-            self.deletionParticleLayer = nil
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            emitter.birthRate = 0.0
+            CATransaction.commit()
         }
+        self.deletionParticleStopWorkItem = stopItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: stopItem)
+
+        let removeItem = DispatchWorkItem { [weak self] in
+            guard let self, self.deletionParticleLayer === emitter else { return }
+            emitter.removeFromSuperlayer()
+            self.deletionParticleLayer = nil
+            self.deletionParticleCell = nil
+            self.deletionParticleStopWorkItem = nil
+            self.deletionParticleRemoveWorkItem = nil
+        }
+        self.deletionParticleRemoveWorkItem = removeItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: removeItem)
     }
 
     private static let deletionParticleImage: UIImage = {
@@ -1638,6 +2342,18 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
             self.updateTextElements()
             self.setNeedsDisplay()
         }
+
+        // Per-frame animation repaint. Deliberately does NOT call
+        // updateTextElements(): blockquote frames and custom-emoji rects cannot
+        // change mid-insertion-animation, and recomputing them every frame was the
+        // dominant cost of the old implementation.
+        self.displayInternal.invalidateAnimationRect = { [weak self] damageRect in
+            guard let self else {
+                return
+            }
+            self.setNeedsDisplayInAnimationRect(damageRect)
+            self.onInsertionAnimationFrame?()
+        }
         
         self.shouldRespondToAction = { [weak self] action in
             guard let self, let action else {
@@ -1717,6 +2433,11 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
+
+    deinit {
+        self.deletionParticleStopWorkItem?.cancel()
+        self.deletionParticleRemoveWorkItem?.cancel()
+    }
     
     override public func scrollRectToVisible(_ rect: CGRect, animated: Bool) {
         var rect = rect
@@ -1780,7 +2501,7 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
         // placement.
         guard let customDelegate = self.customDelegate else {
             if text.isEmpty, range.length > 0 {
-                self.beginDeletionParticleAnimation(for: range)
+                self.registerDeletion(for: range)
             }
             return true
         }
@@ -1789,9 +2510,21 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
         }
         let shouldChange = customDelegate.chatInputTextNode(shouldChangeTextIn: range, replacementText: text)
         if shouldChange, text.isEmpty, range.length > 0 {
-            self.beginDeletionParticleAnimation(for: range)
+            self.registerDeletion(for: range)
         }
         return shouldChange
+    }
+
+    /// Particles only fire for a HELD backspace (iOS key repeat emits a
+    /// deletion roughly every 33ms after the initial delay). A single, isolated
+    /// press deletes cleanly with no effect.
+    private func registerDeletion(for range: NSRange) {
+        let now = CACurrentMediaTime()
+        let isHeldRepeat = now - self.lastDeletionTimestamp < 0.3
+        self.lastDeletionTimestamp = now
+        if isHeldRepeat {
+            self.beginDeletionParticleAnimation(for: range)
+        }
     }
     
     public func updateTextContainerInset() {
@@ -1890,6 +2623,14 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
     
     public func lastLineBoundingRect() -> CGRect {
         return self.displayInternal.currentTextLastLineBoundingRect()
+    }
+
+    /// Current insertion-animation state for a character range, so decorations that
+    /// are real subviews rather than glyphs (custom emoji) can match the text
+    /// timeline exactly instead of popping in while the text around them fades.
+    /// Returns nil when nothing is animating at that range.
+    public func insertionAnimationState(forCharacterRange range: NSRange) -> (progress: CGFloat, slideDistance: CGFloat, scaleStart: CGFloat?)? {
+        return self.displayInternal.insertionAnimationState(forCharacterRange: range)
     }
     
     public func updateTextElements() {

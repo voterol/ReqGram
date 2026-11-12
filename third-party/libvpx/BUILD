@@ -1,5 +1,7 @@
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
 headers = [
     "vp8.h",
     "vp8cx.h",

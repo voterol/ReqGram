@@ -1,5 +1,10 @@
 "Settings.ContentSettings" = "Content Settings";
 
+"Settings.FullChannelViewCounts" = "Full Channel View Counts";
+"Settings.FullChannelViewCounts.Notice" = "Show channel message views without K/M abbreviations. Uses the latest available count and applies when messages are laid out again.";
+"Settings.ChannelForwardCounts" = "Show Channel Forward Counts";
+"Settings.AddCommaAfterMention" = "Add Comma After Mention";
+
 "SG.ScamWarning.Title" = "Warning: this user is listed in the SG Scam Registry";
 "SG.ScamWarning.Source" = "Source: GID_ScamBase · external source";
 "SG.ScamWarning.Profile" = "**Warning:** this user is listed in SG Scam. [View source](https://t.me/GID_ScamBase).";
@@ -25,6 +30,8 @@
 "Settings.Folders.RememberLast.Notice" = "ReqGram will open the last used folder when you restart the app or switch accounts.";
 
 "Settings.Folders.CompactNames" = "Smaller spacing";
+"Settings.Folders.HideArchiveFolder" = "Hide Archive Folder";
+"Settings.Folders.HideUnreadCounters" = "Hide Folder Unread Counters";
 "Settings.Folders.AllChatsTitle" = "\"All Chats\" title";
 "Settings.Folders.AllChatsTitle.short" = "Short";
 "Settings.Folders.AllChatsTitle.long" = "Long";
@@ -34,6 +41,8 @@
 
 "Settings.ChatList.Header" = "CHAT LIST";
 "Settings.CompactChatList" = "Compact Chat List";
+"Settings.ChatList.HideSearchBar" = "Hide Search Bar";
+"Settings.ChatList.HideComposeButton" = "Hide Compose Button";
 "Settings.CompactMessagePreview" = "Compact Message Preview";
 "Settings.ChatList.Lines" = "Chat List Lines";
 "Settings.ChatList.Lines.1" = "1 line";
@@ -131,6 +140,8 @@
 
 "Settings.ChatSwipeOptions" = "Chat List Swipe Options";
 "Settings.DeleteChatSwipeOption" = "Swipe to Delete Chat";
+"Settings.ChatList.CustomTitle" = "Chat List Title";
+"Settings.ChatList.CustomTitle.Message" = "Enter a custom title for the chats screen. Leave empty to use the default.";
 /* Re-word like this string on offical app https://translations.telegram.org/en/ios/groups_and_channels/Chat.NextChannelSameLocationSwipeProgress */
 "Settings.PullToNextChannel" = "Pull to Next Unread Channel";
 /* Re-word like this string on offical app https://translations.telegram.org/en/ios/groups_and_channels/Chat.NextUnreadTopicSwipeProgress */
@@ -347,7 +358,6 @@
 
 "AyuGram.Icon.Style.eyeoff" = "Eye off";
 
-"AyuGram.Icon.Opacity" = "Opacity";
 
 "AyuGram.Database.Header" = "DATABASE";
 "AyuGram.Deleted.Marker" = "Deleted message";
@@ -376,6 +386,10 @@
 "AyuGram.Ghost.SendWithoutSound.ghost" = "In Ghost Mode";
 "AyuGram.Ghost.SendWithoutSound.always" = "Always";
 "AyuGram.Ghost.SuggestBeforeStory" = "Ask before viewing stories";
+"AyuGram.Ghost.SuggestBeforeStory.Alert.Title" = "Ghost Mode";
+"AyuGram.Ghost.SuggestBeforeStory.Alert.Text" = "Enable Ghost Mode before viewing stories? Your views will not be sent.";
+"AyuGram.Ghost.SuggestBeforeStory.Alert.Enable" = "Enable";
+"AyuGram.Ghost.SuggestBeforeStory.Alert.Open" = "Open Anyway";
 "AyuGram.Ghost.Locks.Header" = "LOCKED TOGGLES";
 "AyuGram.Ghost.Locks.Notice" = "A locked toggle keeps its value when you flip the master Ghost Mode switch.";
 "AyuGram.Ghost.Lock.ReadReceipts" = "Lock read receipts";
@@ -545,34 +559,43 @@
 "ReqGram.Support.Title" = "Support ReqGram";
 "ReqGram.Support.MenuTitle" = "Support the project";
 "ReqGram.Plugins.Title" = "Plugins";
+"ReqGram.Presentation.Title" = "Appearance";
+"ReqGram.Presentation.Messages" = "Messages";
+"ReqGram.Presentation.DeletedMessages" = "Retained deleted messages";
+"ReqGram.Presentation.ChatList" = "Chat list";
+"ReqGram.Presentation.Profiles" = "Profiles";
+"ReqGram.CompactDescriptions" = "Compact settings descriptions";
+"ReqGram.CompactDescriptions.Notice" = "Hide optional explanations on this screen only. Warnings and plugin information remain visible.";
+"ReqGram.DeletedOpacity" = "Deleted message opacity";
+"ReqGram.DeletedOpacity.Notice" = "Changes only the appearance of locally retained messages, not what is saved. Turning fading off keeps messages fully opaque. Round video bubbles keep their existing appearance. Reopen the chat or viewer to refresh existing messages. Low opacity can reduce readability.";
 "AyuGram.BatchForwarding" = "Batch forwarding";
 "ReqGram.BuiltIn.Title" = "Built-in plugins";
+"ReqGram.Gifts.Title" = "Gifts";
 "ReqGram.Installed.Title" = "Installed plugins";
 "ReqGram.Support.Section" = "Support";
 "ReqGram.Plugin.GiftId" = "Gift ID";
-"ReqGram.Plugin.DeletedGiftSender" = "Legacy Gift Details";
 "ReqGram.Plugin.TextAnimationPrivateLet" = "Text Animation";
 "ReqGram.Plugin.LocalEdictorZwyLib" = "Local Message Editor";
 "ReqGram.Plugin.Enable" = "Enable plugin";
 "ReqGram.Plugin.Information" = "Information";
 "ReqGram.Plugin.GiftId.Description" = "Shows the numeric gift ID in supported gift details and lets you copy it.";
-"ReqGram.Plugin.DeletedGiftSender.Description" = "Makes supported legacy gift information available without changing Telegram’s server data.";
-"ReqGram.Plugin.DeletedGiftSending.Notice" = "**Deleted-gift sending no longer works.** Telegram fixed this method on September 15, 2026. The plugin is retained with its settings and actions. This notice applies only to the deleted-gift sending method, not to normal gift sending.";
-"ReqGram.Plugin.DeletedGiftSender.DisplayNotice" = "**Warning:** Gift display may be incorrect. Always compare gifts by ID.";
 "ReqGram.Plugin.LocalEdictorZwyLib.Description" = "Edit message text locally and keep your changes between launches.";
 "ReqGram.Plugin.TextAnimationPrivateLet.Description" = "Preview and send animated text.";
 "ReqGram.Plugin.ScamBaseWriter" = "Scam Detection";
 "ReqGram.Plugin.ScamBaseWriter.Description" = "Check message senders against a regularly updated scam registry.";
 "ReqGram.Plugin.ScamBaseWriter.Interval" = "Refresh interval";
 "ReqGram.Plugin.ScamBaseWriter.Refresh" = "Refresh now";
+"ReqGram.Plugin.ScamBaseWriter.Refresh.InProgress" = "Scanning…";
 "ReqGram.Plugin.ScamBaseWriter.Status" = "Known scam IDs";
 "ReqGram.Plugin.ScamBaseWriter.Refresh.Done" = "Scam registry updated";
 "ReqGram.Plugin.ScamBaseWriter.Refresh.Failed" = "Unable to update the scam registry.";
+"ReqGram.Plugin.ScamBaseWriter.Refresh.AlreadyInProgress" = "A scan is already running.";
 "ReqGram.Animation.Blur" = "Blur-style approximation";
 "ReqGram.Animation.Slide" = "Slide";
 "ReqGram.Animation.Scale" = "Scale";
 "ReqGram.Animation.Rotate" = "Rotate";
 "ReqGram.Animation.IgnoreSpaces" = "Ignore spaces";
+"ReqGram.Animation.RestoreDefaults" = "Restore to Defaults";
 "ReqGram.Animation.AllLines" = "Animate all lines";
 "ReqGram.Animation.Duration" = "Duration";
 "ReqGram.Animation.Preview.Title" = "Preview";
@@ -628,8 +651,6 @@
 "AyuGram.Icon.Color.blue" = "Blue";
 "AyuGram.Icon.Color.purple" = "Purple";
 
-"Settings.Telegram1211LegacyDesign" = "Telegram 12.1.1 legacy design";
-"Settings.Telegram1211LegacyDesign.Notice" = "Applies only to screens migrated to the legacy design. More screens will be added over time.";
 
 "ReqGram.Plugin.SendGiftById" = "Send Gift by ID";
 "ReqGram.Plugin.SendGiftById.Description" = "Send a catalog gift by its exact ID using the standard gift composer and payment flow.";
@@ -707,3 +728,150 @@
 "ReqGram.Installed.Error.ExpiredImport" = "This import is no longer available. Select the file again.";
 "ReqGram.Installed.Error.RuntimeUnavailable" = "Installed, not running. The Python runtime is unavailable in this build.";
 "ReqGram.Installed.Error.InvalidSettingsTransfer" = "Settings transfer is unavailable or the file does not match this plugin. No settings were changed.";
+"ReqGram.Media.Title" = "Media";
+"ReqGram.StopAfterVoiceMessage" = "Stop after voice message";
+"ReqGram.StopAfterVoiceMessage.Notice" = "Stop playback when a voice message finishes instead of automatically playing the next message. Music and video messages are not affected.";
+
+"ReqGram.CharacterCounter" = "Draft character counter";
+
+/* ReqGram - Gift Scheduler plugin */
+"ReqGram.Plugin.GiftScheduler" = "Gift Scheduler";
+"ReqGram.Plugin.GiftScheduler.Description" = "Schedule a star gift to be delivered later. Pick the gift, the recipient, a date and time, an optional caption and whether to hide your name. Custom and premium emoji in the caption are preserved and sent as animated emoji.\n\nStars are charged at the moment of delivery, not when you schedule. iOS cannot wake the app at an exact time, so a gift is delivered on the next activation of Telegram after its scheduled moment, within the allowed lateness below.";
+"ReqGram.Plugin.GiftScheduler.MaxLate" = "Allowed lateness";
+"ReqGram.Plugin.GiftScheduler.MaxLate.Notice" = "If the app was not opened within this window after the scheduled moment, the gift is not sent and is marked as missed.";
+"ReqGram.Plugin.GiftScheduler.Delivery.Notice" = "Delivery happens while Telegram is open, or on the next activation after the scheduled moment. It is not guaranteed at the exact minute. Nothing is ever sent without a task you created, and a gift is never retried after a payment attempt.";
+"ReqGram.Plugin.GiftScheduler.Tasks" = "Scheduled gifts";
+"ReqGram.Plugin.GiftScheduler.Tasks.Empty" = "No scheduled gifts.";
+"ReqGram.Plugin.GiftScheduler.CancelAll" = "Cancel all pending gifts";
+"ReqGram.Plugin.GiftScheduler.CancelAll.Title" = "Cancel pending gifts?";
+"ReqGram.Plugin.GiftScheduler.CancelAll.Text" = "Pending gifts that will be cancelled";
+"ReqGram.Plugin.GiftScheduler.CancelAll.Confirm" = "Cancel All";
+"ReqGram.Plugin.GiftScheduler.ClearFinished" = "Clear finished records";
+"ReqGram.Plugin.GiftScheduler.Unit.Hours" = "h";
+"ReqGram.Plugin.GiftScheduler.Unit.Minutes" = "min";
+"ReqGram.Plugin.GiftScheduler.UnnamedGift" = "Gift";
+"ReqGram.Plugin.GiftScheduler.UnknownRecipient" = "Unknown recipient";
+"ReqGram.Plugin.GiftScheduler.Schedule" = "Schedule delivery";
+"ReqGram.Plugin.GiftScheduler.Schedule.Off" = "Send now";
+"ReqGram.Plugin.GiftScheduler.Schedule.Info" = "Choose when this gift should be delivered. Stars are charged at delivery. Delivery happens on the next activation of Telegram after that moment, not necessarily at the exact minute.";
+"ReqGram.Plugin.GiftScheduler.Schedule.Change" = "Change time";
+"ReqGram.Plugin.GiftScheduler.Schedule.Clear" = "Send now instead";
+"ReqGram.Plugin.GiftScheduler.Recipients.Only" = "Only %@";
+"ReqGram.Plugin.GiftScheduler.Recipients.Select" = "Select recipients…";
+"ReqGram.Plugin.GiftScheduler.Recipients.Title" = "Gift recipients";
+"ReqGram.Plugin.GiftScheduler.Recipients.None" = "No recipients selected.";
+"ReqGram.Plugin.GiftScheduler.Confirm.RecipientsCount" = "Recipients: %d";
+"ReqGram.Plugin.GiftScheduler.Confirm.TotalStars" = "Total stars: %d";
+"ReqGram.Plugin.GiftScheduler.Scheduled.Partial" = "Scheduled %d of %d gifts — the task limit was reached. Increase \"Allowed lateness\" or clear finished records.";
+"ReqGram.Plugin.GiftScheduler.Confirm.Title" = "Schedule this gift?";
+"ReqGram.Plugin.GiftScheduler.Confirm.Action" = "Schedule";
+"ReqGram.Plugin.GiftScheduler.Confirm.Recipient" = "Recipient";
+"ReqGram.Plugin.GiftScheduler.Confirm.When" = "When";
+"ReqGram.Plugin.GiftScheduler.Confirm.Stars" = "Stars";
+"ReqGram.Plugin.GiftScheduler.Confirm.CustomEmoji" = "Custom emoji in caption";
+"ReqGram.Plugin.GiftScheduler.Confirm.Truncated" = "The caption was shortened to fit the allowed length.";
+"ReqGram.Plugin.GiftScheduler.Confirm.HiddenName" = "Your name will be hidden.";
+"ReqGram.Plugin.GiftScheduler.Confirm.Charge" = "Stars will be charged at the moment of delivery, not now.";
+"ReqGram.Plugin.GiftScheduler.Detail.Status" = "Status";
+"ReqGram.Plugin.GiftScheduler.Detail.Caption" = "Caption";
+"ReqGram.Plugin.GiftScheduler.Detail.Cancel" = "Cancel Gift";
+"ReqGram.Plugin.GiftScheduler.Detail.Remove" = "Remove Record";
+"ReqGram.Plugin.GiftScheduler.Detail.SendingNotice" = "This gift is being sent and can no longer be cancelled.";
+"ReqGram.Plugin.GiftScheduler.Status.Pending" = "Pending";
+"ReqGram.Plugin.GiftScheduler.Status.Sending" = "Sending";
+"ReqGram.Plugin.GiftScheduler.Status.Sent" = "Sent";
+"ReqGram.Plugin.GiftScheduler.Status.Failed" = "Failed";
+"ReqGram.Plugin.GiftScheduler.Status.Missed" = "Missed";
+"ReqGram.Plugin.GiftScheduler.Error.Missed" = "The app was not open within the allowed lateness window.";
+"ReqGram.Plugin.GiftScheduler.Error.Interrupted" = "The app stopped while this gift was being sent. Check your gift history before scheduling it again: it may already have been delivered and charged.";
+"ReqGram.Plugin.GiftScheduler.Error.NoForm" = "Telegram did not return a payment form.";
+"ReqGram.Plugin.GiftScheduler.Error.PeerUnavailable" = "The recipient is not available.";
+"ReqGram.Plugin.GiftScheduler.Error.PremiumRequired" = "Custom emoji in a gift caption require Telegram Premium.";
+"ReqGram.Plugin.GiftScheduler.Error.WillRetry" = "Will retry";
+"ReqGram.Plugin.GiftScheduler.Error.TimeInPast" = "Pick a time at least a minute in the future.";
+"ReqGram.Plugin.GiftScheduler.Error.TooMany" = "Too many scheduled gifts. Cancel or clear some first.";
+"ReqGram.Plugin.GiftScheduler.Error.Disabled" = "Enable the Gift Scheduler plugin first.";
+"ReqGram.Plugin.GiftScheduler.Error.Generic" = "Could not schedule this gift.";
+"ReqGram.Plugin.BuyGifts" = "Buy Gifts";
+"ReqGram.Plugin.BuyGifts.Description" = "Send the same real gift to multiple recipients and/or multiple copies at once, one real purchase per gift, with a short pause between sends to avoid Telegram's flood limits.";
+"ReqGram.Plugin.BuyGifts.RememberQuantity" = "Remember last quantity";
+"ReqGram.Plugin.BuyGifts.Haptic" = "Haptic feedback on each send";
+"ReqGram.Plugin.BuyGifts.Delay" = "Pause between sends";
+"ReqGram.Plugin.BuyGifts.Delay.Off" = "No pause";
+"ReqGram.Plugin.BuyGifts.Delay.Value" = "%d ms";
+"ReqGram.Plugin.BuyGifts.Delay.Notice" = "Protects against Telegram's flood limits when sending many gifts in a row.";
+"ReqGram.Plugin.BuyGifts.MaxRecipients" = "Max recipients per batch";
+"ReqGram.Plugin.BuyGifts.Send.Info" = "When this plugin is enabled, the gift-send screen offers a quantity and multiple-recipients option.";
+"ReqGram.Plugin.BuyGifts.Quantity" = "Quantity";
+"ReqGram.Plugin.BuyGifts.Quantity.Title" = "Quantity per recipient";
+"ReqGram.Plugin.BuyGifts.Quantity.Custom" = "Custom amount";
+"ReqGram.Plugin.BuyGifts.Quantity.Limited" = "This gift is limited to %d per recipient. Quantity was adjusted.";
+"ReqGram.Plugin.BuyGifts.Recipients" = "Recipients";
+"ReqGram.Plugin.BuyGifts.Recipients.Title" = "Choose recipients";
+"ReqGram.Plugin.BuyGifts.Recipients.Current" = "current chat";
+"ReqGram.Plugin.BuyGifts.Recipients.Count" = "%d chats";
+"ReqGram.Plugin.BuyGifts.Recipients.LimitReached" = "You can select up to %d recipients per batch. Change this in Buy Gifts settings.";
+"ReqGram.Plugin.BuyGifts.Confirm.Title" = "Send this gift in bulk?";
+"ReqGram.Plugin.BuyGifts.Confirm.Action" = "Send";
+"ReqGram.Plugin.BuyGifts.Confirm.Recipients" = "Recipients: %d";
+"ReqGram.Plugin.BuyGifts.Confirm.Quantity" = "Quantity per recipient: %d";
+"ReqGram.Plugin.BuyGifts.Confirm.Total" = "Total gifts to send: %d";
+"ReqGram.Plugin.BuyGifts.Confirm.Charge" = "Stars are charged one send at a time, as each gift goes out.";
+"ReqGram.Plugin.BuyGifts.Progress" = "Sent %d/%d · tap to stop";
+"ReqGram.Plugin.BuyGifts.Done.Success" = "Sent %d gifts · %lld ⭐ spent";
+"ReqGram.Plugin.BuyGifts.Done.Stopped" = "Stopped: %d of %d sent";
+"ReqGram.Plugin.BuyGifts.Done.Partial" = "Sent %d of %d";
+"ReqGram.Plugin.BuyGifts.Done.Error" = "Sending stopped after an error. Check your gift history before trying again.";
+
+"ReqGram.Plugin.NowPlaying" = "Now Playing";
+"ReqGram.Plugin.NowPlaying.Description" = "Shows the track you are listening to on your profile: in the bio, the business location, or as a profile playlist entry. Polls Spotify (via stats.fm), VK Music, Last.fm, SoundCloud, Yandex Music and YouTube Music.";
+"ReqGram.Plugin.NowPlaying.StreamPlace" = "Show in";
+"ReqGram.Plugin.NowPlaying.Place.Bio" = "Bio";
+"ReqGram.Plugin.NowPlaying.Place.Playlist" = "Profile playlist";
+"ReqGram.Plugin.NowPlaying.Place.Location" = "Business location (Premium)";
+"ReqGram.Plugin.NowPlaying.Source" = "Source";
+"ReqGram.Plugin.NowPlaying.Source.Auto" = "Auto";
+"ReqGram.Plugin.NowPlaying.Platform.spotify" = "Spotify (stats.fm)";
+"ReqGram.Plugin.NowPlaying.Platform.vk_music" = "VK Music";
+"ReqGram.Plugin.NowPlaying.Platform.last_fm" = "Last.fm";
+"ReqGram.Plugin.NowPlaying.Platform.soundcloud" = "SoundCloud";
+"ReqGram.Plugin.NowPlaying.Platform.yandex_music" = "Yandex Music";
+"ReqGram.Plugin.NowPlaying.Platform.youtube_music" = "YouTube Music";
+"ReqGram.Plugin.NowPlaying.Token.Placeholder" = "Token";
+"ReqGram.Plugin.NowPlaying.Token.Hint.spotify" = "Enter your stats.fm username. Enable \"Share your top tracks with friends\" in stats.fm first.";
+"ReqGram.Plugin.NowPlaying.Token.Hint.vk_music" = "Enter a VK API access token (status scope). The track is read from your VK status audio.";
+"ReqGram.Plugin.NowPlaying.Token.Hint.last_fm" = "Enter your Last.fm username.";
+"ReqGram.Plugin.NowPlaying.Token.Hint.soundcloud" = "Enter a SoundCloud OAuth token.";
+"ReqGram.Plugin.NowPlaying.Token.Hint.yandex_music" = "Enter your Yandex Music ya-token.";
+"ReqGram.Plugin.NowPlaying.Token.Hint.youtube_music" = "Paste your music.youtube.com Cookie header. SAPISID is extracted automatically.";
+"ReqGram.Plugin.NowPlaying.Token.Clear" = "Clear";
+"ReqGram.Plugin.NowPlaying.DefaultText" = "Idle text";
+"ReqGram.Plugin.NowPlaying.DefaultText.Placeholder" = "Shown when nothing is playing";
+"ReqGram.Plugin.NowPlaying.Check" = "Check now";
+"ReqGram.Plugin.NowPlaying.Check.InProgress" = "Checking…";
+"ReqGram.Plugin.NowPlaying.Status" = "Status";
+"ReqGram.Plugin.NowPlaying.Status.Idle" = "Idle";
+"ReqGram.Plugin.NowPlaying.Menu.Button" = "Music";
+"ReqGram.Plugin.NowPlaying.Menu.Card" = "Card";
+"ReqGram.Plugin.NowPlaying.Menu.AudioFile" = "Audio File";
+"ReqGram.Plugin.NowPlaying.Menu.Text" = "Text";
+"ReqGram.Plugin.NowPlaying.Menu.Share" = "Share with…";
+"ReqGram.Plugin.NowPlaying.Menu.NothingPlaying" = "Nothing is playing right now";
+"ReqGram.Plugin.NowPlaying.Section.Platforms" = "Platforms";
+"ReqGram.Plugin.NowPlaying.Section.Sending" = "Sending & Card";
+"ReqGram.Plugin.NowPlaying.Section.Diagnostics" = "Diagnostics";
+"ReqGram.Plugin.NowPlaying.Card.Type" = "Card Layout";
+"ReqGram.Plugin.NowPlaying.Card.Type.Horizontal" = "Horizontal";
+"ReqGram.Plugin.NowPlaying.Card.Type.Vertical" = "Vertical";
+"ReqGram.Plugin.NowPlaying.Card.Background" = "Card Background";
+"ReqGram.Plugin.NowPlaying.Card.Background.TrackCover" = "Track Cover";
+"ReqGram.Plugin.NowPlaying.Card.Background.AccentColor" = "Cover Accent Color";
+"ReqGram.Plugin.NowPlaying.Card.Font" = "Card Font";
+"ReqGram.Plugin.NowPlaying.Card.Font.YSMusic" = "YS Music";
+"ReqGram.Plugin.NowPlaying.Card.Font.Onest" = "Onest";
+"ReqGram.Plugin.NowPlaying.Card.LinkStyle" = "Track Link";
+"ReqGram.Plugin.NowPlaying.Card.LinkStyle.Text" = "Text";
+"ReqGram.Plugin.NowPlaying.Card.LinkStyle.QR" = "QR Code";
+"ReqGram.Plugin.NowPlaying.Card.SongLink" = "Link to Other Platforms";
+"ReqGram.Plugin.NowPlaying.Card.SongLink.Hint" = "Via song.link";
+

@@ -9,6 +9,7 @@ import AccountContext
 import TelegramUniversalVideoContent
 import DeviceProximity
 import PeerMessagesMediaPlaylist
+import SGSimpleSettings
 
 private enum SharedMediaPlaybackItem: Equatable {
     case audio(MediaPlayer)
@@ -165,6 +166,7 @@ final class SharedMediaPlayer {
         }
     }
     private var currentPlayedToEnd = false
+    private var completionGate = ReqGramPlaybackCompletionGate()
     private var scheduledPlaybackAction: SharedMediaPlayerPlaybackControlAction?
     private var scheduledStartTime: Double?
     
@@ -210,6 +212,7 @@ final class SharedMediaPlayer {
                 let previousPlaybackItem = strongSelf.playbackItem
                 strongSelf.updatePrefetchItems(item: state.item, previousItem: state.previousItem, nextItem: state.nextItem, ordering: state.order)
                 if state.item?.playbackData != strongSelf.stateValue?.item?.playbackData {
+                    strongSelf.completionGate.invalidate()
                     if let playbackItem = strongSelf.playbackItem {
                         switch playbackItem {
                             case .audio:
@@ -250,20 +253,7 @@ final class SharedMediaPlayer {
                     }
                     if let playbackItem = strongSelf.playbackItem {
                         playbackItem.setForceAudioToSpeaker(strongSelf.forceAudioToSpeaker)
-                        playbackItem.setActionAtEnd({
-                            Queue.mainQueue().async {
-                                if let strongSelf = self {
-                                    switch strongSelf.playlist.looping {
-                                        case .item:
-                                            strongSelf.playbackItem?.seek(0.0)
-                                            strongSelf.playbackItem?.play()
-                                        default:
-                                            strongSelf.scheduledPlaybackAction = .play
-                                            strongSelf.control(.next)
-                                    }
-                                }
-                            }
-                        })
+                        strongSelf.armPlaybackCompletion(isVoiceMessage: state.item?.playbackData?.type == .voice)
                         switch playbackItem {
                             case .audio:
                                 break
@@ -376,6 +366,21 @@ final class SharedMediaPlayer {
                     strongSelf.forceAudioToSpeaker = forceAudioToSpeaker
                     strongSelf.playbackItem?.setForceAudioToSpeaker(forceAudioToSpeaker)
                     if !forceAudioToSpeaker {
+                        // A voice or video message is being recorded: the sensor is covered by the user's face
+                        // while speaking, not to ask for playback on the ear speaker. Resuming would push a
+                        // playback audio session on top of the recorder's, and the recorder stops as soon as
+                        // its session is deactivated.
+                        //
+                        // Only the resume is skipped, and the state above is tracked either way. This block is
+                        // edge-triggered on forceAudioToSpeaker, so returning before the assignment would
+                        // strand it at its old value for good: the sensor and the stored value would disagree
+                        // from then on, and the next playback would take the wrong route - the ear speaker
+                        // with the phone in hand, i.e. inaudible. The assignment is safe here because the
+                        // playback holder is inactive while a recorder holds the session, so setOutputMode
+                        // only records the intended mode instead of touching the live session.
+                        if strongSelf.audioSession.getIsRecordingActive() {
+                            return
+                        }
                         if let playbackStateValue = strongSelf._playbackStateValue, case let .item(item) = playbackStateValue, item.status.timestamp < 1.5 {
                             strongSelf.control(.seek(0.0))
                         }
@@ -411,7 +416,50 @@ final class SharedMediaPlayer {
         }
     }
     
+    private func armPlaybackCompletion(isVoiceMessage: Bool) {
+        let ticket = self.completionGate.arm()
+        self.playbackItem?.setActionAtEnd({ [weak self] in
+            Queue.mainQueue().async { [weak self] in
+                guard let self, self.completionGate.consume(ticket) else { return }
+                if ReqGramVoicePlaybackPolicy.stopsAtEnd(enabled: SGSimpleSettings.shared.stopAfterVoiceMessage, isVoicePlayer: self.type == .voice, isVoiceMessage: isVoiceMessage) {
+                    self.scheduledPlaybackAction = nil
+                    self.scheduledStartTime = nil
+                    self.stop()
+                    self.playedToEnd?()
+                    return
+                }
+                switch self.playlist.looping {
+                case .item:
+                    self.armPlaybackCompletion(isVoiceMessage: isVoiceMessage)
+                    self.playbackItem?.seek(0.0)
+                    self.playbackItem?.play()
+                default:
+                    // Natural progression is not a new user intent. The consumed
+                    // ticket remains disarmed while asynchronous navigation loads.
+                    self.scheduledPlaybackAction = .play
+                    self.playlist.control(.next)
+                }
+            }
+        })
+    }
+
     func control(_ action: SharedMediaPlayerControlAction) {
+        // Invalidate at intent time, before navigation can yield a loading state.
+        // Replaying/seeking the same item needs a new installed callback ticket.
+        switch action {
+        case .next, .previous:
+            self.completionGate.invalidate()
+        case .playback(.pause):
+            self.completionGate.invalidate()
+        case .playback, .seek:
+            self.completionGate.invalidate()
+            // The old item may still be installed while explicit navigation loads.
+            if self.playbackItem != nil && self.scheduledPlaybackAction == nil {
+                self.armPlaybackCompletion(isVoiceMessage: self.stateValue?.item?.playbackData?.type == .voice)
+            }
+        case .setOrder, .setLooping, .setBaseRate:
+            break
+        }
         switch action {
             case .next:
                 self.scheduledPlaybackAction = .play
@@ -463,6 +511,7 @@ final class SharedMediaPlayer {
     }
     
     func stop() {
+        self.completionGate.invalidate()
         if let playbackItem = self.playbackItem {
             switch playbackItem {
                 case let .audio(player):

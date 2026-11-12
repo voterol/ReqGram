@@ -131,6 +131,8 @@ public class SGSimpleSettings {
         case contextShowSaveMedia
         case contextShowMessageReplies
         case contextShowJson
+        case contextShowMessageDetails
+        case addCommaAfterMention
         case disableScrollToNextChannel
         case disableScrollToNextTopic
         case disableChatSwipeOptions
@@ -149,10 +151,15 @@ public class SGSimpleSettings {
         case regDateCache
         case compactChatList
         case chatListLines
+        case customChatListTitle
         case compactFolderNames
         case allChatsTitleLengthOverride
 //        case allChatsFolderPositionOverride
         case allChatsHidden
+        case hideChatListSearchBar
+        case hideChatListComposeButton
+        case hideArchiveFolder
+        case hideFolderUnreadCounters
         case defaultEmojisFirst
         case messageDoubleTapActionOutgoing
         case wideChannelPosts
@@ -184,9 +191,16 @@ public class SGSimpleSettings {
         case showProfileId
         case sendWithReturnKey
         // MARK: ReqGram plugins
-         case reqGramGiftIdEnabled
-         case reqGramSendGiftByIdEnabled
-         case reqGramDeletedGiftSenderEnabled
+          case reqGramGiftIdEnabled
+          case reqGramSendGiftByIdEnabled
+          case reqGramGiftSchedulerEnabled
+          case reqGramGiftSchedulerMaxLateMinutes
+          case reqGramBuyGiftsEnabled
+          case reqGramBuyGiftsRememberQuantity
+          case reqGramBuyGiftsHapticFeedback
+          case reqGramBuyGiftsSendDelayMs
+          case reqGramBuyGiftsMaxRecipients
+          case reqGramBuyGiftsLastQuantity
         case reqGramZwyLibEnabled
          case reqGramLocalEdictorEnabled
          case reqGramTextAnimationPrivateLetEnabled
@@ -231,7 +245,6 @@ public class SGSimpleSettings {
         case ayuMediaLimitBytes
         case ayuDeletedIconStyle
         case ayuDeletedIconColor
-        case ayuDeletedOpacity
         case ayuShowDeletedInline
         // MARK: AyuGram - ghost mode (extended)
         case ayuGhostSendOfflineAfterOnline
@@ -308,8 +321,12 @@ public class SGSimpleSettings {
         // MARK: AyuGram - misc
         case ayuStreamerMode
         case ayuKeepDeletedOnOwnDelete
-        // Enables the opt-in, incrementally migrated Telegram 12.1.1 UI surface.
-        case telegram1211LegacyDesign
+        case fullChannelViewCounts
+        case reqGramShowForwardCounts
+        case reqGramCompactDescriptions
+         case stopAfterVoiceMessage
+         case reqGramDeletedOpacityPercent
+         case reqGramCharacterCounter
     }
     
     public enum DownloadSpeedBoostValues: String, CaseIterable {
@@ -449,6 +466,8 @@ public class SGSimpleSettings {
         Keys.contextShowSaveMedia.rawValue: true,
         Keys.contextShowMessageReplies.rawValue: true,
         Keys.contextShowJson.rawValue: false,
+        Keys.contextShowMessageDetails.rawValue: true,
+        Keys.addCommaAfterMention.rawValue: false,
         Keys.disableScrollToNextChannel.rawValue: false,
         Keys.disableScrollToNextTopic.rawValue: false,
         Keys.disableChatSwipeOptions.rawValue: false,
@@ -467,10 +486,15 @@ public class SGSimpleSettings {
         Keys.regDateCache.rawValue: [:],
         Keys.compactChatList.rawValue: false,
         Keys.chatListLines.rawValue: ChatListLines.defaultValue.rawValue,
+        Keys.customChatListTitle.rawValue: "",
         Keys.compactFolderNames.rawValue: false,
         Keys.allChatsTitleLengthOverride.rawValue: AllChatsTitleLengthOverride.none.rawValue,
 //        Keys.allChatsFolderPositionOverride.rawValue: AllChatsFolderPositionOverride.none.rawValue
         Keys.allChatsHidden.rawValue: false,
+        Keys.hideChatListSearchBar.rawValue: false,
+        Keys.hideChatListComposeButton.rawValue: false,
+        Keys.hideArchiveFolder.rawValue: false,
+        Keys.hideFolderUnreadCounters.rawValue: false,
         Keys.defaultEmojisFirst.rawValue: false,
         Keys.messageDoubleTapActionOutgoing.rawValue: MessageDoubleTapAction.default.rawValue,
         Keys.wideChannelPosts.rawValue: false,
@@ -496,9 +520,33 @@ public class SGSimpleSettings {
         Keys.warnOnStoriesOpen.rawValue: false,
         Keys.showProfileId.rawValue: true,
         Keys.sendWithReturnKey.rawValue: false,
-         // MARK: ReqGram plugin defaults
-          Keys.reqGramGiftIdEnabled.rawValue: false,
-          Keys.reqGramSendGiftByIdEnabled.rawValue: false,
+          // MARK: ReqGram plugin defaults
+            // Gift ID display + "send by ID" are passive/informational and
+            // enabled by default; the star-spending features below stay OFF
+            // unless explicitly turned on.
+            Keys.reqGramGiftIdEnabled.rawValue: true,
+            Keys.reqGramSendGiftByIdEnabled.rawValue: true,
+            // Enabled by the owner's decision for this build; they still only
+            // spend stars on gift events the user explicitly schedules/buys.
+            Keys.reqGramGiftSchedulerEnabled.rawValue: true,
+            // Grace window in minutes. The Android plugin's docstring says 60,
+            // but its code default is "360" (60s*60 is only a parse-failure
+            // fallback); 360 is the real default and is preserved here.
+            Keys.reqGramGiftSchedulerMaxLateMinutes.rawValue: 360,
+            // Buy Gifts (bulk send). Enabled by the owner's decision for this
+            // build; each batch still requires an explicit user action.
+            Keys.reqGramBuyGiftsEnabled.rawValue: true,
+           Keys.reqGramBuyGiftsRememberQuantity.rawValue: true,
+           Keys.reqGramBuyGiftsHapticFeedback.rawValue: true,
+           // Matches the Android original's _DEFAULT_DELAY_MS.
+           Keys.reqGramBuyGiftsSendDelayMs.rawValue: 350,
+           // Matches the Android original's _DEFAULT_MAX_QUANTITY, but used
+           // here as "max recipients per batch" rather than max quantity
+           // (quantity is bounded separately by the real gift's own limits).
+           Keys.reqGramBuyGiftsMaxRecipients.rawValue: 50,
+           // Last quantity the user chose, used only when "remember quantity"
+           // is on. Never spends anything by itself.
+           Keys.reqGramBuyGiftsLastQuantity.rawValue: 1,
          // Native iOS forwarding/deletion already batches requests at Telegram's
          // supported limit. Keep the optional high-level feature disabled until
          // an explicit native entry point is added; never alter protected-content
@@ -534,7 +582,6 @@ public class SGSimpleSettings {
           Keys.reqGramTextAnimationPrivateLetDebugMode.rawValue: false,
          // These Android plugins have no native iOS implementation; keep their
         // gates off rather than implying unsupported behavior is active.
-        Keys.reqGramDeletedGiftSenderEnabled.rawValue: false,
         Keys.reqGramZwyLibEnabled.rawValue: false,
          Keys.reqGramLocalEdictorEnabled.rawValue: false,
         // MARK: AyuGram - default values
@@ -543,17 +590,14 @@ public class SGSimpleSettings {
         Keys.ayuGhostBlockTyping.rawValue: true,
         Keys.ayuGhostBlockOnlinePresence.rawValue: true,
         Keys.ayuGhostBlockStoryViews.rawValue: true,
-        Keys.ayuSaveDeletedMessages.rawValue: false,
-        Keys.ayuSaveEditedMessages.rawValue: false,
-        Keys.ayuSaveMediaAttachments.rawValue: false,
+         Keys.ayuSaveDeletedMessages.rawValue: true,
+         Keys.ayuSaveEditedMessages.rawValue: true,
+         Keys.ayuSaveMediaAttachments.rawValue: true,
         Keys.ayuShowGhostModeInProfile.rawValue: false,
         // 50 MB default per-file media limit (0 = unlimited)
         Keys.ayuMediaLimitBytes.rawValue: 50 * 1024 * 1024,
         Keys.ayuDeletedIconStyle.rawValue: "trash",
         Keys.ayuDeletedIconColor.rawValue: "theme",
-        // Legacy value retained for preferences compatibility. Inline and saved
-        // deleted-message presentation is controlled by ayuSemiTransparentDeleted.
-        Keys.ayuDeletedOpacity.rawValue: 70,
         Keys.ayuShowDeletedInline.rawValue: true,
         // MARK: AyuGram - ghost mode (extended) defaults
         Keys.ayuGhostSendOfflineAfterOnline.rawValue: false,
@@ -638,7 +682,12 @@ public class SGSimpleSettings {
         // MARK: AyuGram - misc defaults
         Keys.ayuStreamerMode.rawValue: false,
         Keys.ayuKeepDeletedOnOwnDelete.rawValue: false,
-        Keys.telegram1211LegacyDesign.rawValue: false
+        Keys.fullChannelViewCounts.rawValue: false,
+        Keys.reqGramShowForwardCounts.rawValue: false,
+        Keys.reqGramCompactDescriptions.rawValue: false,
+        Keys.stopAfterVoiceMessage.rawValue: false,
+         Keys.reqGramDeletedOpacityPercent.rawValue: ReqGramPresentationPolicy.defaultDeletedOpacityPercent
+         ,Keys.reqGramCharacterCounter.rawValue: false
     ]
     
     public static let groupDefaultValues: [String: Any] = [
@@ -652,10 +701,31 @@ public class SGSimpleSettings {
     @UserDefault(key: Keys.hidePhoneInSettings.rawValue)
     public var hidePhoneInSettings: Bool
 
-    /// Opt-in legacy design mode. This is a feature gate for screen-by-screen migration,
-    /// not a claim that the complete historical UI has been restored.
-    @UserDefault(key: Keys.telegram1211LegacyDesign.rawValue)
-    public var telegram1211LegacyDesign: Bool
+    @UserDefault(key: Keys.fullChannelViewCounts.rawValue)
+    public var fullChannelViewCounts: Bool
+
+    @UserDefault(key: Keys.reqGramShowForwardCounts.rawValue)
+    public var reqGramShowForwardCounts: Bool
+
+    @UserDefault(key: Keys.reqGramCompactDescriptions.rawValue)
+    public var reqGramCompactDescriptions: Bool
+
+    @UserDefault(key: Keys.stopAfterVoiceMessage.rawValue)
+    public var stopAfterVoiceMessage: Bool
+
+    /// Draft-only grapheme counter. It does not enforce or replace server limits.
+    @UserDefault(key: Keys.reqGramCharacterCounter.rawValue)
+    public var reqGramCharacterCounter: Bool
+
+    // Rendering authority for deleted-message opacity. Surfaced in the AyuGram
+    // settings section; the key name is kept for settings-transfer compatibility.
+    @UserDefault(key: Keys.reqGramDeletedOpacityPercent.rawValue)
+    private var storedReqGramDeletedOpacityPercent: Int
+
+    public var reqGramDeletedOpacityPercent: Int {
+        get { ReqGramPresentationPolicy.validatedDeletedOpacityPercent(storedReqGramDeletedOpacityPercent) }
+        set { storedReqGramDeletedOpacityPercent = ReqGramPresentationPolicy.validatedDeletedOpacityPercent(newValue) }
+    }
     
     @UserDefault(key: Keys.showTabNames.rawValue)
     public var showTabNames: Bool
@@ -757,7 +827,13 @@ public class SGSimpleSettings {
     
     @UserDefault(key: Keys.contextShowJson.rawValue)
     public var contextShowJson: Bool
-    
+
+    @UserDefault(key: Keys.contextShowMessageDetails.rawValue)
+    public var contextShowMessageDetails: Bool
+
+    @UserDefault(key: Keys.addCommaAfterMention.rawValue)
+    public var addCommaAfterMention: Bool
+
     @UserDefault(key: Keys.disableScrollToNextChannel.rawValue)
     public var disableScrollToNextChannel: Bool
 
@@ -814,6 +890,9 @@ public class SGSimpleSettings {
     @UserDefault(key: Keys.chatListLines.rawValue)
     public var chatListLines: String
 
+    @UserDefault(key: Keys.customChatListTitle.rawValue)
+    public var customChatListTitle: String
+
     @UserDefault(key: Keys.compactFolderNames.rawValue)
     public var compactFolderNames: Bool
     
@@ -824,6 +903,19 @@ public class SGSimpleSettings {
 //    public var allChatsFolderPositionOverride: String
     @UserDefault(key: Keys.allChatsHidden.rawValue)
     public var allChatsHidden: Bool
+
+    // MARK: ReqGram — exteraGram chat list appearance (batch 2)
+    @UserDefault(key: Keys.hideChatListSearchBar.rawValue)
+    public var hideChatListSearchBar: Bool
+
+    @UserDefault(key: Keys.hideChatListComposeButton.rawValue)
+    public var hideChatListComposeButton: Bool
+
+    @UserDefault(key: Keys.hideArchiveFolder.rawValue)
+    public var hideArchiveFolder: Bool
+
+    @UserDefault(key: Keys.hideFolderUnreadCounters.rawValue)
+    public var hideFolderUnreadCounters: Bool
 
     @UserDefault(key: Keys.defaultEmojisFirst.rawValue)
     public var defaultEmojisFirst: Bool
@@ -915,9 +1007,53 @@ public class SGSimpleSettings {
     @UserDefault(key: Keys.reqGramSendGiftByIdEnabled.rawValue)
     public var reqGramSendGiftByIdEnabled: Bool
 
-    @UserDefault(key: Keys.reqGramDeletedGiftSenderEnabled.rawValue)
-    public var reqGramDeletedGiftSenderEnabled: Bool
+    /// Gates the Gift Scheduler plugin. While off, the scheduler's tick never
+    /// runs and no scheduled task is evaluated, so no stars can be spent.
+    @UserDefault(key: Keys.reqGramGiftSchedulerEnabled.rawValue)
+    public var reqGramGiftSchedulerEnabled: Bool
 
+    /// Grace window, in minutes, for delivering a gift whose moment passed
+    /// while the app was not running. Past this, the task becomes `missed`
+    /// and is never sent. Default 360, matching the Android plugin's code
+    /// default (its docstring's "60" is wrong).
+    @UserDefault(key: Keys.reqGramGiftSchedulerMaxLateMinutes.rawValue)
+    public var reqGramGiftSchedulerMaxLateMinutes: Int
+
+    /// Gates the Buy Gifts plugin (bulk-send: quantity × multiple recipients).
+    /// While off, the gift-send screen never offers the quantity/recipients UI
+    /// and no extra sends beyond the normal single gift can happen.
+    @UserDefault(key: Keys.reqGramBuyGiftsEnabled.rawValue)
+    public var reqGramBuyGiftsEnabled: Bool
+
+    /// Remember the last quantity typed/picked across gift-send sessions.
+    @UserDefault(key: Keys.reqGramBuyGiftsRememberQuantity.rawValue)
+    public var reqGramBuyGiftsRememberQuantity: Bool
+
+    /// Haptic tick on every successful send in a batch.
+    @UserDefault(key: Keys.reqGramBuyGiftsHapticFeedback.rawValue)
+    public var reqGramBuyGiftsHapticFeedback: Bool
+
+    /// Delay, in milliseconds, between consecutive sends in a batch. Protects
+    /// against Telegram's flood limits. Bounded to 0...5000 by the settings UI.
+    @UserDefault(key: Keys.reqGramBuyGiftsSendDelayMs.rawValue)
+    public var reqGramBuyGiftsSendDelayMs: Int
+
+    /// Maximum number of distinct recipients allowed in a single batch.
+    /// Does NOT bound quantity-per-recipient; that is bounded by the real
+    /// gift's own `limited`/`limitedPerUser` remaining counts.
+    @UserDefault(key: Keys.reqGramBuyGiftsMaxRecipients.rawValue)
+    public var reqGramBuyGiftsMaxRecipients: Int
+
+    /// Last quantity picked by the user, persisted only to pre-fill the
+    /// picker when `reqGramBuyGiftsRememberQuantity` is on.
+    @UserDefault(key: Keys.reqGramBuyGiftsLastQuantity.rawValue)
+    public var reqGramBuyGiftsLastQuantity: Int
+
+    /// NOT IMPLEMENTED. No runtime consumer exists for this key anywhere in the
+    /// app; the "Local Message Editor" plugin is gated solely by
+    /// `reqGramLocalEdictorEnabled`. Retained only so previously stored values are
+    /// not silently reinterpreted. Do not surface it in UI and do not add it to
+    /// `ReqGramSettingsTransfer.keys` until a real consumer lands.
     @UserDefault(key: Keys.reqGramZwyLibEnabled.rawValue)
     public var reqGramZwyLibEnabled: Bool
 
@@ -955,6 +1091,42 @@ public class SGSimpleSettings {
      @UserDefault(key: Keys.reqGramTextAnimationPrivateLetIgnoreSpaces.rawValue) public var reqGramTextAnimationPrivateLetIgnoreSpaces: Bool
      @UserDefault(key: Keys.reqGramTextAnimationPrivateLetAnimateAllLines.rawValue) public var reqGramTextAnimationPrivateLetAnimateAllLines: Bool
      @UserDefault(key: Keys.reqGramTextAnimationPrivateLetDebugMode.rawValue) public var reqGramTextAnimationPrivateLetDebugMode: Bool
+
+    /// Restores every Text Animation setting to its factory default ("Restore
+    /// to Defaults" in the plugin's settings). Goes through the typed
+    /// properties so the wrapper's in-memory caches stay coherent and the
+    /// didChange notifications fire for the settings UI.
+    public func resetReqGramTextAnimationPrivateLet() {
+        reqGramTextAnimationPrivateLetEnabled = false
+        reqGramTextAnimationPrivateLetDuration = 300
+        reqGramTextAnimationPrivateLetBlurEnabled = true
+        reqGramTextAnimationPrivateLetBlurDuration = 100
+        reqGramTextAnimationPrivateLetBlurRadius = 10
+        reqGramTextAnimationPrivateLetBlurTextDelay = 20
+        reqGramTextAnimationPrivateLetSlideEnabled = true
+        reqGramTextAnimationPrivateLetSlideDist = 20
+        reqGramTextAnimationPrivateLetScaleEnabled = false
+        reqGramTextAnimationPrivateLetScaleStart = 0.0
+        reqGramTextAnimationPrivateLetRotateEnabled = false
+        reqGramTextAnimationPrivateLetRotateAngle = -15
+        reqGramTextAnimationPrivateLetDeleteAnimEnabled = true
+        reqGramTextAnimationPrivateLetParticleStyle = 0
+        reqGramTextAnimationPrivateLetParticleCount = 5
+        reqGramTextAnimationPrivateLetParticleSpeed = 50
+        reqGramTextAnimationPrivateLetParticleSpread = 50
+        reqGramTextAnimationPrivateLetParticleSize = 50
+        reqGramTextAnimationPrivateLetCursorEnabled = true
+        reqGramTextAnimationPrivateLetCursorSpeed = 30
+        reqGramTextAnimationPrivateLetCursorWidth = 5
+        reqGramTextAnimationPrivateLetLiquidCursorEnabled = false
+        reqGramTextAnimationPrivateLetLiquidScaleFactor = 15
+        reqGramTextAnimationPrivateLetSelectionCursorEffect = 0
+        reqGramTextAnimationPrivateLetSelectionLiquidStretch = 60
+        reqGramTextAnimationPrivateLetSelectionLiquidSide = 50
+        reqGramTextAnimationPrivateLetIgnoreSpaces = true
+        reqGramTextAnimationPrivateLetAnimateAllLines = false
+        reqGramTextAnimationPrivateLetDebugMode = false
+    }
 
 
     // MARK: AyuGram - settings properties
@@ -998,10 +1170,6 @@ public class SGSimpleSettings {
     /// Marker tint: "theme" or one of the fixed AyuGram palette names.
     @UserDefault(key: Keys.ayuDeletedIconColor.rawValue)
     public var ayuDeletedIconColor: String
-
-    /// Opacity of deleted-message content in the viewer, percent 0–100.
-    @UserDefault(key: Keys.ayuDeletedOpacity.rawValue)
-    public var ayuDeletedOpacity: Int
 
     /// Show preserved deleted messages inline in the chat history.
     @UserDefault(key: Keys.ayuShowDeletedInline.rawValue)
@@ -1252,12 +1420,6 @@ public class SGSimpleSettings {
 }
 
 extension SGSimpleSettings {
-    /// Shared feature gate for incremental Telegram 12.1.1 legacy-design migrations.
-    /// Individual screens should check this gate at their own rendering boundary.
-    public var isTelegram1211LegacyDesignEnabled: Bool {
-        return telegram1211LegacyDesign
-    }
-
     public var isStealthModeEnabled: Bool {
         return storyStealthMode && canUseStealthMode
     }

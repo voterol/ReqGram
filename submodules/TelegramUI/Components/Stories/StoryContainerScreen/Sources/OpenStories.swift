@@ -5,9 +5,47 @@ import AccountContext
 import SwiftSignalKit
 import TelegramCore
 import AvatarNode
+import PresentationDataUtils
+import SGStrings
+import SGSimpleSettings
+
+// MARK: AyuGram - suggest enabling Ghost Mode before viewing stories
+/// Mirrors AyuGram's "ask before viewing stories" tweak: when the user is
+/// about to open the story viewer with Ghost Mode off, offer to enable it so
+/// story views are not sent. The story always opens, with or without ghost.
+private func ayuMaybeSuggestGhostModeBeforeStories(context: AccountContext, isOwnStories: Bool, parentController: ViewController, open: @escaping () -> Void) {
+    let settings = SGSimpleSettings.shared
+    guard settings.ayuGhostSuggestBeforeStory, !settings.isAyuGhostActive, !isOwnStories else {
+        open()
+        return
+    }
+    let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+    let locale = presentationData.strings.baseLanguageCode
+    let alertController = textAlertController(
+        context: context,
+        title: "AyuGram.Ghost.SuggestBeforeStory.Alert.Title".i18n(locale),
+        text: "AyuGram.Ghost.SuggestBeforeStory.Alert.Text".i18n(locale),
+        actions: [
+            TextAlertAction(type: .defaultAction, title: "AyuGram.Ghost.SuggestBeforeStory.Alert.Enable".i18n(locale), action: { [open] in
+                SGSimpleSettings.shared.ayuGhostMode = true
+                open()
+            }),
+            TextAlertAction(type: .genericAction, title: "AyuGram.Ghost.SuggestBeforeStory.Alert.Open".i18n(locale), action: { [open] in
+                open()
+            })
+        ]
+    )
+    parentController.present(alertController, in: .window(.root))
+}
 
 public extension StoryContainerScreen {
     static func openArchivedStories(context: AccountContext, parentController: ViewController, avatarNode: AvatarNode, sharedProgressDisposable: MetaDisposable?) {
+        ayuMaybeSuggestGhostModeBeforeStories(context: context, isOwnStories: false, parentController: parentController) {
+            StoryContainerScreen.ayuOpenArchivedStoriesImpl(context: context, parentController: parentController, avatarNode: avatarNode, sharedProgressDisposable: sharedProgressDisposable)
+        }
+    }
+    
+    fileprivate static func ayuOpenArchivedStoriesImpl(context: AccountContext, parentController: ViewController, avatarNode: AvatarNode, sharedProgressDisposable: MetaDisposable?) {
         let storyContent = StoryContentContextImpl(context: context, isHidden: true, focusedPeerId: nil, singlePeer: false)
         let signal = storyContent.state
         |> take(1)
@@ -160,6 +198,39 @@ public extension StoryContainerScreen {
     }
     
     static func openPeerStoriesCustom(
+        context: AccountContext,
+        peerId: EnginePeer.Id,
+        focusOnId: Int32? = nil,
+        isHidden: Bool,
+        initialOrder: [EnginePeer.Id] = [],
+        singlePeer: Bool,
+        parentController: ViewController,
+        transitionIn: @escaping () -> StoryContainerScreen.TransitionIn?,
+        transitionOut: @escaping (EnginePeer.Id) -> StoryContainerScreen.TransitionOut?,
+        setFocusedItem: @escaping (Signal<EngineStoryId?, NoError>) -> Void,
+        setProgress: @escaping (Signal<Never, NoError>) -> Void,
+        completion: @escaping (StoryContainerScreen) -> Void = { _ in }
+    ) {
+        // MARK: AyuGram - offer Ghost Mode before the story viewer opens
+        ayuMaybeSuggestGhostModeBeforeStories(context: context, isOwnStories: peerId == context.account.peerId, parentController: parentController) {
+            StoryContainerScreen.ayuOpenPeerStoriesCustomImpl(
+                context: context,
+                peerId: peerId,
+                focusOnId: focusOnId,
+                isHidden: isHidden,
+                initialOrder: initialOrder,
+                singlePeer: singlePeer,
+                parentController: parentController,
+                transitionIn: transitionIn,
+                transitionOut: transitionOut,
+                setFocusedItem: setFocusedItem,
+                setProgress: setProgress,
+                completion: completion
+            )
+        }
+    }
+    
+    fileprivate static func ayuOpenPeerStoriesCustomImpl(
         context: AccountContext,
         peerId: EnginePeer.Id,
         focusOnId: Int32? = nil,

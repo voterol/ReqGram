@@ -91,7 +91,7 @@ public extension RichTextEditorView {
 
     // MARK: Swiftgram
     /// The return-key appearance exposed by the canvas's `UITextInputTraits` conformance.
-    var composerReturnKeyType: UIReturnKeyType {
+    public var composerReturnKeyType: UIReturnKeyType {
         get { self.canvas.returnKeyType }
         set { self.canvas.returnKeyType = newValue }
     }

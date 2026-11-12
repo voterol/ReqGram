@@ -63,7 +63,7 @@ private func SGProControllerEntries(presentationData: PresentationData) -> [SGPr
     entries.append(.header(id: id.count, section: .appearance, text: presentationData.strings.Appearance_Title.uppercased(), badge: nil))
     entries.append(.disclosure(id: id.count, section: .appearance, link: .appIcons, text: presentationData.strings.Appearance_AppIcon))
     entries.append(.disclosure(id: id.count, section: .appearance, link: .appBages, text: "AppBadge.Title".i18n(lang)))
-    entries.append(.notice(id: id.count, section: .appearance, text: "AppBadge.Notice".i18n(lang)))
+    sgAppendNotice(to: &entries, counter: id, section: .appearance, text: "AppBadge.Notice".i18n(lang))
 
     #if DEBUG
     entries.append(.action(id: id.count, section: .footer, actionType: .resetIAP, text: "Reset Pro", kind: .destructive))
@@ -166,8 +166,9 @@ public func sgProController(context: AccountContext) -> ViewController {
         }
     })
     
-    let signal = combineLatest(context.sharedContext.presentationData, simplePromise.get())
-    |> map { presentationData, _ ->  (ItemListControllerState, (ItemListNodeState, Any)) in
+    // `sgSimpleSettingsChangedSignal` re-renders when compact descriptions are toggled elsewhere.
+    let signal = combineLatest(context.sharedContext.presentationData, simplePromise.get(), sgSimpleSettingsChangedSignal)
+    |> map { presentationData, _, _ ->  (ItemListControllerState, (ItemListNodeState, Any)) in
         
         let entries = SGProControllerEntries(presentationData: presentationData)
         

@@ -3,6 +3,8 @@ import AccountContext
 import SwiftSignalKit
 import TelegramCore
 import Postbox
+// MARK: ReqGram - FunctionDescription/Buffer/DeserializeFunctionResponse for the raw
+// network.request call below come from TelegramApi.
 import TelegramApi
 
 /// Provider-internal typed failure. `code` is the stable string exposed by the

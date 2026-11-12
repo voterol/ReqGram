@@ -46,9 +46,11 @@ public extension ToolbarTheme {
 }
 
 public extension NavigationBarTheme {
+    // MARK: ReqGram - `style`/`hideBackground`/`hideSeparator`/`enableBackgroundBlur` restored:
+    // upstream dropped them with the legacy/glass merge, but call sites below still need them.
     convenience init(rootControllerTheme: PresentationTheme, enableBackgroundBlur: Bool = true, hideBackground: Bool = false, hideBadge: Bool = false, hideSeparator: Bool = false, edgeEffectColor: UIColor? = nil, style: NavigationBar.Style = .legacy, glassStyle: NavigationBar.GlassStyle = .default) {
         let theme = rootControllerTheme.rootController.navigationBar
-        
+
         let buttonColor: UIColor
         let disabledButtonColor: UIColor
         let badgeBackgroundColor: UIColor
@@ -59,23 +61,26 @@ public extension NavigationBarTheme {
             disabledButtonColor = buttonColor.withMultipliedAlpha(0.5)
             badgeBackgroundColor = rootControllerTheme.chat.inputPanel.panelControlColor
             badgeTextColor = rootControllerTheme.overallDarkAppearance ? .black : rootControllerTheme.list.itemCheckColors.foregroundColor
-            if edgeEffectColor == nil {
-                edgeEffectColor = rootControllerTheme.list.plainBackgroundColor
-            }
         } else {
             buttonColor = theme.buttonColor
             disabledButtonColor = theme.disabledButtonColor
             badgeBackgroundColor = theme.badgeBackgroundColor
             badgeTextColor = theme.badgeTextColor
         }
-        
+        // ReqGram: fill the edge-effect color for legacy-style bars too — upstream fills it
+        // unconditionally; leaving it nil makes NavigationBarNode fall back to `.white`,
+        // which renders a white #BFBFBF scrim band on dark themes.
+        if edgeEffectColor == nil {
+            edgeEffectColor = rootControllerTheme.list.plainBackgroundColor
+        }
+
         self.init(overallDarkAppearance: rootControllerTheme.overallDarkAppearance, buttonColor: buttonColor, disabledButtonColor: disabledButtonColor, primaryTextColor: theme.primaryTextColor, backgroundColor: hideBackground ? .clear : theme.blurredBackgroundColor, opaqueBackgroundColor: hideBackground ? .clear : theme.opaqueBackgroundColor, enableBackgroundBlur: enableBackgroundBlur, separatorColor: hideBackground || hideSeparator ? .clear : theme.separatorColor, badgeBackgroundColor: hideBadge ? .clear : badgeBackgroundColor, badgeStrokeColor: .clear, badgeTextColor: hideBadge ? .clear : badgeTextColor, edgeEffectColor: edgeEffectColor, accentButtonColor: rootControllerTheme.list.itemCheckColors.fillColor, accentDisabledButtonColor: rootControllerTheme.chat.inputPanel.panelControlDisabledColor, accentForegroundColor: rootControllerTheme.list.itemCheckColors.foregroundColor, style: style, glassStyle: glassStyle)
     }
 }
 
 public extension NavigationBarStrings {
     convenience init(presentationStrings: PresentationStrings) {
-        self.init(back: presentationStrings.Common_Back, close: presentationStrings.Common_Close)
+        self.init(back: presentationStrings.Common_Back, close: presentationStrings.Common_Close, more: presentationStrings.Common_More)
     }
 }
 
@@ -83,11 +88,12 @@ public extension NavigationBarPresentationData {
     convenience init(presentationData: PresentationData, style: NavigationBar.Style = .legacy, glassStyle: NavigationBar.GlassStyle = .default) {
         self.init(theme: NavigationBarTheme(rootControllerTheme: presentationData.theme, style: style, glassStyle: glassStyle), strings: NavigationBarStrings(presentationStrings: presentationData.strings))
     }
-    
+
+    /// `hideBackground`: no backdrop (a clear edge effect).
     convenience init(presentationData: PresentationData, hideBackground: Bool, hideBadge: Bool, hideSeparator: Bool = false, style: NavigationBar.Style = .legacy, glassStyle: NavigationBar.GlassStyle = .default, edgeEffectColor: UIColor? = nil) {
         self.init(theme: NavigationBarTheme(rootControllerTheme: presentationData.theme, hideBackground: hideBackground, hideBadge: hideBadge, hideSeparator: hideSeparator, edgeEffectColor: hideBackground ? .clear : edgeEffectColor, style: style, glassStyle: glassStyle), strings: NavigationBarStrings(presentationStrings: presentationData.strings))
     }
-    
+
     convenience init(presentationTheme: PresentationTheme, presentationStrings: PresentationStrings, style: NavigationBar.Style = .legacy, glassStyle: NavigationBar.GlassStyle = .default) {
         self.init(theme: NavigationBarTheme(rootControllerTheme: presentationTheme, style: style, glassStyle: glassStyle), strings: NavigationBarStrings(presentationStrings: presentationStrings))
     }
@@ -135,7 +141,7 @@ public extension NavigationControllerTheme {
         case .white:
             navigationStatusBar = .white
         }
-        self.init(statusBar: navigationStatusBar, navigationBar: NavigationBarTheme(rootControllerTheme: presentationTheme), emptyAreaColor: presentationTheme.chatList.backgroundColor)
+        self.init(statusBar: navigationStatusBar, navigationBar: NavigationBarTheme(rootControllerTheme: presentationTheme), emptyAreaColor: presentationTheme.chatList.backgroundColor, separatorColor: presentationTheme.rootController.navigationBar.separatorColor, opaqueBackgroundColor: presentationTheme.rootController.navigationBar.opaqueBackgroundColor)
     }
 }
 

@@ -125,17 +125,17 @@ public func projectSupportController(context: AccountContext, kind: ProjectSuppo
     let signal = context.sharedContext.presentationData
     |> map { presentationData -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let lang = presentationData.strings.baseLanguageCode
-        var entries: [ProjectSupportEntry] = [
-            .header(id: 0, section: .project, text: configuration.title.uppercased(), badge: nil),
-            .notice(id: 1, section: .project, text: i18n("ProjectSupport.Description", lang, configuration.title)),
-            .action(id: 2, section: .project, actionType: .boosty, text: i18n("ProjectSupport.Boosty", lang), kind: .generic),
-            .action(id: 3, section: .project, actionType: .contact, text: i18n("ProjectSupport.Contact", lang, configuration.contactUsername), kind: .generic),
-            .header(id: 4, section: .payment, text: i18n("ProjectSupport.PaymentDetails", lang), badge: nil)
-        ]
-        for (index, payment) in configuration.payments.enumerated() {
-            entries.append(.oneFromManySelector(id: 5 + index, section: .payment, settingName: ProjectSupportPayment(value: payment.1), text: payment.0, value: payment.1, enabled: true))
+        let counter = SGItemListCounter()
+        var entries: [ProjectSupportEntry] = []
+        entries.append(.header(id: counter.count, section: .project, text: configuration.title.uppercased(), badge: nil))
+        sgAppendNotice(to: &entries, counter: counter, section: .project, text: i18n("ProjectSupport.Description", lang, configuration.title))
+        entries.append(.action(id: counter.count, section: .project, actionType: .boosty, text: i18n("ProjectSupport.Boosty", lang), kind: .generic))
+        entries.append(.action(id: counter.count, section: .project, actionType: .contact, text: i18n("ProjectSupport.Contact", lang, configuration.contactUsername), kind: .generic))
+        entries.append(.header(id: counter.count, section: .payment, text: i18n("ProjectSupport.PaymentDetails", lang), badge: nil))
+        for payment in configuration.payments {
+            entries.append(.oneFromManySelector(id: counter.count, section: .payment, settingName: ProjectSupportPayment(value: payment.1), text: payment.0, value: payment.1, enabled: true))
         }
-        entries.append(.notice(id: 5 + configuration.payments.count, section: .payment, text: i18n("ProjectSupport.CopyHint", lang)))
+        sgAppendNotice(to: &entries, counter: counter, section: .payment, text: i18n("ProjectSupport.CopyHint", lang))
         return (
             ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),

@@ -83,7 +83,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
             navigationStatusBar = .white
         }
         
-        super.init(mode: .single, theme: NavigationControllerTheme(statusBar: navigationStatusBar, navigationBar: AuthorizationSequenceController.navigationBarTheme(presentationData.theme), emptyAreaColor: .black), isFlat: true)
+        super.init(mode: .single, theme: NavigationControllerTheme(statusBar: navigationStatusBar, navigationBar: AuthorizationSequenceController.navigationBarTheme(presentationData.theme), emptyAreaColor: .black, separatorColor: .clear, opaqueBackgroundColor: .clear), isFlat: true)
         
         self.inAppPurchaseManager = InAppPurchaseManager(engine: .unauthorized(self.engine))
         

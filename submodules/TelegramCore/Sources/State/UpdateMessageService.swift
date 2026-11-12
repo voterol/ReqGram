@@ -1,32 +1,25 @@
 import Foundation
 import Postbox
 import SwiftSignalKit
-import TelegramApi
+internal import TelegramApi
 import MtProtoKit
 
-class UpdateMessageService: NSObject, MTMessageService {
+class UpdateMessageService: NSObject, NetworkEngineUpdateSink {
     var peerId: PeerId!
+    private var ignoresShortSentMessages = false
     let pipe: ValuePipe<[UpdateGroup]> = ValuePipe()
-    var mtProto: MTProto?
     
     override init() {
         super.init()
     }
     
-    convenience init(peerId: PeerId) {
+    convenience init(peerId: PeerId, ignoresShortSentMessages: Bool) {
         self.init()
         self.peerId = peerId
+        self.ignoresShortSentMessages = ignoresShortSentMessages
     }
     
-    func mtProtoWillAdd(_ mtProto: MTProto!) {
-        self.mtProto = mtProto
-    }
-    
-    func mtProtoDidChangeSession(_ mtProto: MTProto!) {
-        self.pipe.putNext([.reset])
-    }
-    
-    func mtProtoServerDidChangeSession(_ mtProto: MTProto!, firstValidMessageId: Int64, otherValidMessageIds: [Any]!) {
+    func networkSessionDidReset() {
         self.pipe.putNext([.reset])
     }
     
@@ -34,8 +27,8 @@ class UpdateMessageService: NSObject, MTMessageService {
         self.pipe.putNext(groups)
     }
     
-    func mtProto(_ mtProto: MTProto!, receivedMessage message: MTIncomingMessage!, authInfoSelector: MTDatacenterAuthInfoSelector, networkType: Int32) {
-        if let updates = (message.body as? BoxedMessage)?.body as? Api.Updates {
+    func networkSessionDidReceive(message: Any) {
+        if let updates = (message as? BoxedMessage)?.body as? Api.Updates {
             self.addUpdates(updates)
         }
     }
@@ -88,6 +81,9 @@ class UpdateMessageService: NSObject, MTMessageService {
             case .updatesTooLong:
                 self.pipe.putNext([.reset])
             case let .updateShortSentMessage(updateShortSentMessageData):
+                if self.ignoresShortSentMessages {
+                    return
+                }
                 let (pts, ptsCount) = (updateShortSentMessageData.pts, updateShortSentMessageData.ptsCount)
                 self.pipe.putNext([.updatePts(pts: pts, ptsCount: ptsCount)])
         }

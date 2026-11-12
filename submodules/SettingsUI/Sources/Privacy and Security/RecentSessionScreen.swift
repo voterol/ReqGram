@@ -1157,6 +1157,7 @@ private final class RecentSessionSheetComponent: CombinedComponent {
                         )
                     },
                     backgroundColor: .color(environment.theme.list.modalBlocksBackgroundColor),
+                    centeredSize: environment.metrics.widthClass == .regular ? CGSize(width: 414.0, height: 640.0) : nil,
                     animateOut: animateOut
                 ),
                 environment: {
@@ -1169,7 +1170,7 @@ private final class RecentSessionSheetComponent: CombinedComponent {
                         metrics: environment.metrics,
                         deviceMetrics: environment.deviceMetrics,
                         isDisplaying: environment.value.isVisible,
-                        isCentered: environment.metrics.widthClass == .regular,
+                        isCentered: environment.presentsFloatingPanels,
                         screenSize: context.availableSize,
                         regularMetricsSize: CGSize(width: 430.0, height: 900.0),
                         dismiss: { animated in

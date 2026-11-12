@@ -21,6 +21,7 @@ public enum MediaDataReaderReadSampleBufferResult {
 public protocol MediaDataReader: AnyObject {
     var hasVideo: Bool { get }
     var hasAudio: Bool { get }
+    var videoRotationAngle: Double { get }
         
     func readSampleBuffer() -> MediaDataReaderReadSampleBufferResult
 }
@@ -36,6 +37,10 @@ public final class FFMpegMediaDataReaderV2: MediaDataReader {
     private let videoSource: FFMpegFileReader?
     private let audioSource: FFMpegFileReader?
     
+    public var videoRotationAngle: Double {
+        return self.videoSource?.videoRotationAngle ?? 0.0
+    }
+
     public var hasVideo: Bool {
         return self.videoSource != nil
     }
@@ -44,7 +49,11 @@ public final class FFMpegMediaDataReaderV2: MediaDataReader {
         return self.audioSource != nil
     }
     
-    public init(content: Content, isVideo: Bool, codecName: String?) {
+    public convenience init(content: Content, isVideo: Bool, codecName: String?) {
+        self.init(content: content, isVideo: isVideo, codecName: codecName, ignoreEditList: false)
+    }
+
+    public init(content: Content, isVideo: Bool, codecName: String?, ignoreEditList: Bool) {
         self.content = content
         self.isVideo = isVideo
         
@@ -100,14 +109,14 @@ public final class FFMpegMediaDataReaderV2: MediaDataReader {
             }
             #endif*/
             
-            if let videoSource = FFMpegFileReader(source: source, passthroughDecoder: passthroughDecoder, useHardwareAcceleration: useHardwareAcceleration, selectedStream: .mediaType(.video), seek: seek, maxReadablePts: maxReadablePts) {
+            if let videoSource = FFMpegFileReader(source: source, passthroughDecoder: passthroughDecoder, useHardwareAcceleration: useHardwareAcceleration, selectedStream: .mediaType(.video), seek: seek, maxReadablePts: maxReadablePts, ignoreEditList: ignoreEditList) {
                 self.videoSource = videoSource
             } else {
                 self.videoSource = nil
             }
             self.audioSource = nil
         } else {
-            if let audioSource = FFMpegFileReader(source: source, passthroughDecoder: false, useHardwareAcceleration: false, selectedStream: .mediaType(.audio), seek: seek, maxReadablePts: maxReadablePts) {
+            if let audioSource = FFMpegFileReader(source: source, passthroughDecoder: false, useHardwareAcceleration: false, selectedStream: .mediaType(.audio), seek: seek, maxReadablePts: maxReadablePts, ignoreEditList: ignoreEditList) {
                 self.audioSource = audioSource
             } else {
                 self.audioSource = nil
@@ -161,6 +170,10 @@ public final class FFMpegMediaDataReaderV1: MediaDataReader {
     private let videoSource: SoftwareVideoReader?
     private let audioSource: SoftwareAudioSource?
     
+    public var videoRotationAngle: Double {
+        return self.videoSource?.videoRotationAngle ?? 0.0
+    }
+
     public var hasVideo: Bool {
         return self.videoSource != nil
     }
@@ -169,7 +182,11 @@ public final class FFMpegMediaDataReaderV1: MediaDataReader {
         return self.audioSource != nil
     }
     
-    public init(filePath: String, isVideo: Bool, codecName: String?) {
+    public convenience init(filePath: String, isVideo: Bool, codecName: String?) {
+        self.init(filePath: filePath, isVideo: isVideo, codecName: codecName, ignoreEditList: false)
+    }
+
+    public init(filePath: String, isVideo: Bool, codecName: String?, ignoreEditList: Bool) {
         self.isVideo = isVideo
         
         if self.isVideo {
@@ -185,7 +202,7 @@ public final class FFMpegMediaDataReaderV1: MediaDataReader {
             }
             self.audioSource = nil
         } else {
-            let audioSource = SoftwareAudioSource(path: filePath)
+            let audioSource = SoftwareAudioSource(path: filePath, ignoreEditList: ignoreEditList, isPlayback: true)
             if audioSource.hasStream {
                 self.audioSource = audioSource
             } else {
@@ -216,6 +233,8 @@ public final class FFMpegMediaDataReaderV1: MediaDataReader {
 }
 
 public final class AVAssetVideoDataReader: MediaDataReader {
+    public private(set) var videoRotationAngle: Double = 0.0
+
     private let isVideo: Bool
     private var mediaInfo: FFMpegMediaInfo.Info?
     private var assetReader: AVAssetReader?
@@ -245,6 +264,8 @@ public final class AVAssetVideoDataReader: MediaDataReader {
             guard let videoTrack = asset.tracks(withMediaType: .video).first else {
                 return
             }
+            let transform = videoTrack.preferredTransform
+            self.videoRotationAngle = atan2(Double(transform.b), Double(transform.a))
             let videoOutput = AVAssetReaderTrackOutput(track: videoTrack, outputSettings: [String(kCVPixelBufferPixelFormatTypeKey): kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange])
             assetReader.add(videoOutput)
             if assetReader.startReading() {

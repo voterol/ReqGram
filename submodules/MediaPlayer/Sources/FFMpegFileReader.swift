@@ -225,6 +225,8 @@ public final class FFMpegFileReader {
         case error
     }
     
+    public private(set) var videoRotationAngle: Double = 0.0
+
     private(set) var readingError = false
     private var stream: Stream?
     private var avIoContext: FFMpegAVIOContext?
@@ -239,7 +241,11 @@ public final class FFMpegFileReader {
     private var lastReadPts: (streamIndex: Int, pts: Int64)?
     private var isWaitingForMoreData: Bool = false
     
-    public init?(source: SourceDescription, passthroughDecoder: Bool = false, useHardwareAcceleration: Bool, selectedStream: SelectedStream, seek: Seek?, maxReadablePts: (streamIndex: Int, pts: Int64, isEnded: Bool)?) {
+    public convenience init?(source: SourceDescription, passthroughDecoder: Bool = false, useHardwareAcceleration: Bool, skipLoopFilter: Bool = false, selectedStream: SelectedStream, seek: Seek?, maxReadablePts: (streamIndex: Int, pts: Int64, isEnded: Bool)?) {
+        self.init(source: source, passthroughDecoder: passthroughDecoder, useHardwareAcceleration: useHardwareAcceleration, skipLoopFilter: skipLoopFilter, selectedStream: selectedStream, seek: seek, maxReadablePts: maxReadablePts, ignoreEditList: false)
+    }
+
+    init?(source: SourceDescription, passthroughDecoder: Bool = false, useHardwareAcceleration: Bool, skipLoopFilter: Bool = false, selectedStream: SelectedStream, seek: Seek?, maxReadablePts: (streamIndex: Int, pts: Int64, isEnded: Bool)?, ignoreEditList: Bool) {
         let _ = FFMpegMediaFrameSourceContextHelpers.registerFFMpegGlobals
         
         switch source {
@@ -265,7 +271,7 @@ public final class FFMpegFileReader {
         
         avFormatContext.setIO(self.avIoContext!)
         
-        if !avFormatContext.openInput(withDirectFilePath: nil) {
+        if !avFormatContext.openInput(withDirectFilePath: nil, ignoreEditList: ignoreEditList) {
             self.readingError = true
             return nil
         }
@@ -327,6 +333,7 @@ public final class FFMpegFileReader {
                 
                 switch mediaType {
                 case .video:
+                    self.videoRotationAngle = rotationAngle
                     if passthroughDecoder {
                         var videoFormatData: FFMpegMediaPassthroughVideoFrameDecoder.VideoFormatData?
                         if codecId == FFMpegCodecIdMPEG4 {
@@ -353,6 +360,9 @@ public final class FFMpegFileReader {
                                 if useHardwareAcceleration {
                                     codecContext.setupHardwareAccelerationIfPossible()
                                 }
+                                if skipLoopFilter {
+                                    codecContext.setSkipLoopFilterToAll()
+                                }
                                 
                                 if codecContext.open() {
                                     stream = Stream(
@@ -371,7 +381,7 @@ public final class FFMpegFileReader {
                             if codecContext.open() {
                                 stream = Stream(
                                     info: info,
-                                    decoder: .audio(FFMpegAudioFrameDecoder(codecContext: codecContext, sampleRate: 48000, channelCount: 1))
+                                    decoder: .audio(FFMpegAudioFrameDecoder(codecContext: codecContext, sampleRate: 48000, channelCount: FFMpegAudioFrameDecoder.playbackChannelCount(codecContext: codecContext)))
                                 )
                                 break outer
                             }

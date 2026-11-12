@@ -28,6 +28,7 @@ private enum AyuSettingsSection: Int32, SGItemListSection {
     case marks
     case appearance
     case chats
+    case filters
     case database
     case integration
     case support
@@ -90,7 +91,7 @@ private enum AyuBoolSetting: String {
 }
 
 private enum AyuSliderSetting: String {
-    case ayuDeletedOpacity
+    case ayuDeletedMessageOpacity
 }
 
 private enum AyuOneFromManySetting: String {
@@ -188,15 +189,15 @@ private func ayuSettingsEntries(presentationData: PresentationData) -> [AyuSetti
     entries.append(.toggle(id: id.count, section: .ghost, settingName: .ayuGhostBlockTyping, value: settings.ayuGhostBlockTyping, text: i18n("AyuGram.Ghost.Typing", lang), enabled: ghostEnabled))
     entries.append(.toggle(id: id.count, section: .ghost, settingName: .ayuGhostBlockOnlinePresence, value: settings.ayuGhostBlockOnlinePresence, text: i18n("AyuGram.Ghost.Online", lang), enabled: ghostEnabled))
     entries.append(.toggle(id: id.count, section: .ghost, settingName: .ayuGhostBlockStoryViews, value: settings.ayuGhostBlockStoryViews, text: i18n("AyuGram.Ghost.Stories", lang), enabled: ghostEnabled))
-    entries.append(.notice(id: id.count, section: .ghost, text: i18n("AyuGram.Ghost.Notice", lang)))
+    sgAppendNotice(to: &entries, counter: id, section: .ghost, text: i18n("AyuGram.Ghost.Notice", lang))
 
     // MARK: Ghost Mode - advanced
     entries.append(.toggle(id: id.count, section: .ghostAdvanced, settingName: .ayuGhostMarkReadAfterAction, value: settings.ayuGhostMarkReadAfterAction, text: i18n("AyuGram.Ghost.MarkReadAfterAction", lang), enabled: ghostEnabled))
-    entries.append(.notice(id: id.count, section: .ghostAdvanced, text: i18n("AyuGram.Ghost.MarkReadAfterAction.Notice", lang)))
+    sgAppendNotice(to: &entries, counter: id, section: .ghostAdvanced, text: i18n("AyuGram.Ghost.MarkReadAfterAction.Notice", lang))
     entries.append(.toggle(id: id.count, section: .ghostAdvanced, settingName: .ayuGhostUseScheduledMessages, value: settings.ayuGhostUseScheduledMessages, text: i18n("AyuGram.Ghost.UseScheduledMessages", lang), enabled: ghostEnabled))
-    entries.append(.notice(id: id.count, section: .ghostAdvanced, text: i18n("AyuGram.Ghost.UseScheduledMessages.Notice", lang)))
+    sgAppendNotice(to: &entries, counter: id, section: .ghostAdvanced, text: i18n("AyuGram.Ghost.UseScheduledMessages.Notice", lang))
     entries.append(.toggle(id: id.count, section: .ghostAdvanced, settingName: .ayuGhostSendOfflineAfterOnline, value: settings.ayuGhostSendOfflineAfterOnline, text: i18n("AyuGram.Ghost.OfflineAfterOnline", lang), enabled: ghostEnabled))
-    entries.append(.notice(id: id.count, section: .ghostAdvanced, text: i18n("AyuGram.Ghost.OfflineAfterOnline.Notice", lang)))
+    sgAppendNotice(to: &entries, counter: id, section: .ghostAdvanced, text: i18n("AyuGram.Ghost.OfflineAfterOnline.Notice", lang))
     entries.append(.oneFromManySelector(id: id.count, section: .ghostAdvanced, settingName: .ayuGhostSendWithoutSound, text: i18n("AyuGram.Ghost.SendWithoutSound", lang), value: i18n("AyuGram.Ghost.SendWithoutSound.\(settings.ayuSendWithoutSoundEnum.rawValue)", lang), enabled: true))
 
     // MARK: Message preservation
@@ -207,7 +208,7 @@ private func ayuSettingsEntries(presentationData: PresentationData) -> [AyuSetti
     entries.append(.toggle(id: id.count, section: .save, settingName: .ayuSaveForBots, value: settings.ayuSaveForBots, text: i18n("AyuGram.Save.ForBots", lang), enabled: saveDeleted || settings.ayuSaveEditedMessages))
     entries.append(.toggle(id: id.count, section: .save, settingName: .ayuSaveMediaAttachments, value: settings.ayuSaveMediaAttachments, text: i18n("AyuGram.SaveMedia", lang), enabled: saveDeleted))
     entries.append(.oneFromManySelector(id: id.count, section: .save, settingName: .ayuMediaLimitBytes, text: i18n("AyuGram.Save.MediaLimit", lang), value: ayuMediaLimitLabel(settings.ayuMediaLimitBytes, lang: lang), enabled: settings.ayuSaveMediaAttachments))
-    entries.append(.notice(id: id.count, section: .save, text: i18n("AyuGram.Save.Notice", lang)))
+    sgAppendNotice(to: &entries, counter: id, section: .save, text: i18n("AyuGram.Save.Notice", lang))
 
     // MARK: Media scope
     let mediaScopeEnabled = saveDeleted && settings.ayuSaveMediaAttachments
@@ -217,14 +218,22 @@ private func ayuSettingsEntries(presentationData: PresentationData) -> [AyuSetti
     entries.append(.toggle(id: id.count, section: .saveMediaScope, settingName: .ayuSaveMediaInPublicChannels, value: settings.ayuSaveMediaInPublicChannels, text: i18n("AyuGram.Save.MediaScope.PublicChannels", lang), enabled: mediaScopeEnabled))
     entries.append(.toggle(id: id.count, section: .saveMediaScope, settingName: .ayuSaveMediaInPrivateGroups, value: settings.ayuSaveMediaInPrivateGroups, text: i18n("AyuGram.Save.MediaScope.PrivateGroups", lang), enabled: mediaScopeEnabled))
     entries.append(.toggle(id: id.count, section: .saveMediaScope, settingName: .ayuSaveMediaInPublicGroups, value: settings.ayuSaveMediaInPublicGroups, text: i18n("AyuGram.Save.MediaScope.PublicGroups", lang), enabled: mediaScopeEnabled))
-    entries.append(.notice(id: id.count, section: .saveMediaScope, text: i18n("AyuGram.Save.MediaScope.Notice", lang)))
+    sgAppendNotice(to: &entries, counter: id, section: .saveMediaScope, text: i18n("AyuGram.Save.MediaScope.Notice", lang))
 
     // MARK: Deleted message appearance
     entries.append(.header(id: id.count, section: .marks, text: i18n("AyuGram.Icon.Header", lang), badge: nil))
     entries.append(.oneFromManySelector(id: id.count, section: .marks, settingName: .ayuDeletedIconStyle, text: i18n("AyuGram.Icon.Style", lang), value: ayuDeletedIconLabel(settings.ayuDeletedIconStyle, lang: lang), enabled: true))
     entries.append(.oneFromManySelector(id: id.count, section: .marks, settingName: .ayuDeletedIconColor, text: i18n("AyuGram.Icon.Color", lang), value: ayuDeletedIconColorLabel(settings.ayuDeletedIconColor, lang: lang), enabled: settings.ayuDeletedIconStyle != "none"))
     entries.append(.toggle(id: id.count, section: .marks, settingName: .ayuSemiTransparentDeleted, value: settings.ayuSemiTransparentDeleted, text: i18n("AyuGram.Marks.SemiTransparent", lang), enabled: true))
-    entries.append(.notice(id: id.count, section: .marks, text: i18n("AyuGram.Marks.Notice", lang)))
+    // Keep the configured value when transparency is off; the helper still returns 100%.
+    if settings.ayuSemiTransparentDeleted {
+        entries.append(.percentageSlider(id: id.count, section: .marks, settingName: .ayuDeletedMessageOpacity, value: Int32(settings.reqGramDeletedOpacityPercent), title: i18n("ReqGram.DeletedOpacity", lang), unit: "%", minimum: 30, maximum: 100))
+    } else {
+        // Burn the id so stable ids of later rows do not shift when toggling.
+        _ = id.count
+    }
+    sgAppendNotice(to: &entries, counter: id, section: .marks, text: i18n("AyuGram.Marks.Notice", lang))
+    sgAppendNotice(to: &entries, counter: id, section: .marks, text: i18n("ReqGram.DeletedOpacity.Notice", lang), kind: .warning)
 
     // MARK: Appearance
     entries.append(.header(id: id.count, section: .appearance, text: i18n("AyuGram.Appearance.Header", lang), badge: nil))
@@ -234,13 +243,23 @@ private func ayuSettingsEntries(presentationData: PresentationData) -> [AyuSetti
     // MARK: Chats
     entries.append(.header(id: id.count, section: .chats, text: i18n("AyuGram.Chats.Header", lang), badge: nil))
     entries.append(.toggle(id: id.count, section: .chats, settingName: .ayuLocalPremium, value: settings.ayuLocalPremium, text: i18n("AyuGram.Chats.LocalPremium", lang), enabled: true))
-    entries.append(.notice(id: id.count, section: .chats, text: i18n("AyuGram.Chats.LocalPremium.Notice", lang)))
+    sgAppendNotice(to: &entries, counter: id, section: .chats, text: i18n("AyuGram.Chats.LocalPremium.Notice", lang))
+    entries.append(.toggle(id: id.count, section: .chats, settingName: .ayuFilterZalgo, value: settings.ayuFilterZalgo, text: i18n("AyuGram.Chats.FilterZalgo", lang), enabled: true))
+
+    // MARK: Regex filters
+    let filtersEnabled = settings.ayuFiltersEnabled
+    entries.append(.header(id: id.count, section: .filters, text: i18n("AyuGram.Filters.Header", lang).uppercased(), badge: nil))
+    entries.append(.toggle(id: id.count, section: .filters, settingName: .ayuFiltersEnabled, value: filtersEnabled, text: i18n("AyuGram.Filters.Enabled", lang), enabled: true))
+    entries.append(.disclosure(id: id.count, section: .filters, link: .manageFilters, text: i18n("AyuGram.Filters.Manage", lang)))
+    entries.append(.toggle(id: id.count, section: .filters, settingName: .ayuFiltersInChats, value: settings.ayuFiltersInChats, text: i18n("AyuGram.Filters.InChats", lang), enabled: filtersEnabled))
+    entries.append(.toggle(id: id.count, section: .filters, settingName: .ayuFiltersCaseInsensitive, value: settings.ayuFiltersCaseInsensitive, text: i18n("AyuGram.Filters.CaseInsensitive", lang), enabled: filtersEnabled))
+    sgAppendNotice(to: &entries, counter: id, section: .filters, text: i18n("AyuGram.Filters.Notice", lang))
 
     // MARK: Database
     entries.append(.header(id: id.count, section: .database, text: i18n("AyuGram.Database.Header", lang), badge: nil))
     entries.append(.action(id: id.count, section: .database, actionType: .exportDatabase, text: i18n("AyuGram.Export", lang), kind: .generic))
     entries.append(.action(id: id.count, section: .database, actionType: .importDatabase, text: i18n("AyuGram.Import", lang), kind: .destructive))
-    entries.append(.notice(id: id.count, section: .database, text: i18n("AyuGram.Export.Import.Notice", lang)))
+    sgAppendNotice(to: &entries, counter: id, section: .database, text: i18n("AyuGram.Export.Import.Notice", lang), kind: .warning)
 
     entries.append(.toggle(id: id.count, section: .integration, settingName: .ayuShowGhostModeInProfile, value: settings.ayuShowGhostModeInProfile, text: i18n("AyuGram.Ghost.ProfileToggle", lang), enabled: true))
     entries.append(.toggle(id: id.count, section: .integration, settingName: .ayuBatchForwarding, value: settings.ayuBatchForwarding, text: i18n("AyuGram.BatchForwarding", lang), enabled: true))
@@ -524,11 +543,11 @@ public func ayuSettingsController(context: AccountContext) -> ViewController {
             simplePromise.set(true)
         }, updateSliderValue: { setting, value in
             switch setting {
-            case .ayuDeletedOpacity:
-                // Slider is continuous 0-100; quantize to steps of 5.
-                let quantized = Int(max(0, min(100, value)) / 5 * 5)
-                if SGSimpleSettings.shared.ayuDeletedOpacity != quantized {
-                    SGSimpleSettings.shared.ayuDeletedOpacity = quantized
+            case .ayuDeletedMessageOpacity:
+                // The property clamps itself to the policy range on write.
+                if SGSimpleSettings.shared.reqGramDeletedOpacityPercent != Int(value) {
+                    SGSimpleSettings.shared.reqGramDeletedOpacityPercent = Int(value)
+                    // Refresh so the show/hide gate on this row re-evaluates.
                     simplePromise.set(true)
                 }
             }
@@ -684,8 +703,10 @@ public func ayuSettingsController(context: AccountContext) -> ViewController {
             }
         })
 
-    let signal = combineLatest(context.sharedContext.presentationData, simplePromise.get())
-    |> map { presentationData, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    // `sgSimpleSettingsChangedSignal` keeps this screen in sync with the compact-descriptions
+    // toggle, which can be flipped from the ReqGram screen while this one is still alive.
+    let signal = combineLatest(context.sharedContext.presentationData, simplePromise.get(), sgSimpleSettingsChangedSignal)
+    |> map { presentationData, _, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let entries = ayuSettingsEntries(presentationData: presentationData)
 
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("AyuGram"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))

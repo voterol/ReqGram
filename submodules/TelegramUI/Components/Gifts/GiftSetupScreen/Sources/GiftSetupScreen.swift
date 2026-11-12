@@ -4,6 +4,7 @@ import Display
 import AsyncDisplayKit
 import SwiftSignalKit
 import TelegramCore
+import TelegramNotices
 import TelegramPresentationData
 import TelegramUIPreferences
 import TelegramStringFormatting
@@ -40,6 +41,11 @@ import MessageInputPanelComponent
 import GiftRemainingCountComponent
 import GlassBackgroundComponent
 import SGSimpleSettings
+import SGStrings
+import ReqGramGiftScheduler
+import ReqGramBuyGifts
+import PromptUI
+import ChatScheduleTimeController
 
 private final class GiftSetupScreenComponent: Component {
     typealias EnvironmentType = ViewControllerComponentContainer.Environment
@@ -115,6 +121,10 @@ private final class GiftSetupScreenComponent: Component {
         private let upgradeSection = ComponentView<Empty>()
         private let hideSection = ComponentView<Empty>()
         private let giftIdSection = ComponentView<Empty>()
+        /// ReqGram "Gift Scheduler" plugin. Only built when the plugin is on.
+        private let scheduleSection = ComponentView<Empty>()
+        /// ReqGram "Buy Gifts" plugin. Only built when the plugin is on.
+        private let buyGiftsSection = ComponentView<Empty>()
         
         private let glassContainerView = GlassBackgroundContainerView()
         private let inputPanel = ComponentView<Empty>()
@@ -129,6 +139,10 @@ private final class GiftSetupScreenComponent: Component {
         private var isUpdating: Bool = false
         private var environment: ViewControllerComponentContainer.Environment?
         private var itemLayout: ItemLayout?
+        /// The container's bottom corners where the screen's differ (iPhone Duo's cover screen); nil elsewhere.
+        private var containerBottomCornerRadii: CornerRadii?
+        /// iPhone Duo unfolded portrait: the Done button's frame clear of the side strip, and how it clears the status island.
+        private var doneButtonIslandLayout: (frame: CGRect, inset: CGFloat, islandHeight: CGFloat)?
         
         private var currentInputMode: MessageInputPanelComponent.InputMode = .text
         
@@ -147,6 +161,16 @@ private final class GiftSetupScreenComponent: Component {
         private var hideName = false
         private var includeUpgrade = false
         private var payWithStars = false
+
+        /// ReqGram Gift Scheduler: chosen delivery timestamp, nil = send now.
+        private var scheduledTimestamp: Int32?
+
+        /// ReqGram Buy Gifts: quantity sent to EACH selected recipient, and the
+        /// recipients themselves. Empty `buyGiftsRecipients` means "just the
+        /// current chat", matching the native single-send behavior exactly.
+        private var buyGiftsQuantity: Int = 1
+        private var buyGiftsRecipients: [EnginePeer.Id] = []
+        private var buyGiftsEngine: ReqGramBuyGiftsEngine?
         
         private var inProgress = false
                         
@@ -284,6 +308,11 @@ private final class GiftSetupScreenComponent: Component {
             transition.setTransform(layer: self.backgroundLayer, transform: CATransform3DMakeTranslation(0.0, topOffset + itemLayout.containerInset, 0.0))
             
             transition.setPosition(view: self.navigationBarContainer, position: CGPoint(x: 0.0, y: topOffset + itemLayout.containerInset))
+            if let doneButtonView = self.doneButton?.view, let islandLayout = self.doneButtonIslandLayout {
+                // Slides clear of the status island as the sheet's top rises beside it.
+                let shift = statusIslandTrailingShift(rowMinY: topOffset + itemLayout.containerInset + islandLayout.frame.minY, rowHeight: islandLayout.frame.height, islandHeight: islandLayout.islandHeight, inset: islandLayout.inset)
+                transition.setPosition(view: doneButtonView, position: CGPoint(x: islandLayout.frame.midX - shift, y: islandLayout.frame.midY))
+            }
             
             var topOffsetFraction = self.scrollView.bounds.minY / 100.0
             topOffsetFraction = max(0.0, min(1.0, topOffsetFraction))
@@ -300,7 +329,9 @@ private final class GiftSetupScreenComponent: Component {
             containerTransform = CATransform3DTranslate(containerTransform, 0.0, scaledTranslation, 0.0)
             containerTransform = CATransform3DScale(containerTransform, scale, scale, scale)
             transition.setTransform(view: self.containerView, transform: containerTransform)
-            transition.setCornerRadius(layer: self.containerView.layer, cornerRadius: scaledCornerRadius)
+            if !self.containerView.layer.applyCornerRadiiIfNeeded(self.containerBottomCornerRadii) {
+                transition.setCornerRadius(layer: self.containerView.layer, cornerRadius: scaledCornerRadius)
+            }
         }
         
         func animateIn() {
@@ -331,10 +362,41 @@ private final class GiftSetupScreenComponent: Component {
         }
         
         @objc private func proceed() {
-            guard let component = self.component, let environment = self.environment else {
+            guard !self.inProgress, let component = self.component, let environment = self.environment else {
                 return
             }
-                        
+            
+            if let inputPanelView = self.inputPanel.view as? MessageInputPanelComponent.View, !inputPanelView.canDeactivateInput() {
+                inputPanelView.animateError()
+                return
+            }
+
+            // MARK: ReqGram Gift Scheduler
+            // When a delivery time has been chosen, this button schedules the
+            // gift instead of paying now. Nothing is charged here.
+            if SGSimpleSettings.shared.reqGramGiftSchedulerEnabled, self.scheduledTimestamp != nil, case .starGift = component.subject {
+                self.confirmGiftSchedule()
+                return
+            }
+
+            // MARK: ReqGram Buy Gifts
+            // Takes over whenever the user configured anything beyond the
+            // plain default (quantity 1 to exactly the current chat): extra
+            // quantity, more than one recipient, OR a single recipient that
+            // is NOT the current chat (picked explicitly via the recipients
+            // picker). A plain single gift to the current chat always goes
+            // through the untouched native path below, so enabling the
+            // plugin never changes behavior for a normal send.
+            if SGSimpleSettings.shared.reqGramBuyGiftsEnabled,
+               case let .starGift(starGift, _) = component.subject,
+               !starGift.flags.contains(.isAuction),
+               (self.buyGiftsQuantity > 1
+                   || self.buyGiftsRecipients.count > 1
+                   || (self.buyGiftsRecipients.count == 1 && self.buyGiftsRecipients.first != component.peerId)) {
+                self.proceedWithBuyGiftsBulkSend()
+                return
+            }
+
             switch component.subject {
             case let .premium(product):
                 if self.payWithStars, let starsPrice = product.starsPrice, let peer = self.peerMap[component.peerId] {
@@ -368,8 +430,706 @@ private final class GiftSetupScreenComponent: Component {
             }
         }
         
+        // MARK: - ReqGram Gift Scheduler
+
+        /// Current caption as an attributed string.
+        ///
+        /// Returning the attributed value (not `.string`) is what preserves
+        /// custom emoji: each animated emoji is an
+        /// `NSAttributedString` attribute, and flattening to `String` is
+        /// precisely the defect this port fixes.
+        private func currentCaptionAttributedText() -> NSAttributedString {
+            if let inputPanelView = self.inputPanel.view as? MessageInputPanelComponent.View, case let .text(text) = inputPanelView.getSendMessageInput() {
+                return text
+            }
+            return NSAttributedString()
+        }
+
+        private func presentGiftScheduleTimePicker() {
+            guard let component = self.component, let environment = self.environment, let controller = environment.controller() else {
+                return
+            }
+            let lang = environment.strings.baseLanguageCode
+            let minimalTime = Int32(Date().timeIntervalSince1970 + ReqGramGiftSchedulerRequest.minimumLeadTime)
+            let timeController = ChatScheduleTimeController(
+                context: component.context,
+                updatedPresentationData: nil,
+                mode: .scheduledMessages(sendWhenOnlineAvailable: false),
+                style: .default,
+                currentTime: self.scheduledTimestamp,
+                minimalTime: minimalTime,
+                dismissByTapOutside: true,
+                completion: { [weak self] time in
+                    guard let self else {
+                        return
+                    }
+                    self.scheduledTimestamp = time
+                    self.state?.updated(transition: .spring(duration: 0.4))
+                }
+            )
+            // Offer clearing the choice so the user can fall back to sending now.
+            if self.scheduledTimestamp != nil {
+                let actionSheet = ActionSheetController(presentationData: component.context.sharedContext.currentPresentationData.with { $0 })
+                actionSheet.setItemGroups([
+                    ActionSheetItemGroup(items: [
+                        ActionSheetButtonItem(title: i18n("ReqGram.Plugin.GiftScheduler.Schedule.Change", lang), action: { [weak actionSheet, weak controller] in
+                            actionSheet?.dismissAnimated()
+                            controller?.present(timeController, in: .window(.root))
+                        }),
+                        ActionSheetButtonItem(title: i18n("ReqGram.Plugin.GiftScheduler.Schedule.Clear", lang), color: .destructive, action: { [weak self, weak actionSheet] in
+                            actionSheet?.dismissAnimated()
+                            guard let self else {
+                                return
+                            }
+                            self.scheduledTimestamp = nil
+                            self.state?.updated(transition: .spring(duration: 0.4))
+                        })
+                    ]),
+                    ActionSheetItemGroup(items: [
+                        ActionSheetButtonItem(title: environment.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak actionSheet] in
+                            actionSheet?.dismissAnimated()
+                        })
+                    ])
+                ])
+                controller.present(actionSheet, in: .window(.root))
+            } else {
+                controller.present(timeController, in: .window(.root))
+            }
+        }
+
+        /// Explicit confirmation before committing a future charge of real stars.
+        ///
+        /// The plugin never schedules without passing through here, and never
+        /// sends anything that the user did not create as a task. Recipients
+        /// can be just the current chat or a picked list — one task is
+        /// committed per recipient, each with the same gift, moment and caption.
+        private func confirmGiftSchedule() {
+            guard let component = self.component, let environment = self.environment, let controller = environment.controller() else {
+                return
+            }
+            guard case let .starGift(starGift, _) = component.subject, let scheduledTimestamp = self.scheduledTimestamp else {
+                return
+            }
+            let context = component.context
+            let lang = environment.strings.baseLanguageCode
+            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+            let peerName = self.peerMap[component.peerId]?.compactDisplayTitle ?? ""
+            let whenString = reqGramGiftSchedulerFormatWhen(
+                timestamp: scheduledTimestamp,
+                dateTimeFormat: presentationData.dateTimeFormat
+            )
+
+            let sheet = ActionSheetController(presentationData: presentationData)
+            sheet.setItemGroups([
+                ActionSheetItemGroup(items: [
+                    ActionSheetTextItem(title: "\(starGift.title ?? "") · \(whenString)", parseMarkdown: false),
+                    ActionSheetButtonItem(title: String(format: i18n("ReqGram.Plugin.GiftScheduler.Recipients.Only", lang), peerName), color: .accent, action: { [weak self, weak sheet] in
+                        sheet?.dismissAnimated()
+                        self?.proceedGiftSchedule(recipients: [component.peerId])
+                    }),
+                    ActionSheetButtonItem(title: i18n("ReqGram.Plugin.GiftScheduler.Recipients.Select", lang), color: .accent, action: { [weak self, weak sheet] in
+                        sheet?.dismissAnimated()
+                        self?.presentScheduleRecipientsPicker()
+                    })
+                ]),
+                ActionSheetItemGroup(items: [
+                    ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak sheet] in
+                        sheet?.dismissAnimated()
+                    })
+                ])
+            ])
+            controller.present(sheet, in: .window(.root))
+        }
+
+        /// Multi-recipient picker for scheduled delivery (the same picker Buy
+        /// Gifts uses). The result feeds `proceedGiftSchedule`, which commits
+        /// one task per selected peer.
+        private func presentScheduleRecipientsPicker() {
+            guard let component = self.component, let environment = self.environment, let controller = environment.controller() else {
+                return
+            }
+            let context = component.context
+            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+            let lang = presentationData.strings.baseLanguageCode
+            let maxRecipients = ReqGramBuyGiftsLimits.normalizedMaxRecipients(SGSimpleSettings.shared.reqGramBuyGiftsMaxRecipients)
+
+            let picker = context.sharedContext.makeContactMultiselectionController(ContactMultiselectionControllerParams(
+                context: context,
+                mode: .chatSelection(ContactMultiselectionControllerMode.ChatSelection(
+                    title: i18n("ReqGram.Plugin.GiftScheduler.Recipients.Title", lang),
+                    searchPlaceholder: presentationData.strings.ChatListFilter_AddChatsSearchPlaceholder,
+                    selectedChats: Set([component.peerId]),
+                    additionalCategories: nil,
+                    chatListFilters: nil,
+                    onlyUsers: false
+                )),
+                filters: [],
+                alwaysEnabled: true,
+                limit: Int32(maxRecipients),
+                reachedLimit: { [weak self] _ in
+                    guard let self else {
+                        return
+                    }
+                    self.environment?.controller()?.present(textAlertController(
+                        context: context,
+                        title: nil,
+                        text: String(format: i18n("ReqGram.Plugin.BuyGifts.Recipients.LimitReached", lang), maxRecipients),
+                        actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]
+                    ), in: .window(.root))
+                }
+            ))
+            picker.navigationPresentation = .modal
+
+            let _ = (picker.result
+            |> take(1)
+            |> deliverOnMainQueue).startStandalone(next: { [weak self, weak picker] result in
+                guard case let .result(rawPeerIds, _) = result else {
+                    picker?.dismiss()
+                    return
+                }
+                let peerIds = rawPeerIds.compactMap { id -> EnginePeer.Id? in
+                    switch id {
+                    case let .peer(id):
+                        return id
+                    case .deviceContact:
+                        return nil
+                    }
+                }
+                let normalized = ReqGramBuyGiftsLimits.normalizedRecipients(peerIds, maxRecipients: maxRecipients)
+                guard let self else {
+                    picker?.dismiss()
+                    return
+                }
+                let _ = (context.engine.data.get(
+                    EngineDataMap(normalized.map { TelegramEngine.EngineData.Item.Peer.Peer(id: $0) })
+                )
+                |> take(1)
+                |> deliverOnMainQueue).startStandalone(next: { [weak self, weak picker] peers in
+                    guard let self else {
+                        picker?.dismiss()
+                        return
+                    }
+                    for (peerId, maybePeer) in peers {
+                        if let peer = maybePeer {
+                            self.peerMap[peerId] = peer
+                        }
+                    }
+                    picker?.dismiss()
+                    if normalized.isEmpty {
+                        self.environment?.controller()?.present(textAlertController(
+                            context: context,
+                            title: nil,
+                            text: i18n("ReqGram.Plugin.GiftScheduler.Recipients.None", lang),
+                            actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]
+                        ), in: .window(.root))
+                        return
+                    }
+                    self.proceedGiftSchedule(recipients: normalized)
+                })
+            })
+            controller.push(picker)
+        }
+
+        /// Validates the shared draft once, confirms once, then commits one
+        /// task per recipient.
+        private func proceedGiftSchedule(recipients: [EnginePeer.Id]) {
+            guard let component = self.component, let environment = self.environment, let controller = environment.controller() else {
+                return
+            }
+            guard case let .starGift(starGift, _) = component.subject, let scheduledTimestamp = self.scheduledTimestamp, !recipients.isEmpty else {
+                return
+            }
+            let context = component.context
+            let lang = environment.strings.baseLanguageCode
+            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+
+            var finalPrice = starGift.price
+            if self.includeUpgrade, let upgradeStars = starGift.upgradeStars {
+                finalPrice += upgradeStars
+            }
+
+            let drafts = recipients.map { peerId in
+                ReqGramGiftSchedulerRequest.makeDraft(
+                    context: context,
+                    when: Double(scheduledTimestamp),
+                    recipientPeerId: peerId,
+                    giftId: starGift.id,
+                    label: starGift.title ?? "",
+                    stars: finalPrice,
+                    giftFileId: starGift.file.fileId.id,
+                    attributedCaption: self.currentCaptionAttributedText(),
+                    hide: self.hideName,
+                    // Matches the original plugin, which never offered upgrades.
+                    includeUpgrade: self.includeUpgrade
+                )
+            }
+
+            let presentError: (String) -> Void = { [weak controller] text in
+                controller?.present(textAlertController(
+                    context: context,
+                    title: nil,
+                    text: text,
+                    actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]
+                ), in: .window(.root))
+            }
+
+            let whenString = reqGramGiftSchedulerFormatWhen(
+                timestamp: scheduledTimestamp,
+                dateTimeFormat: presentationData.dateTimeFormat
+            )
+
+            // Premium is required for custom emoji. Validate now AND again at
+            // send time, since the subscription can lapse in between. All
+            // drafts share the caption and moment, so one check covers them.
+            let _ = (ReqGramGiftSchedulerRequest.accountIsPremium(context: context)
+            |> take(1)
+            |> deliverOnMainQueue).start(next: { [weak self] isPremium in
+                if let error = ReqGramGiftSchedulerRequest.validate(drafts[0], isPremium: isPremium) {
+                    switch error {
+                    case .premiumRequiredForCustomEmoji:
+                        presentError(i18n("ReqGram.Plugin.GiftScheduler.Error.PremiumRequired", lang))
+                    case .timeInPast:
+                        presentError(i18n("ReqGram.Plugin.GiftScheduler.Error.TimeInPast", lang))
+                    case .tooManyTasks:
+                        presentError(i18n("ReqGram.Plugin.GiftScheduler.Error.TooMany", lang))
+                    case .schedulerDisabled:
+                        presentError(i18n("ReqGram.Plugin.GiftScheduler.Error.Disabled", lang))
+                    }
+                    return
+                }
+
+                var lines: [String] = []
+                if drafts.count == 1 {
+                    let peerName = self?.peerMap[recipients[0]].flatMap { $0.compactDisplayTitle } ?? recipients[0].description
+                    lines.append(i18n("ReqGram.Plugin.GiftScheduler.Confirm.Recipient", lang) + ": " + peerName)
+                    lines.append(i18n("ReqGram.Plugin.GiftScheduler.Confirm.Stars", lang) + ": " + "\(finalPrice)")
+                } else {
+                    lines.append(String(format: i18n("ReqGram.Plugin.GiftScheduler.Confirm.RecipientsCount", lang), drafts.count))
+                    lines.append(i18n("ReqGram.Plugin.GiftScheduler.Confirm.Stars", lang) + ": \(finalPrice) × \(drafts.count)")
+                    lines.append(String(format: i18n("ReqGram.Plugin.GiftScheduler.Confirm.TotalStars", lang), finalPrice * Int64(drafts.count)))
+                }
+                lines.append(i18n("ReqGram.Plugin.GiftScheduler.Confirm.When", lang) + ": " + whenString)
+                if drafts[0].customEmojiCount > 0 {
+                    lines.append(i18n("ReqGram.Plugin.GiftScheduler.Confirm.CustomEmoji", lang) + ": " + "\(drafts[0].customEmojiCount)")
+                }
+                if drafts[0].caption.wasTruncated {
+                    lines.append(i18n("ReqGram.Plugin.GiftScheduler.Confirm.Truncated", lang))
+                }
+                if drafts[0].hide {
+                    lines.append(i18n("ReqGram.Plugin.GiftScheduler.Confirm.HiddenName", lang))
+                }
+                lines.append("")
+                lines.append(i18n("ReqGram.Plugin.GiftScheduler.Confirm.Charge", lang))
+
+                let alert = textAlertController(
+                    context: context,
+                    title: i18n("ReqGram.Plugin.GiftScheduler.Confirm.Title", lang),
+                    text: lines.joined(separator: "\n"),
+                    actions: [
+                        TextAlertAction(type: .genericAction, title: presentationData.strings.Common_Cancel, action: {}),
+                        TextAlertAction(type: .defaultAction, title: i18n("ReqGram.Plugin.GiftScheduler.Confirm.Action", lang), action: { [weak self] in
+                            guard let self else {
+                                return
+                            }
+                            var scheduled = 0
+                            var limitReached = false
+                            var genericFailure = false
+                            for draft in drafts {
+                                do {
+                                    let _ = try ReqGramGiftSchedulerRequest.commit(draft, context: context, isPremium: isPremium)
+                                    scheduled += 1
+                                } catch ReqGramGiftSchedulerRequest.Error.tooManyTasks {
+                                    limitReached = true
+                                    break
+                                } catch {
+                                    genericFailure = true
+                                    break
+                                }
+                            }
+                            if scheduled > 0 {
+                                ReqGramGiftScheduler.shared.setup(context: context)
+                                self.environment?.controller()?.dismiss()
+                            }
+                            if limitReached {
+                                presentError(String(format: i18n("ReqGram.Plugin.GiftScheduler.Scheduled.Partial", lang), scheduled, drafts.count))
+                            } else if genericFailure && scheduled == 0 {
+                                presentError(i18n("ReqGram.Plugin.GiftScheduler.Error.Generic", lang))
+                            }
+                        })
+                    ]
+                )
+                controller.present(alert, in: .window(.root))
+            })
+        }
+
+        // MARK: - ReqGram Buy Gifts
+
+        /// Quantity picker: preset steps via an action sheet, plus a
+        /// "custom" entry that opens a numeric prompt. Values are bounded
+        /// against the real gift's own remaining-count limits as soon as a
+        /// gift is known, matching `ReqGramBuyGiftsLimits.normalizedQuantity`.
+        private func presentBuyGiftsQuantityPicker() {
+            guard let component = self.component, let environment = self.environment, let controller = environment.controller() else {
+                return
+            }
+            guard case let .starGift(starGift, _) = component.subject else {
+                return
+            }
+            let context = component.context
+            let lang = environment.strings.baseLanguageCode
+            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+
+            let perUserRemains = starGift.perUserLimit?.remains
+            let availabilityRemains = starGift.availability?.remains
+
+            let applyQuantity: (Int) -> Void = { [weak self] requested in
+                guard let self else {
+                    return
+                }
+                let normalized = ReqGramBuyGiftsLimits.normalizedQuantity(
+                    requested,
+                    perUserRemains: perUserRemains,
+                    availabilityRemains: availabilityRemains
+                )
+                if normalized != requested {
+                    let limit = [perUserRemains, availabilityRemains].compactMap { $0 }.min() ?? Int32(normalized)
+                    self.environment?.controller()?.present(textAlertController(
+                        context: context,
+                        title: nil,
+                        text: String(format: i18n("ReqGram.Plugin.BuyGifts.Quantity.Limited", lang), limit),
+                        actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]
+                    ), in: .window(.root))
+                }
+                self.buyGiftsQuantity = normalized
+                if SGSimpleSettings.shared.reqGramBuyGiftsRememberQuantity {
+                    SGSimpleSettings.shared.reqGramBuyGiftsLastQuantity = normalized
+                }
+                self.state?.updated(transition: .spring(duration: 0.4))
+            }
+
+            let sheet = ActionSheetController(presentationData: presentationData)
+            var items: [ActionSheetItem] = [
+                ActionSheetTextItem(title: i18n("ReqGram.Plugin.BuyGifts.Quantity.Title", lang), parseMarkdown: false)
+            ]
+            let steps = [1, 2, 3, 5, 10, 15, 25, 50, 100]
+            items.append(contentsOf: steps.map { quantity in
+                ActionSheetButtonItem(title: "×\(quantity)", color: .accent, action: { [weak sheet] in
+                    sheet?.dismissAnimated()
+                    applyQuantity(quantity)
+                })
+            })
+            items.append(ActionSheetButtonItem(title: i18n("ReqGram.Plugin.BuyGifts.Quantity.Custom", lang), color: .accent, action: { [weak self, weak sheet] in
+                sheet?.dismissAnimated()
+                guard let self else {
+                    return
+                }
+                self.environment?.controller()?.present(promptController(
+                    context: context,
+                    text: i18n("ReqGram.Plugin.BuyGifts.Quantity.Title", lang),
+                    value: "\(self.buyGiftsQuantity)",
+                    placeholder: i18n("ReqGram.Plugin.BuyGifts.Quantity.Custom", lang),
+                    apply: { value in
+                        guard let value, let parsed = Int(value.trimmingCharacters(in: .whitespacesAndNewlines)), parsed > 0 else {
+                            return
+                        }
+                        applyQuantity(parsed)
+                    }
+                ), in: .window(.root))
+            }))
+            sheet.setItemGroups([
+                ActionSheetItemGroup(items: items),
+                ActionSheetItemGroup(items: [
+                    ActionSheetButtonItem(title: environment.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak sheet] in
+                        sheet?.dismissAnimated()
+                    })
+                ])
+            ])
+            controller.present(sheet, in: .window(.root))
+        }
+
+        /// Multi-recipient picker. Reuses `ContactMultiselectionController`
+        /// (the same picker used elsewhere in the app for "add to many chats"
+        /// flows) rather than inventing a new one, and caps the result at the
+        /// configured "max recipients per batch".
+        private func presentBuyGiftsRecipientsPicker() {
+            guard let component = self.component, let environment = self.environment, let controller = environment.controller() else {
+                return
+            }
+            let context = component.context
+            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+            let lang = presentationData.strings.baseLanguageCode
+            let maxRecipients = ReqGramBuyGiftsLimits.normalizedMaxRecipients(SGSimpleSettings.shared.reqGramBuyGiftsMaxRecipients)
+
+            let picker = context.sharedContext.makeContactMultiselectionController(ContactMultiselectionControllerParams(
+                context: context,
+                mode: .chatSelection(ContactMultiselectionControllerMode.ChatSelection(
+                    title: i18n("ReqGram.Plugin.BuyGifts.Recipients.Title", lang),
+                    searchPlaceholder: presentationData.strings.ChatListFilter_AddChatsSearchPlaceholder,
+                    selectedChats: Set(self.buyGiftsRecipients),
+                    additionalCategories: nil,
+                    chatListFilters: nil,
+                    onlyUsers: false
+                )),
+                filters: [],
+                alwaysEnabled: true,
+                limit: Int32(maxRecipients),
+                reachedLimit: { [weak self] _ in
+                    guard let self else {
+                        return
+                    }
+                    self.environment?.controller()?.present(textAlertController(
+                        context: context,
+                        title: nil,
+                        text: String(format: i18n("ReqGram.Plugin.BuyGifts.Recipients.LimitReached", lang), maxRecipients),
+                        actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]
+                    ), in: .window(.root))
+                }
+            ))
+            picker.navigationPresentation = .modal
+
+            let _ = (picker.result
+            |> take(1)
+            |> deliverOnMainQueue).startStandalone(next: { [weak self, weak picker] result in
+                guard case let .result(rawPeerIds, _) = result else {
+                    picker?.dismiss()
+                    return
+                }
+                let peerIds = rawPeerIds.compactMap { id -> EnginePeer.Id? in
+                    switch id {
+                    case let .peer(id):
+                        return id
+                    case .deviceContact:
+                        return nil
+                    }
+                }
+                let normalized = ReqGramBuyGiftsLimits.normalizedRecipients(peerIds, maxRecipients: maxRecipients)
+                guard let self else {
+                    picker?.dismiss()
+                    return
+                }
+                let _ = (context.engine.data.get(
+                    EngineDataMap(normalized.map { TelegramEngine.EngineData.Item.Peer.Peer(id: $0) })
+                )
+                |> take(1)
+                |> deliverOnMainQueue).startStandalone(next: { [weak self, weak picker] peers in
+                    guard let self else {
+                        picker?.dismiss()
+                        return
+                    }
+                    for (peerId, maybePeer) in peers {
+                        if let peer = maybePeer {
+                            self.peerMap[peerId] = peer
+                        }
+                    }
+                    self.buyGiftsRecipients = normalized
+                    self.state?.updated(transition: .spring(duration: 0.4))
+                    picker?.dismiss()
+                })
+            })
+            controller.push(picker)
+        }
+
+        /// Builds the bulk-send plan from current UI state and the already
+        /// resolved, real `StarGift.Gift`, shows the total-cost confirmation
+        /// (with a balance check and top-up offer exactly like the single-send
+        /// flow), and on confirmation hands it to `ReqGramBuyGiftsEngine`.
+        ///
+        /// Only called when the user actually configured quantity > 1 or more
+        /// than one recipient; otherwise the normal single-send path is used
+        /// unchanged, so Buy Gifts is strictly additive.
+        private func proceedWithBuyGiftsBulkSend() {
+            guard let component = self.component, let environment = self.environment, environment.controller() != nil else {
+                return
+            }
+            guard case let .starGift(starGift, _) = component.subject, let starsContext = component.context.starsContext else {
+                return
+            }
+            let context = component.context
+
+            var textInputText = NSAttributedString()
+            if let inputPanelView = self.inputPanel.view as? MessageInputPanelComponent.View, case let .text(text) = inputPanelView.getSendMessageInput() {
+                textInputText = text
+            }
+            let entities = generateChatInputTextEntities(textInputText)
+
+            var unitPrice = starGift.price
+            if self.includeUpgrade, let upgradeStars = starGift.upgradeStars {
+                unitPrice += upgradeStars
+            }
+
+            let recipients = self.buyGiftsRecipients.isEmpty ? [component.peerId] : self.buyGiftsRecipients
+            let request = ReqGramBuyGiftsRequest(
+                giftId: starGift.id,
+                hideName: self.hideName,
+                includeUpgrade: self.includeUpgrade,
+                text: textInputText.string.isEmpty ? nil : textInputText.string,
+                entities: entities.isEmpty ? nil : entities,
+                unitPrice: unitPrice,
+                recipients: recipients,
+                quantityPerRecipient: self.buyGiftsQuantity
+            )
+
+            let totalPrice = request.totalPrice
+            let totalUnits = request.totalUnits
+
+            let startBatch: () -> Void = { [weak self] in
+                guard let self else {
+                    return
+                }
+                self.presentBuyGiftsProgress(request: request)
+            }
+
+            // Pre-send balance check, same convention as the single-send flow
+            // a few lines below in `proceedWithStarGift`: if the balance is
+            // already known and insufficient, offer the top-up screen before
+            // starting anything, instead of discovering it mid-batch.
+            if let balance = starsContext.currentState?.balance, balance.value < totalPrice {
+                let _ = (self.optionsPromise.get()
+                |> filter { $0 != nil }
+                |> take(1)
+                |> deliverOnMainQueue).startStandalone(next: { [weak self, starsContext] options in
+                    guard let self, let controller = self.environment?.controller() else {
+                        return
+                    }
+                    let purchaseController = context.sharedContext.makeStarsPurchaseScreen(
+                        context: context,
+                        starsContext: starsContext,
+                        options: options ?? [],
+                        purpose: .starGift(peerId: component.peerId, requiredStars: totalPrice),
+                        targetPeerId: nil,
+                        customTheme: nil,
+                        completion: { [weak starsContext] stars in
+                            guard let starsContext else {
+                                return
+                            }
+                            starsContext.add(balance: StarsAmount(value: stars, nanos: 0))
+                            let _ = (starsContext.onUpdate
+                            |> deliverOnMainQueue).start(next: {
+                                self.presentBuyGiftsConfirmation(request: request, totalPrice: totalPrice, totalUnits: totalUnits, startBatch: startBatch)
+                            })
+                        }
+                    )
+                    controller.push(purchaseController)
+                })
+                return
+            }
+
+            self.presentBuyGiftsConfirmation(request: request, totalPrice: totalPrice, totalUnits: totalUnits, startBatch: startBatch)
+        }
+
+        /// Explicit "you are about to spend N⭐ across M gifts" confirmation,
+        /// matching Gift Scheduler's Confirm.Stars/Confirm.Charge convention.
+        /// Nothing is charged before the user taps the confirm action here.
+        private func presentBuyGiftsConfirmation(
+            request: ReqGramBuyGiftsRequest,
+            totalPrice: Int64,
+            totalUnits: Int,
+            startBatch: @escaping () -> Void
+        ) {
+            guard let component = self.component, let environment = self.environment, let controller = environment.controller() else {
+                return
+            }
+            let context = component.context
+            let lang = environment.strings.baseLanguageCode
+            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+
+            var lines: [String] = []
+            lines.append(String(format: i18n("ReqGram.Plugin.BuyGifts.Confirm.Recipients", lang), request.recipients.count))
+            lines.append(String(format: i18n("ReqGram.Plugin.BuyGifts.Confirm.Quantity", lang), request.quantityPerRecipient))
+            lines.append(String(format: i18n("ReqGram.Plugin.BuyGifts.Confirm.Total", lang), totalUnits))
+            lines.append(i18n("ReqGram.Plugin.GiftScheduler.Confirm.Stars", lang) + ": \(totalPrice)")
+            lines.append("")
+            lines.append(i18n("ReqGram.Plugin.BuyGifts.Confirm.Charge", lang))
+
+            let alert = textAlertController(
+                context: context,
+                title: i18n("ReqGram.Plugin.BuyGifts.Confirm.Title", lang),
+                text: lines.joined(separator: "\n"),
+                actions: [
+                    TextAlertAction(type: .genericAction, title: presentationData.strings.Common_Cancel, action: {}),
+                    TextAlertAction(type: .defaultAction, title: i18n("ReqGram.Plugin.BuyGifts.Confirm.Action", lang), action: {
+                        startBatch()
+                    })
+                ]
+            )
+            controller.present(alert, in: .window(.root))
+        }
+
+        /// Live progress sheet + cancel affordance, then the final summary.
+        /// Cancellation only stops the NEXT send; a send already in flight
+        /// always completes (see `ReqGramBuyGiftsEngine`'s doc comment).
+        private func presentBuyGiftsProgress(request: ReqGramBuyGiftsRequest) {
+            guard let component = self.component, let environment = self.environment, let controller = environment.controller() else {
+                return
+            }
+            let context = component.context
+            let lang = environment.strings.baseLanguageCode
+            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+
+            let engine = ReqGramBuyGiftsEngine(context: context)
+            self.buyGiftsEngine = engine
+
+            let sheet = ActionSheetController(presentationData: presentationData)
+            let progressItem = ActionSheetTextItem(
+                title: String(format: i18n("ReqGram.Plugin.BuyGifts.Progress", lang), 0, request.totalUnits),
+                parseMarkdown: false
+            )
+            let stopItem = ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, color: .destructive, action: { [weak engine] in
+                engine?.cancel()
+            })
+            sheet.setItemGroups([ActionSheetItemGroup(items: [progressItem, stopItem])])
+            self.inProgress = true
+            self.state?.updated()
+            controller.present(sheet, in: .window(.root))
+
+            engine.start(
+                request: request,
+                delayMs: SGSimpleSettings.shared.reqGramBuyGiftsSendDelayMs,
+                onProgress: { [weak sheet, weak engine] progress in
+                    let updatedItem = ActionSheetTextItem(
+                        title: String(format: i18n("ReqGram.Plugin.BuyGifts.Progress", lang), progress.sent, progress.total),
+                        parseMarkdown: false
+                    )
+                    let stopItem = ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, color: .destructive, action: { [weak engine] in
+                        engine?.cancel()
+                    })
+                    sheet?.setItemGroups([ActionSheetItemGroup(items: [updatedItem, stopItem])])
+                },
+                onFinished: { [weak self, weak sheet] result in
+                    guard let self else {
+                        return
+                    }
+                    self.inProgress = false
+                    self.buyGiftsEngine = nil
+                    self.state?.updated()
+                    sheet?.dismissAnimated()
+
+                    let summaryText: String
+                    if result.failureReason != nil {
+                        summaryText = String(format: i18n("ReqGram.Plugin.BuyGifts.Done.Partial", lang), result.sent, result.total) + "\n" + i18n("ReqGram.Plugin.BuyGifts.Done.Error", lang)
+                    } else if result.cancelled {
+                        summaryText = String(format: i18n("ReqGram.Plugin.BuyGifts.Done.Stopped", lang), result.sent, result.total)
+                    } else {
+                        summaryText = String(format: i18n("ReqGram.Plugin.BuyGifts.Done.Success", lang), result.sent, result.spent)
+                    }
+
+                    self.environment?.controller()?.present(textAlertController(
+                        context: context,
+                        title: nil,
+                        text: summaryText,
+                        actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: { [weak self] in
+                            if result.sent > 0, !result.cancelled, result.failureReason == nil {
+                                self?.environment?.controller()?.dismiss()
+                            }
+                        })]
+                    ), in: .window(.root))
+                }
+            )
+        }
+
+
         private func proceedWithPremiumGift() {
-            guard let component = self.component, case let .premium(product) = component.subject, let storeProduct = product.storeProduct, let inAppPurchaseManager = component.context.inAppPurchaseManager else {
+            guard !self.inProgress, let component = self.component, case let .premium(product) = component.subject, let storeProduct = product.storeProduct, let inAppPurchaseManager = component.context.inAppPurchaseManager else {
                 return
             }
             
@@ -410,27 +1170,36 @@ private final class GiftSetupScreenComponent: Component {
                                 return
                             }
                             
-                            var controllers = navigationController.viewControllers
-                            controllers = controllers.filter { !($0 is GiftSetupScreen) && !($0 is GiftOptionsScreenProtocol) && !($0 is PeerInfoScreen) && !($0 is ContactSelectionController) }
-                            var foundController = false
-                            for controller in controllers.reversed() {
-                                if let chatController = controller as? ChatController, case .peer(id: component.peerId) = chatController.chatLocation {
-                                    chatController.hintPlayNextOutgoingGift()
-                                    foundController = true
-                                    break
+                            let navigateToChat = {
+                                var controllers = navigationController.viewControllers
+                                controllers = controllers.filter { !($0 is GiftSetupScreen) && !($0 is GiftOptionsScreenProtocol) && !($0 is PeerInfoScreen) && !($0 is ContactSelectionController) }
+                                var foundController = false
+                                for controller in controllers.reversed() {
+                                    if let chatController = controller as? ChatController, case .peer(id: component.peerId) = chatController.chatLocation {
+                                        chatController.hintPlayNextOutgoingGift()
+                                        foundController = true
+                                        break
+                                    }
                                 }
+                                if !foundController {
+                                    let chatController = component.context.sharedContext.makeChatController(context: component.context, chatLocation: .peer(id: component.peerId), subject: nil, botStart: nil, mode: .standard(.default), params: nil)
+                                    chatController.hintPlayNextOutgoingGift()
+                                    controllers.append(chatController)
+                                }
+                                navigationController.setViewControllers(controllers, animated: true)
                             }
-                            if !foundController {
-                                let chatController = component.context.sharedContext.makeChatController(context: component.context, chatLocation: .peer(id: component.peerId), subject: nil, botStart: nil, mode: .standard(.default), params: nil)
-                                chatController.hintPlayNextOutgoingGift()
-                                controllers.append(chatController)
+                            if component.peerId.namespace == Namespaces.Peer.CloudUser {
+                                let _ = (ApplicationSpecificNotice.incrementDismissedBirthdayPremiumGiftTip(accountManager: component.context.sharedContext.accountManager, peerId: component.peerId, timestamp: Int32(Date().timeIntervalSince1970))
+                                |> deliverOnMainQueue).startStandalone(completed: navigateToChat)
+                            } else {
+                                navigateToChat()
                             }
-                            navigationController.setViewControllers(controllers, animated: true)
                         }
                     }, error: { [weak self] error in
                         guard let self, let controller = self.environment?.controller() else {
                             return
                         }
+                        self.inProgress = false
                         self.state?.updated(transition: .immediate)
 
                         var errorText: String?
@@ -466,7 +1235,7 @@ private final class GiftSetupScreenComponent: Component {
         }
         
         private func proceedWithStarGift() {
-            guard let component = self.component, let environment = self.environment, let starsContext = component.context.starsContext, let starsState = starsContext.currentState else {
+            guard !self.inProgress, let component = self.component, let environment = self.environment, let starsContext = component.context.starsContext, let starsState = starsContext.currentState else {
                 return
             }
             
@@ -548,6 +1317,20 @@ private final class GiftSetupScreenComponent: Component {
                     guard let self, let controller = self.environment?.controller(), let navigationController = controller.navigationController as? NavigationController else {
                         return
                     }
+                    
+                    let complete: () -> Void = {
+                        if let completion {
+                            completion()
+                            
+                            if let controller = self.environment?.controller() {
+                                controller.dismiss()
+                            }
+                        }
+                        
+                        Queue.mainQueue().after(2.5) {
+                            starsContext.load(force: true)
+                        }
+                    }
 
                     if peerId.namespace == Namespaces.Peer.CloudChannel, case let .starGift(starGift, _) = component.subject {
                         var controllers = navigationController.viewControllers
@@ -571,62 +1354,59 @@ private final class GiftSetupScreenComponent: Component {
                         
                         navigationController.view.addSubview(ConfettiView(frame: navigationController.view.bounds))
                     } else if peerId.namespace == Namespaces.Peer.CloudUser {
-                        var controllers = navigationController.viewControllers
-                        controllers = controllers.filter { !($0 is GiftSetupScreen) && !($0 is GiftOptionsScreenProtocol) && !($0 is PeerInfoScreen) && !($0 is ContactSelectionController) }
-                        var foundController = false
-                        for controller in controllers.reversed() {
-                            if let chatController = controller as? ChatController, case .peer(id: component.peerId) = chatController.chatLocation {
-                                chatController.hintPlayNextOutgoingGift()
-                                foundController = true
-                                break
-                            }
-                        }
-                        if !foundController {
-                            let chatController = component.context.sharedContext.makeChatController(context: component.context, chatLocation: .peer(id: component.peerId), subject: nil, botStart: nil, mode: .standard(.default), params: nil)
-                            chatController.hintPlayNextOutgoingGift()
-                            controllers.append(chatController)
-                        }
-                        navigationController.setViewControllers(controllers, animated: true)
-                        
-                        if case let .starGift(starGift, _) = component.subject, let perUserLimit = starGift.perUserLimit {
-                            Queue.mainQueue().after(0.5) {
-                                let remains = max(0, perUserLimit.remains - 1)
-                                let text: String
-                                if remains == 0 {
-                                    text = presentationData.strings.Gift_Send_Limited_Success_Text_None
-                                } else {
-                                    text = presentationData.strings.Gift_Send_Limited_Success_Text(remains)
+                        let navigateToChat = {
+                            var controllers = navigationController.viewControllers
+                            controllers = controllers.filter { !($0 is GiftSetupScreen) && !($0 is GiftOptionsScreenProtocol) && !($0 is PeerInfoScreen) && !($0 is ContactSelectionController) }
+                            var foundController = false
+                            for controller in controllers.reversed() {
+                                if let chatController = controller as? ChatController, case .peer(id: component.peerId) = chatController.chatLocation {
+                                    chatController.hintPlayNextOutgoingGift()
+                                    foundController = true
+                                    break
                                 }
-                                let tooltipController = UndoOverlayController(
-                                    presentationData: presentationData,
-                                    content: .sticker(
-                                        context: context,
-                                        file: starGift.file,
-                                        loop: true,
-                                        title: presentationData.strings.Gift_Send_Limited_Success_Title,
-                                        text: text,
-                                        undoText: nil,
-                                        customAction: nil
-                                    ),
-                                    position: .top,
-                                    action: { _ in return true }
-                                )
-                                (navigationController.viewControllers.last as? ViewController)?.present(tooltipController, in: .current)
                             }
+                            if !foundController {
+                                let chatController = component.context.sharedContext.makeChatController(context: component.context, chatLocation: .peer(id: component.peerId), subject: nil, botStart: nil, mode: .standard(.default), params: nil)
+                                chatController.hintPlayNextOutgoingGift()
+                                controllers.append(chatController)
+                            }
+                            navigationController.setViewControllers(controllers, animated: true)
+                            
+                            if case let .starGift(starGift, _) = component.subject, let perUserLimit = starGift.perUserLimit {
+                                Queue.mainQueue().after(0.5) {
+                                    let remains = max(0, perUserLimit.remains - 1)
+                                    let text: String
+                                    if remains == 0 {
+                                        text = presentationData.strings.Gift_Send_Limited_Success_Text_None
+                                    } else {
+                                        text = presentationData.strings.Gift_Send_Limited_Success_Text(remains)
+                                    }
+                                    let tooltipController = UndoOverlayController(
+                                        presentationData: presentationData,
+                                        content: .sticker(
+                                            context: context,
+                                            file: starGift.file,
+                                            loop: true,
+                                            title: presentationData.strings.Gift_Send_Limited_Success_Title,
+                                            text: text,
+                                            undoText: nil,
+                                            customAction: nil
+                                        ),
+                                        position: .top,
+                                        action: { _ in return true }
+                                    )
+                                    (navigationController.viewControllers.last as? ViewController)?.present(tooltipController, in: .current)
+                                }
+                            }
+                            
+                            complete()
                         }
+                        let _ = (ApplicationSpecificNotice.incrementDismissedBirthdayPremiumGiftTip(accountManager: component.context.sharedContext.accountManager, peerId: component.peerId, timestamp: Int32(Date().timeIntervalSince1970))
+                        |> deliverOnMainQueue).startStandalone(completed: navigateToChat)
+                        return
                     }
                     
-                    if let completion {
-                        completion()
-                        
-                        if let controller = self.environment?.controller() {
-                            controller.dismiss()
-                        }
-                    }
-                    
-                    Queue.mainQueue().after(2.5) {
-                        starsContext.load(force: true)
-                    }
+                    complete()
                 }, error: { [weak self] error in
                     guard let self, let controller = self.environment?.controller() else {
                         return
@@ -669,7 +1449,7 @@ private final class GiftSetupScreenComponent: Component {
                 let _ = (self.optionsPromise.get()
                 |> filter { $0 != nil }
                 |> take(1)
-                |> deliverOnMainQueue).startStandalone(next: { [weak self] options in
+                |> deliverOnMainQueue).startStandalone(next: { [weak self, starsContext] options in
                     guard let self, let component = self.component, let controller = self.environment?.controller() else {
                         return
                     }
@@ -817,7 +1597,7 @@ private final class GiftSetupScreenComponent: Component {
                     targetFrame.origin.y = availableSize.height
                     transition.setFrame(view: inputMediaNode.view, frame: targetFrame, completion: { [weak inputMediaNode] _ in
                         if let inputMediaNode {
-                            Queue.mainQueue().after(0.3) {
+                            Queue.mainQueue().after(0.3) { [inputMediaNode] in
                                 inputMediaNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.35, removeOnCompletion: false, completion: { [weak inputMediaNode] _ in
                                     inputMediaNode?.view.removeFromSuperview()
                                 })
@@ -893,11 +1673,16 @@ private final class GiftSetupScreenComponent: Component {
             
             let resetScrolling = self.scrollView.bounds.width != availableSize.width
             
+            // Narrowed by the side safe insets only where there is one on each side. Beside iPhone Duo's side strip
+            // (one side only) the screen-centered sheet keeps its width: in landscape it already sits clear of the
+            // strip, and in folded portrait it spans the strip as a bottom panel. Subtracting the left inset twice
+            // made it 168pt narrower in landscape-right than in landscape-left.
+            let fillingSideInset: CGFloat = environment.safeInsets.left == environment.safeInsets.right ? environment.safeInsets.left : 0.0
             let fillingSize: CGFloat
             if case .regular = environment.metrics.widthClass {
-                fillingSize = min(availableSize.width, 414.0) - environment.safeInsets.left * 2.0
+                fillingSize = min(availableSize.width, 414.0) - fillingSideInset * 2.0
             } else {
-                fillingSize = min(availableSize.width, environment.deviceMetrics.screenSize.width) - environment.safeInsets.left * 2.0
+                fillingSize = min(availableSize.width, availableSize.height) - fillingSideInset * 2.0
             }
             let rawSideInset: CGFloat = floor((availableSize.width - fillingSize) * 0.5)
             let sideInset: CGFloat = rawSideInset + 24.0
@@ -909,6 +1694,17 @@ private final class GiftSetupScreenComponent: Component {
             if self.component == nil {
                 if isSelfGift {
                     self.hideName = true
+                }
+
+                // MARK: ReqGram Buy Gifts
+                // Only the real single-recipient flow is pre-selected; the
+                // remembered quantity is purely a UI convenience and never
+                // changes what gets charged without the user re-confirming it
+                // in the picker / the final confirmation sheet.
+                if SGSimpleSettings.shared.reqGramBuyGiftsEnabled, case .starGift = component.subject {
+                    if SGSimpleSettings.shared.reqGramBuyGiftsRememberQuantity {
+                        self.buyGiftsQuantity = max(1, SGSimpleSettings.shared.reqGramBuyGiftsLastQuantity)
+                    }
                 }
                 
                 if case let .starGift(gift, _) = component.subject, gift.flags.contains(.isAuction), let giftAuctionsManager = component.context.giftAuctionsManager {
@@ -985,6 +1781,7 @@ private final class GiftSetupScreenComponent: Component {
                         hasStickers: false,
                         hasGifs: false,
                         hideBackground: true,
+                        maskEdge: .clip,
                         forceHasPremium: true,
                         sendGif: nil
                     )
@@ -1002,7 +1799,6 @@ private final class GiftSetupScreenComponent: Component {
                         return false
                     },
                     sendEmoji: { _, _, _ in
-                        let _ = self
                     },
                     sendGif: { _, _, _, _, _ in
                         return false
@@ -1180,7 +1976,16 @@ private final class GiftSetupScreenComponent: Component {
                     environment: {},
                     containerSize: CGSize(width: 44.0, height: 44.0)
                 )
-                let doneButtonFrame = CGRect(origin: CGPoint(x: availableSize.width - rawSideInset - 16.0 - doneButtonSize.width, y: 16.0), size: doneButtonSize)
+                // Clear of the side strip's status corner when the sheet spans it (iPhone Duo, folded portrait); on the
+                // unfolded screen in portrait `updateScrolling` moves it clear of the status island while the sheet's
+                // top is beside it.
+                let doneButtonFrame = CGRect(origin: CGPoint(x: availableSize.width - rawSideInset - 16.0 - max(0.0, environment.safeInsets.right - rawSideInset) - doneButtonSize.width, y: 16.0), size: doneButtonSize)
+                if environment.navigationBarTrailingButtonsInset > 0.0, let island = environment.reservedCorners.topRight {
+                    let islandInset = max(0.0, environment.safeInsets.right + environment.navigationBarTrailingButtonsInset - rawSideInset) - max(0.0, environment.safeInsets.right - rawSideInset)
+                    self.doneButtonIslandLayout = (doneButtonFrame, islandInset, island.height)
+                } else {
+                    self.doneButtonIslandLayout = nil
+                }
                 if let doneButtonView = doneButton.view {
                     if doneButtonView.superview == nil {
                         doneButtonView.layer.rasterizationScale = UIScreenScale
@@ -1199,6 +2004,7 @@ private final class GiftSetupScreenComponent: Component {
                 }
             } else if let doneButton = self.doneButton {
                 self.doneButton = nil
+                self.doneButtonIslandLayout = nil
                 if let doneButtonView = doneButton.view {
                     doneButtonView.layer.shouldRasterize = true
                     doneButtonView.layer.animateScale(from: 1.0, to: 0.01, duration: 0.25, removeOnCompletion: false)
@@ -1825,6 +2631,183 @@ private final class GiftSetupScreenComponent: Component {
                     transition.setFrame(view: hideSectionView, frame: hideSectionFrame)
                 }
                 contentHeight += hideSectionSize.height
+
+                // MARK: ReqGram Buy Gifts
+                // Quantity-per-recipient and multi-recipient entry point. Only
+                // offered for real star gifts, never for the premium/StoreKit
+                // path and never for auctions (same "genuinely portable, one
+                // real payment per unit" scope as the plugin's engine).
+                if SGSimpleSettings.shared.reqGramBuyGiftsEnabled,
+                   case let .starGift(starGift, _) = component.subject,
+                   !starGift.flags.contains(.isAuction) {
+                    contentHeight += sectionSpacing
+
+                    let lang = environment.strings.baseLanguageCode
+                    let quantityValueString = "×\(self.buyGiftsQuantity)"
+                    let recipientsValueString: String
+                    if self.buyGiftsRecipients.isEmpty {
+                        recipientsValueString = i18n("ReqGram.Plugin.BuyGifts.Recipients.Current", lang)
+                    } else if self.buyGiftsRecipients.count == 1, let onlyId = self.buyGiftsRecipients.first, let onlyPeer = self.peerMap[onlyId] {
+                        recipientsValueString = onlyPeer.compactDisplayTitle
+                    } else {
+                        recipientsValueString = String(format: i18n("ReqGram.Plugin.BuyGifts.Recipients.Count", lang), self.buyGiftsRecipients.count)
+                    }
+
+                    let buyGiftsSectionSize = self.buyGiftsSection.update(
+                        transition: transition,
+                        component: AnyComponent(ListSectionComponent(
+                            theme: theme,
+                            style: .glass,
+                            header: nil,
+                            footer: AnyComponent(MultilineTextComponent(
+                                text: .plain(NSAttributedString(
+                                    string: i18n("ReqGram.Plugin.BuyGifts.Send.Info", lang),
+                                    font: Font.regular(presentationData.listsFontSize.itemListBaseHeaderFontSize),
+                                    textColor: theme.list.freeTextColor
+                                )),
+                                maximumNumberOfLines: 0
+                            )),
+                            items: [
+                                AnyComponentWithIdentity(id: 0, component: AnyComponent(ListActionItemComponent(
+                                    theme: theme,
+                                    style: .glass,
+                                    title: AnyComponent(VStack([
+                                        AnyComponentWithIdentity(id: AnyHashable(0), component: AnyComponent(MultilineTextComponent(
+                                            text: .plain(NSAttributedString(
+                                                string: i18n("ReqGram.Plugin.BuyGifts.Quantity", lang),
+                                                font: Font.regular(presentationData.listsFontSize.baseDisplaySize),
+                                                textColor: theme.list.itemPrimaryTextColor
+                                            )),
+                                            maximumNumberOfLines: 1
+                                        ))),
+                                    ], alignment: .left, spacing: 2.0)),
+                                    icon: ListActionItemComponent.Icon(component: AnyComponentWithIdentity(id: 0, component: AnyComponent(MultilineTextComponent(
+                                        text: .plain(NSAttributedString(
+                                            string: quantityValueString,
+                                            font: Font.regular(presentationData.listsFontSize.baseDisplaySize),
+                                            textColor: theme.list.itemSecondaryTextColor
+                                        )),
+                                        maximumNumberOfLines: 1
+                                    )))),
+                                    accessory: .arrow,
+                                    action: { [weak self] _ in
+                                        self?.presentBuyGiftsQuantityPicker()
+                                    }
+                                ))),
+                                AnyComponentWithIdentity(id: 1, component: AnyComponent(ListActionItemComponent(
+                                    theme: theme,
+                                    style: .glass,
+                                    title: AnyComponent(VStack([
+                                        AnyComponentWithIdentity(id: AnyHashable(0), component: AnyComponent(MultilineTextComponent(
+                                            text: .plain(NSAttributedString(
+                                                string: i18n("ReqGram.Plugin.BuyGifts.Recipients", lang),
+                                                font: Font.regular(presentationData.listsFontSize.baseDisplaySize),
+                                                textColor: theme.list.itemPrimaryTextColor
+                                            )),
+                                            maximumNumberOfLines: 1
+                                        ))),
+                                    ], alignment: .left, spacing: 2.0)),
+                                    icon: ListActionItemComponent.Icon(component: AnyComponentWithIdentity(id: 0, component: AnyComponent(MultilineTextComponent(
+                                        text: .plain(NSAttributedString(
+                                            string: recipientsValueString,
+                                            font: Font.regular(presentationData.listsFontSize.baseDisplaySize),
+                                            textColor: theme.list.itemSecondaryTextColor
+                                        )),
+                                        maximumNumberOfLines: 1
+                                    )))),
+                                    accessory: .arrow,
+                                    action: { [weak self] _ in
+                                        self?.presentBuyGiftsRecipientsPicker()
+                                    }
+                                )))
+                            ]
+                        )),
+                        environment: {},
+                        containerSize: CGSize(width: availableSize.width - sideInset * 2.0, height: 10000.0)
+                    )
+                    let buyGiftsSectionFrame = CGRect(origin: CGPoint(x: sideInset, y: contentHeight), size: buyGiftsSectionSize)
+                    if let buyGiftsSectionView = self.buyGiftsSection.view {
+                        if buyGiftsSectionView.superview == nil {
+                            self.scrollContentView.addSubview(buyGiftsSectionView)
+                        }
+                        transition.setFrame(view: buyGiftsSectionView, frame: buyGiftsSectionFrame)
+                    }
+                    contentHeight += buyGiftsSectionSize.height
+                }
+
+                // MARK: ReqGram Gift Scheduler
+                // Only star gifts can be scheduled: the premium-gift path goes
+                // through StoreKit, which cannot be deferred by this plugin.
+                if SGSimpleSettings.shared.reqGramGiftSchedulerEnabled, case .starGift = component.subject {
+                    contentHeight += sectionSpacing
+
+                    let lang = environment.strings.baseLanguageCode
+                    let scheduleValueString: String
+                    if let scheduledTimestamp = self.scheduledTimestamp {
+                        scheduleValueString = reqGramGiftSchedulerFormatWhen(
+                            timestamp: scheduledTimestamp,
+                            dateTimeFormat: presentationData.dateTimeFormat
+                        )
+                    } else {
+                        scheduleValueString = i18n("ReqGram.Plugin.GiftScheduler.Schedule.Off", lang)
+                    }
+                    let scheduleSectionSize = self.scheduleSection.update(
+                        transition: transition,
+                        component: AnyComponent(ListSectionComponent(
+                            theme: theme,
+                            style: .glass,
+                            header: nil,
+                            footer: AnyComponent(MultilineTextComponent(
+                                text: .plain(NSAttributedString(
+                                    // Honest copy: delivery happens on the next
+                                    // app activation, not guaranteed on the minute.
+                                    string: i18n("ReqGram.Plugin.GiftScheduler.Schedule.Info", lang),
+                                    font: Font.regular(presentationData.listsFontSize.itemListBaseHeaderFontSize),
+                                    textColor: theme.list.freeTextColor
+                                )),
+                                maximumNumberOfLines: 0
+                            )),
+                            items: [
+                                AnyComponentWithIdentity(id: 0, component: AnyComponent(ListActionItemComponent(
+                                    theme: theme,
+                                    style: .glass,
+                                    title: AnyComponent(VStack([
+                                        AnyComponentWithIdentity(id: AnyHashable(0), component: AnyComponent(MultilineTextComponent(
+                                            text: .plain(NSAttributedString(
+                                                string: i18n("ReqGram.Plugin.GiftScheduler.Schedule", lang),
+                                                font: Font.regular(presentationData.listsFontSize.baseDisplaySize),
+                                                textColor: theme.list.itemPrimaryTextColor
+                                            )),
+                                            maximumNumberOfLines: 1
+                                        ))),
+                                    ], alignment: .left, spacing: 2.0)),
+                                    icon: ListActionItemComponent.Icon(component: AnyComponentWithIdentity(id: 0, component: AnyComponent(MultilineTextComponent(
+                                        text: .plain(NSAttributedString(
+                                            string: scheduleValueString,
+                                            font: Font.regular(presentationData.listsFontSize.baseDisplaySize),
+                                            textColor: theme.list.itemSecondaryTextColor
+                                        )),
+                                        maximumNumberOfLines: 1
+                                    )))),
+                                    accessory: .arrow,
+                                    action: { [weak self] _ in
+                                        self?.presentGiftScheduleTimePicker()
+                                    }
+                                )))
+                            ]
+                        )),
+                        environment: {},
+                        containerSize: CGSize(width: availableSize.width - sideInset * 2.0, height: 10000.0)
+                    )
+                    let scheduleSectionFrame = CGRect(origin: CGPoint(x: sideInset, y: contentHeight), size: scheduleSectionSize)
+                    if let scheduleSectionView = self.scheduleSection.view {
+                        if scheduleSectionView.superview == nil {
+                            self.scrollContentView.addSubview(scheduleSectionView)
+                        }
+                        transition.setFrame(view: scheduleSectionView, frame: scheduleSectionFrame)
+                    }
+                    contentHeight += scheduleSectionSize.height
+                }
             }
             contentHeight += sectionSpacing
             
@@ -2096,6 +3079,11 @@ private final class GiftSetupScreenComponent: Component {
             
             self.scrollContentClippingView.layer.cornerRadius = 38.0
             
+            // iPhone Duo's cover screen: the container's bottom corners, which reach the screen's, follow each screen
+            // corner (8pt on the hinge side, 59pt outside) instead of one radius. Nil where the corners are uniform.
+            self.containerBottomCornerRadii = environment.screenCornerRadii.sheetBottomCornerRadii(inset: 0.0).map { CornerRadii(topLeft: 0.0, topRight: 0.0, bottomLeft: $0.left, bottomRight: $0.right) }
+            // The scroll content's clip keeps its bottom corners within the container's.
+            let _ = self.scrollContentClippingView.layer.applyCornerRadiiIfNeeded(self.containerBottomCornerRadii.map { CornerRadii(topLeft: 38.0, topRight: 38.0, bottomLeft: min(38.0, $0.bottomLeft), bottomRight: min(38.0, $0.bottomRight)) })
             self.itemLayout = ItemLayout(containerSize: availableSize, containerInset: containerInset, containerCornerRadius: environment.deviceMetrics.screenCornerRadius, bottomInset: environment.safeInsets.bottom, topInset: topInset)
             
             transition.setFrame(view: self.scrollContentView, frame: CGRect(origin: CGPoint(x: 0.0, y: topInset + containerInset), size: CGSize(width: availableSize.width, height: contentHeight)))
@@ -2131,11 +3119,14 @@ private final class GiftSetupScreenComponent: Component {
                     deviceMetrics: environment.deviceMetrics,
                     intrinsicInsets: UIEdgeInsets(top: 0.0, left: 0.0, bottom: bottomInset, right: 0.0),
                     safeInsets: UIEdgeInsets(top: 0.0, left: 0.0, bottom: 0.0, right: 0.0),
+                    reservedCorners: environment.reservedCorners,
+                    division: nil,
                     additionalInsets: .zero,
-                    statusBarHeight: environment.statusBarHeight,
+                    statusBarHeight: environment.fullStatusBarHeight,
                     inputHeight: nil,
                     inputHeightIsInteractivellyChanging: false,
-                    inVoiceOver: false
+                    inVoiceOver: false,
+                    presentedInFormSheet: false
                 )
                 controller.presentationContext.containerLayoutUpdated(layout, transition: transition.containedViewLayoutTransition)
             }
@@ -2224,30 +3215,6 @@ public class GiftSetupScreen: ViewControllerComponentContainer, GiftSetupScreenP
             } else {
                 self.dismiss(animated: false)
             }
-        }
-    }
-}
-
-private struct GiftConfiguration {
-    static var defaultValue: GiftConfiguration {
-        return GiftConfiguration(maxCaptionLength: 255)
-    }
-    
-    let maxCaptionLength: Int32
-    
-    fileprivate init(maxCaptionLength: Int32) {
-        self.maxCaptionLength = maxCaptionLength
-    }
-    
-    static func with(appConfiguration: AppConfiguration) -> GiftConfiguration {
-        if let data = appConfiguration.data {
-            var maxCaptionLength: Int32?
-            if let value = data["stargifts_message_length_max"] as? Double {
-                maxCaptionLength = Int32(value)
-            }
-            return GiftConfiguration(maxCaptionLength: maxCaptionLength ?? GiftConfiguration.defaultValue.maxCaptionLength)
-        } else {
-            return .defaultValue
         }
     }
 }

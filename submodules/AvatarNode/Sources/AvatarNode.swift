@@ -14,6 +14,7 @@ import Accelerate
 import ComponentFlow
 import AvatarStoryIndicatorComponent
 import DirectMediaImageCache
+import SGSimpleSettings
 
 private let deletedIcon = UIImage(bundleImageName: "Avatar/DeletedIcon")?.precomposed()
 private let phoneIcon = generateTintedImage(image: UIImage(bundleImageName: "Avatar/PhoneIcon"), color: .white)
@@ -29,6 +30,10 @@ private let storyIcon = generateTintedImage(image: UIImage(bundleImageName: "Sha
 
 public func avatarPlaceholderFont(size: CGFloat) -> UIFont {
     return Font.with(size: size, design: .round, weight: .bold)
+}
+
+public func generateDeletedAccountAvatarImage(size: CGSize) -> UIImage? {
+    return generateAvatarImage(size: size, icon: deletedIcon, iconScale: size.width / 60.0, color: .blue, customColors: AvatarNode.grayscaleColors)
 }
 
 public enum AvatarNodeClipStyle {
@@ -533,7 +538,7 @@ public final class AvatarNode: ASDisplayNode {
             self.imageNode.isHidden = true
         }
         
-        public func playRepostAnimation() {
+        public func playRepostAnimation(animated: Bool = true) {
             let animationNode = AnimationNode(animation: "anim_storyrepost", colors: [:], scale: 0.11)
             animationNode.isUserInteractionEnabled = false
             self.addSubnode(animationNode)
@@ -541,9 +546,13 @@ public final class AvatarNode: ASDisplayNode {
             if var size = animationNode.preferredSize() {
                 size = CGSize(width: ceil(size.width), height: ceil(size.height))
                 animationNode.frame = CGRect(x: floor((self.bounds.width - size.width) / 2.0), y: floor((self.bounds.height - size.height) / 2.0) + 1.0, width: size.width, height: size.height)
-                Queue.mainQueue().after(0.15, {
-                    animationNode.play()
-                })
+                if animated {
+                    Queue.mainQueue().after(0.15, {
+                        animationNode.play()
+                    })
+                } else {
+                    animationNode.seekToEnd()
+                }
             }
         }
         
@@ -561,7 +570,7 @@ public final class AvatarNode: ASDisplayNode {
             if var size = animationNode.preferredSize() {
                 size = CGSize(width: ceil(size.width), height: ceil(size.height))
                 animationNode.frame = CGRect(x: floor((self.bounds.width - size.width) / 2.0) + 1.0, y: floor((self.bounds.height - size.height) / 2.0), width: size.width, height: size.height)
-                Queue.mainQueue().after(0.15, {
+                Queue.mainQueue().after(0.15, { [animationBackgroundNode, animationNode] in
                     animationNode.play()
                     animationNode.completion = { [weak animationNode, weak animationBackgroundNode] in
                         animationNode?.removeFromSupernode()
@@ -1273,8 +1282,8 @@ public final class AvatarNode: ASDisplayNode {
         self.contentNode.playArchiveAnimation()
     }
     
-    public func playRepostAnimation() {
-        self.contentNode.playRepostAnimation()
+    public func playRepostAnimation(animated: Bool = true) {
+        self.contentNode.playRepostAnimation(animated: animated)
     }
     
     public func playCameraAnimation() {
@@ -1374,6 +1383,14 @@ public final class AvatarNode: ASDisplayNode {
     }
     
     public func setStoryStats(storyStats: StoryStats?, presentationParams: StoryPresentationParams, transition: ComponentTransition) {
+        // MARK: Swiftgram
+        // Extends the "Hide Stories" setting beyond the chat list header: when enabled,
+        // story rings are suppressed on avatars everywhere (chat list rows, contacts,
+        // chat titles, profiles, item lists, date headers).
+        var storyStats = storyStats
+        if SGSimpleSettings.shared.hideStories {
+            storyStats = nil
+        }
         if self.storyStats != storyStats || self.storyPresentationParams != presentationParams {
             self.storyStats = storyStats
             self.storyPresentationParams = presentationParams

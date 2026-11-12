@@ -557,38 +557,19 @@ struct SGPayWallView: View {
     }
     
     private var legalSection: some View {
-        Group {
-            if #available(iOS 15.0, *) {
-                Text(LocalizedStringKey("PayWall.Notice.Markdown".i18n(lang, args: "PayWall.TermsURL".i18n(lang), "PayWall.PrivacyURL".i18n(lang))))
-                    .font(.caption)
-                    .tint(Color(hex: accentColorHex))
-                    .foregroundColor(.secondary)
-                    .environment(\.openURL, OpenURLAction { url in
-                        openUrl(url.absoluteString, false)
-                        return .handled
-                    })
-            } else {
-                Text("PayWall.Notice.Raw".i18n(lang))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                HStack(alignment: .top, spacing: 8) {
-                    Button(action: {
-                        openUrl("PayWall.PrivacyURL".i18n(lang), true)
-                    }) {
-                        Text("PayWall.Privacy".i18n(lang))
-                            .font(.caption)
-                            .foregroundColor(Color(hex: accentColorHex))
-                    }
-                    Button(action: {
-                        openUrl("PayWall.TermsURL".i18n(lang), true)
-                    }) {
-                        Text("PayWall.Terms".i18n(lang))
-                            .font(.caption)
-                            .foregroundColor(Color(hex: accentColorHex))
-                    }
-                }
-            }
-        }
+        // MARK: ReqGram - deployment target is iOS 15.0 (Telegram/BUILD minimum_os_version),
+        // so the `#available(iOS 15.0, *)` branch below was always taken; the dead `else` branch
+        // is dropped rather than kept behind a check that Swift 6's ViewBuilder now flags
+        // (`buildLimitedAvailability` not implemented) since Swift can no longer verify the
+        // branch is unreachable without it.
+        Text(LocalizedStringKey("PayWall.Notice.Markdown".i18n(lang, args: "PayWall.TermsURL".i18n(lang), "PayWall.PrivacyURL".i18n(lang))))
+            .font(.caption)
+            .tint(Color(hex: accentColorHex))
+            .foregroundColor(.secondary)
+            .environment(\.openURL, OpenURLAction { url in
+                openUrl(url.absoluteString, false)
+                return .handled
+            })
     }
     
     

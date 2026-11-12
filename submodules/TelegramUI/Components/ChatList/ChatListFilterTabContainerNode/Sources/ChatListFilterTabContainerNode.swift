@@ -273,7 +273,10 @@ private final class ItemNode: ASDisplayNode {
             })
         }
         
-        transition.updateAlpha(node: self.badgeContainerNode, alpha: (isEditing || isDisabled || isReordering || unreadCount == 0) ? 0.0 : 1.0)
+        // MARK: Swiftgram (exteraGram batch 2)
+        // Hides the unread counters on folder tabs. Render-time read (same pattern as
+        // compactFolderNames below); applies on the next tab container update/layout pass.
+        transition.updateAlpha(node: self.badgeContainerNode, alpha: (isEditing || isDisabled || isReordering || unreadCount == 0 || SGSimpleSettings.shared.hideFolderUnreadCounters) ? 0.0 : 1.0)
         
         let selectionAlpha: CGFloat = selectionFraction * selectionFraction
         let deselectionAlpha: CGFloat = isDisabled ? 0.5 : 1.0// - selectionFraction

@@ -28,14 +28,19 @@ public struct SGScamRegistrySettings {
     public var enabled: Bool
     public var interval: SGScamRegistryRefreshInterval
 
-    public init(enabled: Bool = false, interval: SGScamRegistryRefreshInterval = .oneDay) {
+    /// Interval default is one hour: with incremental watermark-based fetches
+    /// a periodic check only walks the handful of new posts, so an hourly
+    /// cadence is cheap and keeps protection fresh (the legacy plugin needed
+    /// a whole day because every refresh re-fetched the entire channel).
+    /// Enabled by default: scam protection should protect without opt-in.
+    public init(enabled: Bool = true, interval: SGScamRegistryRefreshInterval = .oneHour) {
         self.enabled = enabled
         self.interval = interval
     }
 
     public init(defaults: UserDefaults = .standard) {
-        self.enabled = defaults.object(forKey: Self.enabledKey) as? Bool ?? false
-        self.interval = SGScamRegistryRefreshInterval(rawValue: defaults.integer(forKey: Self.intervalKey)) ?? .oneDay
+        self.enabled = defaults.object(forKey: Self.enabledKey) as? Bool ?? true
+        self.interval = SGScamRegistryRefreshInterval(rawValue: defaults.integer(forKey: Self.intervalKey)) ?? .oneHour
     }
 
     public func save(to defaults: UserDefaults = .standard) {

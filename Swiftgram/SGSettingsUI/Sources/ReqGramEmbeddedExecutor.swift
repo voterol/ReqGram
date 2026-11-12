@@ -371,7 +371,7 @@ private final class ReqGramHostSession {
                  lock.lock(); pendingWatches.remove(key); lock.unlock()
                  return error("provider_unavailable")
              }
-            let setup = {
+            let setup = { [self] in
                 var installed: Disposable?
                 installed = watchMessages(peerId, ids, { [weak self] event in self?.emit(event) }) { [weak self] failure in
                     guard let self, let failure else { return }

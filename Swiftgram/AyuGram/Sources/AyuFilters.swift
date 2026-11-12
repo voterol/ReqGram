@@ -71,7 +71,37 @@ public final class AyuFilters {
     /// Intentionally not persisted, matching upstream behavior.
     private var revealedPeers = Set<Int64>()
 
+    private static var filtersChangedObservers: [UUID: () -> Void] = [:]
+    private static let observersLock = NSLock()
+
     private init() {}
+
+    /// Adds a filters-changed observer. The returned token must be removed by
+    /// the owner; observers do not replace one another.
+    public static func addFiltersChangedObserver(_ observer: @escaping () -> Void) -> UUID {
+        let token = UUID()
+        AyuFilters.observersLock.lock()
+        AyuFilters.filtersChangedObservers[token] = observer
+        AyuFilters.observersLock.unlock()
+        return token
+    }
+
+    public static func removeFiltersChangedObserver(_ token: UUID) {
+        AyuFilters.observersLock.lock()
+        AyuFilters.filtersChangedObservers.removeValue(forKey: token)
+        AyuFilters.observersLock.unlock()
+    }
+
+    private static func notifyFiltersChanged() {
+        AyuFilters.observersLock.lock()
+        let observers = Array(AyuFilters.filtersChangedObservers.values)
+        AyuFilters.observersLock.unlock()
+        DispatchQueue.main.async {
+            for observer in observers {
+                observer()
+            }
+        }
+    }
 
     // MARK: Filter storage
 
@@ -109,6 +139,7 @@ public final class AyuFilters {
         self.generation &+= 1
         self.verdicts.removeAll(keepingCapacity: false)
         self.lock.unlock()
+        AyuFilters.notifyFiltersChanged()
     }
 
     // MARK: Shadow bans

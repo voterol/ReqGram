@@ -346,7 +346,11 @@ public final class AudioWaveformComponent: Component {
                 self.revealProgress = 0.0
                 self.setNeedsDisplay()
                 
-                DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.08, execute: {
+                DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.08, execute: { [weak self] in
+                    guard let self else {
+                        return
+                    }
+
                     self.animator = DisplayLinkAnimator(duration: 0.8, from: 0.0, to: 1.0, update: { [weak self] progress in
                         guard let strongSelf = self else {
                             return
@@ -546,31 +550,14 @@ public final class AudioWaveformComponent: Component {
                 }
                 memset(adjustedSamplesMemory, 0, numSamples * 2)
                 
-                var bins: [UInt16: Int] = [:]
                 for i in 0 ..< maxReadSamples {
                     let index = i * numSamples / maxReadSamples
                     let sample = samples[i]
                     if adjustedSamples[index] < sample {
                         adjustedSamples[index] = sample
                     }
-                  
-                    if let count = bins[sample] {
-                        bins[sample] = count + 1
-                    } else {
-                        bins[sample] = 1
-                    }
                 }
-                
-                var sortedSamples: [(UInt16, Int)] = []
-                var totalCount: Int = 0
-                for (sample, count) in bins {
-                    if sample > 0 {
-                        sortedSamples.append((sample, count))
-                        totalCount += count
-                    }
-                }
-                sortedSamples.sort { $0.1 > $1.1 }
-                
+
                 let invScale = 1.0 / max(1.0, CGFloat(maxSample))
                 
                 let commonRevealFraction = listViewAnimationCurveSystem(self.revealProgress)

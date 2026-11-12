@@ -1,5 +1,10 @@
 "Settings.ContentSettings" = "Настройки контента";
 
+"Settings.FullChannelViewCounts" = "Полное число просмотров в каналах";
+"Settings.FullChannelViewCounts.Notice" = "Показывать просмотры сообщений в каналах без сокращений K/M. Используется последнее доступное число; изменение применяется при обновлении разметки сообщений.";
+"Settings.ChannelForwardCounts" = "Число репостов в каналах";
+"Settings.AddCommaAfterMention" = "Запятая после упоминания";
+
 "SG.ScamWarning.Title" = "Внимание: пользователь найден в реестре SG Scam";
 "SG.ScamWarning.Source" = "Источник: GID_ScamBase · внешний источник";
 "SG.ScamWarning.Profile" = "**Внимание:** пользователь есть в реестре SG Scam. [Открыть источник](https://t.me/GID_ScamBase).";
@@ -25,6 +30,8 @@
 "Settings.Folders.RememberLast.Notice" = "ReqGram откроет последнюю использованную папку после перезапуска или переключения учетной записи";
 
 "Settings.Folders.CompactNames" = "Уменьшенные расстояния";
+"Settings.Folders.HideArchiveFolder" = "Скрыть папку с архивом";
+"Settings.Folders.HideUnreadCounters" = "Скрыть счётчики непрочитанного";
 "Settings.Folders.AllChatsTitle" = "Название \"Все чаты\"";
 "Settings.Folders.AllChatsTitle.short" = "Короткое";
 "Settings.Folders.AllChatsTitle.long" = "Длинное";
@@ -34,6 +41,8 @@
 
 "Settings.ChatList.Header" = "СПИСОК ЧАТОВ";
 "Settings.CompactChatList" = "Компактный список чатов";
+"Settings.ChatList.HideSearchBar" = "Скрыть строку поиска";
+"Settings.ChatList.HideComposeButton" = "Скрыть кнопку нового чата";
 "Settings.CompactMessagePreview" = "Компактное превью сообщений";
 "Settings.Profiles.Header" = "ПРОФИЛИ";
 
@@ -126,6 +135,8 @@
 
 "Settings.ChatSwipeOptions" = "Опции чатов при свайпе";
 "Settings.DeleteChatSwipeOption" = "Свайп для удаления чата";
+"Settings.ChatList.CustomTitle" = "Заголовок списка чатов";
+"Settings.ChatList.CustomTitle.Message" = "Введите свой заголовок для экрана чатов. Оставьте поле пустым, чтобы использовать стандартный.";
 /* Re-word like this string on offical app https://translations.telegram.org/en/ios/groups_and_channels/Chat.NextChannelSameLocationSwipeProgress */
 "Settings.PullToNextChannel" = "Свайп между каналами";
 /* Re-word like this string on offical app https://translations.telegram.org/en/ios/groups_and_channels/Chat.NextUnreadTopicSwipeProgress */
@@ -342,7 +353,6 @@
 
 "AyuGram.Icon.Style.eyeoff" = "Перечёркнутый глаз";
 
-"AyuGram.Icon.Opacity" = "Прозрачность";
 
 "AyuGram.Database.Header" = "БАЗА ДАННЫХ";
 "AyuGram.Deleted.Marker" = "Удалённое сообщение";
@@ -371,6 +381,10 @@
 "AyuGram.Ghost.SendWithoutSound.ghost" = "В режиме призрака";
 "AyuGram.Ghost.SendWithoutSound.always" = "Всегда";
 "AyuGram.Ghost.SuggestBeforeStory" = "Спрашивать перед просмотром историй";
+"AyuGram.Ghost.SuggestBeforeStory.Alert.Title" = "Режим призрака";
+"AyuGram.Ghost.SuggestBeforeStory.Alert.Text" = "Включить режим призрака перед просмотром историй? Ваши просмотры не будут отправляться.";
+"AyuGram.Ghost.SuggestBeforeStory.Alert.Enable" = "Включить";
+"AyuGram.Ghost.SuggestBeforeStory.Alert.Open" = "Всё равно открыть";
 "AyuGram.Ghost.Locks.Header" = "ЗАФИКСИРОВАННЫЕ ПЕРЕКЛЮЧАТЕЛИ";
 "AyuGram.Ghost.Locks.Notice" = "Зафиксированный переключатель сохраняет своё значение при переключении главного тумблера режима призрака.";
 "AyuGram.Ghost.Lock.ReadReceipts" = "Зафиксировать галочки прочтения";
@@ -540,25 +554,33 @@
 "ReqGram.Support.Title" = "Поддержать ReqGram";
 "ReqGram.Support.MenuTitle" = "Поддержать проект";
 "ReqGram.Plugins.Title" = "Плагины";
+"ReqGram.Presentation.Title" = "Оформление";
+"ReqGram.Presentation.Messages" = "Сообщения";
+"ReqGram.Presentation.DeletedMessages" = "Сохранённые удалённые сообщения";
+"ReqGram.Presentation.ChatList" = "Список чатов";
+"ReqGram.Presentation.Profiles" = "Профили";
+"ReqGram.CompactDescriptions" = "Краткие описания настроек";
+"ReqGram.CompactDescriptions.Notice" = "Скрывает необязательные пояснения только на этом экране. Предупреждения и информация о плагинах остаются видимыми.";
+"ReqGram.DeletedOpacity" = "Непрозрачность удалённых сообщений";
+"ReqGram.DeletedOpacity.Notice" = "Меняет только вид локально сохранённых сообщений, а не правила сохранения. При выключенном затенении сообщения полностью непрозрачны. Видеокружки в чате сохраняют прежний вид. Откройте чат или просмотрщик заново, чтобы обновить уже показанные сообщения. Низкая непрозрачность может ухудшить читаемость.";
 "AyuGram.BatchForwarding" = "Пересылка партиями";
 "ReqGram.BuiltIn.Title" = "Встроенные плагины";
+"ReqGram.Gifts.Title" = "Подарки";
 "ReqGram.Installed.Title" = "Установленные плагины";
 "ReqGram.Support.Section" = "Поддержка";
 "ReqGram.Plugin.GiftId" = "ID подарка";
-"ReqGram.Plugin.DeletedGiftSender" = "Сведения о старых подарках";
 "ReqGram.Plugin.TextAnimationPrivateLet" = "Анимация текста";
 "ReqGram.Plugin.ScamBaseWriter" = "Проверка на мошенников";
 "ReqGram.Plugin.ScamBaseWriter.Description" = "Проверяет отправителей сообщений по регулярно обновляемому реестру мошенников.";
 "ReqGram.Plugin.ScamBaseWriter.Interval" = "Интервал обновления";
 "ReqGram.Plugin.ScamBaseWriter.Refresh" = "Обновить сейчас";
+"ReqGram.Plugin.ScamBaseWriter.Refresh.InProgress" = "Сканирование…";
+"ReqGram.Plugin.ScamBaseWriter.Refresh.AlreadyInProgress" = "Сканирование уже выполняется.";
 "ReqGram.Plugin.ScamBaseWriter.Status" = "Известных ID мошенников";
 "ReqGram.Plugin.LocalEdictorZwyLib" = "Локальный редактор сообщений";
 "ReqGram.Plugin.Enable" = "Включить плагин";
 "ReqGram.Plugin.Information" = "Информация";
 "ReqGram.Plugin.GiftId.Description" = "Показывает ID подарка и позволяет скопировать его.";
-"ReqGram.Plugin.DeletedGiftSender.Description" = "Показывает сведения об отправителях удалённых подарков без изменения данных Telegram на сервере.";
-"ReqGram.Plugin.DeletedGiftSending.Notice" = "**Отправка удалённых подарков больше не работает.** Telegram устранил эту возможность 15 сентября 2026 года. Плагин сохранён вместе с настройками и действиями. Это уведомление касается только способа отправки удалённых подарков, а не обычной отправки подарков.";
-"ReqGram.Plugin.DeletedGiftSender.DisplayNotice" = "**Внимание:** Отображение подарков может быть неверным. Всегда сравнивайте подарки по ID.";
 "ReqGram.Plugin.LocalEdictorZwyLib.Description" = "Позволяет локально изменять текст сообщений и сохранять эти изменения между запусками.";
 "ReqGram.Plugin.TextAnimationPrivateLet.Description" = "Предпросмотр и отправка анимированного текста на iOS.";
 "ReqGram.Animation.Blur" = "Имитация размытия";
@@ -566,6 +588,7 @@
 "ReqGram.Animation.Scale" = "Масштаб";
 "ReqGram.Animation.Rotate" = "Поворот";
 "ReqGram.Animation.IgnoreSpaces" = "Не анимировать пробелы";
+"ReqGram.Animation.RestoreDefaults" = "Восстановить по умолчанию";
 "ReqGram.Animation.AllLines" = "Анимировать все строки";
 "ReqGram.Animation.Duration" = "Длительность";
 "ReqGram.Animation.Preview.Title" = "Предпросмотр";
@@ -697,3 +720,150 @@
 "ReqGram.Plugin.SendGiftById.IdPlaceholder" = "Введите ID подарка";
 "ReqGram.Plugin.SendGiftById.InvalidId" = "Введите корректный ID подарка.";
 "ReqGram.Plugin.SendGiftById.NotFound" = "Этого подарка нет в текущем каталоге.";
+"ReqGram.Media.Title" = "Медиа";
+"ReqGram.StopAfterVoiceMessage" = "Останавливать после голосового";
+"ReqGram.StopAfterVoiceMessage.Notice" = "Останавливать воспроизведение после голосового сообщения, не переходя к следующему автоматически. Не влияет на музыку и видеосообщения.";
+
+"ReqGram.CharacterCounter" = "Счётчик символов черновика";
+
+/* ReqGram - плагин «Отложенные подарки» */
+"ReqGram.Plugin.GiftScheduler" = "Отложенные подарки";
+"ReqGram.Plugin.GiftScheduler.Description" = "Запланируйте отправку подарка за звёзды на будущее. Выберите подарок, получателя, дату и время, при желании подпись и скрытие своего имени. Кастомные и премиум-эмодзи в подписи сохраняются и отправляются как анимированные эмодзи.\n\nЗвёзды списываются в момент отправки, а не при планировании. iOS не может разбудить приложение в точное время, поэтому подарок отправляется при следующем запуске Telegram после назначенного момента, в пределах допустимого опоздания ниже.";
+"ReqGram.Plugin.GiftScheduler.MaxLate" = "Допустимое опоздание";
+"ReqGram.Plugin.GiftScheduler.MaxLate.Notice" = "Если приложение не открывали в течение этого времени после назначенного момента, подарок не отправится и будет помечен как пропущенный.";
+"ReqGram.Plugin.GiftScheduler.Delivery.Notice" = "Отправка происходит, пока Telegram открыт, либо при следующем запуске после назначенного момента. Точная минута не гарантируется. Ничего не отправляется без созданной вами задачи, и подарок никогда не отправляется повторно после попытки оплаты.";
+"ReqGram.Plugin.GiftScheduler.Tasks" = "Запланированные подарки";
+"ReqGram.Plugin.GiftScheduler.Tasks.Empty" = "Запланированных подарков нет.";
+"ReqGram.Plugin.GiftScheduler.CancelAll" = "Отменить все ожидающие подарки";
+"ReqGram.Plugin.GiftScheduler.CancelAll.Title" = "Отменить ожидающие подарки?";
+"ReqGram.Plugin.GiftScheduler.CancelAll.Text" = "Будет отменено подарков";
+"ReqGram.Plugin.GiftScheduler.CancelAll.Confirm" = "Отменить все";
+"ReqGram.Plugin.GiftScheduler.ClearFinished" = "Очистить завершённые записи";
+"ReqGram.Plugin.GiftScheduler.Unit.Hours" = "ч";
+"ReqGram.Plugin.GiftScheduler.Unit.Minutes" = "мин";
+"ReqGram.Plugin.GiftScheduler.UnnamedGift" = "Подарок";
+"ReqGram.Plugin.GiftScheduler.UnknownRecipient" = "Неизвестный получатель";
+"ReqGram.Plugin.GiftScheduler.Schedule" = "Отложить отправку";
+"ReqGram.Plugin.GiftScheduler.Schedule.Off" = "Отправить сейчас";
+"ReqGram.Plugin.GiftScheduler.Schedule.Info" = "Выберите, когда отправить подарок. Звёзды спишутся при отправке. Отправка произойдёт при следующем запуске Telegram после этого момента, не обязательно в точную минуту.";
+"ReqGram.Plugin.GiftScheduler.Schedule.Change" = "Изменить время";
+"ReqGram.Plugin.GiftScheduler.Schedule.Clear" = "Отправить сейчас";
+"ReqGram.Plugin.GiftScheduler.Recipients.Only" = "Только %@";
+"ReqGram.Plugin.GiftScheduler.Recipients.Select" = "Выбрать получателей…";
+"ReqGram.Plugin.GiftScheduler.Recipients.Title" = "Получатели подарка";
+"ReqGram.Plugin.GiftScheduler.Recipients.None" = "Получатели не выбраны.";
+"ReqGram.Plugin.GiftScheduler.Confirm.RecipientsCount" = "Получателей: %d";
+"ReqGram.Plugin.GiftScheduler.Confirm.TotalStars" = "Всего звёзд: %d";
+"ReqGram.Plugin.GiftScheduler.Scheduled.Partial" = "Запланировано %d из %d — достигнут лимит задач. Увеличьте «Допустимое опоздание» или очистите завершённые записи.";
+"ReqGram.Plugin.GiftScheduler.Confirm.Title" = "Запланировать подарок?";
+"ReqGram.Plugin.GiftScheduler.Confirm.Action" = "Запланировать";
+"ReqGram.Plugin.GiftScheduler.Confirm.Recipient" = "Получатель";
+"ReqGram.Plugin.GiftScheduler.Confirm.When" = "Когда";
+"ReqGram.Plugin.GiftScheduler.Confirm.Stars" = "Звёзды";
+"ReqGram.Plugin.GiftScheduler.Confirm.CustomEmoji" = "Кастомных эмодзи в подписи";
+"ReqGram.Plugin.GiftScheduler.Confirm.Truncated" = "Подпись была сокращена до допустимой длины.";
+"ReqGram.Plugin.GiftScheduler.Confirm.HiddenName" = "Ваше имя будет скрыто.";
+"ReqGram.Plugin.GiftScheduler.Confirm.Charge" = "Звёзды спишутся в момент отправки, а не сейчас.";
+"ReqGram.Plugin.GiftScheduler.Detail.Status" = "Статус";
+"ReqGram.Plugin.GiftScheduler.Detail.Caption" = "Подпись";
+"ReqGram.Plugin.GiftScheduler.Detail.Cancel" = "Отменить подарок";
+"ReqGram.Plugin.GiftScheduler.Detail.Remove" = "Убрать запись";
+"ReqGram.Plugin.GiftScheduler.Detail.SendingNotice" = "Подарок уже отправляется, отменить нельзя.";
+"ReqGram.Plugin.GiftScheduler.Status.Pending" = "Ожидает";
+"ReqGram.Plugin.GiftScheduler.Status.Sending" = "Отправляется";
+"ReqGram.Plugin.GiftScheduler.Status.Sent" = "Отправлен";
+"ReqGram.Plugin.GiftScheduler.Status.Failed" = "Ошибка";
+"ReqGram.Plugin.GiftScheduler.Status.Missed" = "Пропущен";
+"ReqGram.Plugin.GiftScheduler.Error.Missed" = "Приложение не открывали в пределах допустимого опоздания.";
+"ReqGram.Plugin.GiftScheduler.Error.Interrupted" = "Приложение остановилось во время отправки этого подарка. Проверьте историю подарков перед повторным планированием: он мог быть отправлен и оплачен.";
+"ReqGram.Plugin.GiftScheduler.Error.NoForm" = "Telegram не вернул форму оплаты.";
+"ReqGram.Plugin.GiftScheduler.Error.PeerUnavailable" = "Получатель недоступен.";
+"ReqGram.Plugin.GiftScheduler.Error.PremiumRequired" = "Для кастомных эмодзи в подписи к подарку нужен Telegram Premium.";
+"ReqGram.Plugin.GiftScheduler.Error.WillRetry" = "Повтор";
+"ReqGram.Plugin.GiftScheduler.Error.TimeInPast" = "Выберите время хотя бы на минуту позже текущего.";
+"ReqGram.Plugin.GiftScheduler.Error.TooMany" = "Слишком много запланированных подарков. Сначала отмените или очистите часть.";
+"ReqGram.Plugin.GiftScheduler.Error.Disabled" = "Сначала включите плагин «Отложенные подарки».";
+"ReqGram.Plugin.GiftScheduler.Error.Generic" = "Не удалось запланировать подарок.";
+"ReqGram.Plugin.BuyGifts" = "Массовая отправка подарков";
+"ReqGram.Plugin.BuyGifts.Description" = "Отправляет один и тот же настоящий подарок нескольким получателям и/или несколько копий сразу, каждая — отдельной реальной покупкой, с небольшой паузой между отправками для защиты от флуд-лимитов Telegram.";
+"ReqGram.Plugin.BuyGifts.RememberQuantity" = "Запоминать последнее количество";
+"ReqGram.Plugin.BuyGifts.Haptic" = "Вибро-отклик при каждой отправке";
+"ReqGram.Plugin.BuyGifts.Delay" = "Пауза между отправками";
+"ReqGram.Plugin.BuyGifts.Delay.Off" = "Без паузы";
+"ReqGram.Plugin.BuyGifts.Delay.Value" = "%d мс";
+"ReqGram.Plugin.BuyGifts.Delay.Notice" = "Защищает от флуд-лимита Telegram при отправке подряд большого числа подарков.";
+"ReqGram.Plugin.BuyGifts.MaxRecipients" = "Максимум получателей за раз";
+"ReqGram.Plugin.BuyGifts.Send.Info" = "Когда этот плагин включён, экран отправки подарка предлагает выбрать количество и нескольких получателей.";
+"ReqGram.Plugin.BuyGifts.Quantity" = "Количество";
+"ReqGram.Plugin.BuyGifts.Quantity.Title" = "Количество на одного получателя";
+"ReqGram.Plugin.BuyGifts.Quantity.Custom" = "Своё значение";
+"ReqGram.Plugin.BuyGifts.Quantity.Limited" = "Для этого подарка лимит %d на получателя. Количество скорректировано.";
+"ReqGram.Plugin.BuyGifts.Recipients" = "Получатели";
+"ReqGram.Plugin.BuyGifts.Recipients.Title" = "Выберите получателей";
+"ReqGram.Plugin.BuyGifts.Recipients.Current" = "текущий чат";
+"ReqGram.Plugin.BuyGifts.Recipients.Count" = "%d чатов";
+"ReqGram.Plugin.BuyGifts.Recipients.LimitReached" = "Можно выбрать не более %d получателей за раз. Это можно изменить в настройках плагина.";
+"ReqGram.Plugin.BuyGifts.Confirm.Title" = "Отправить этот подарок массово?";
+"ReqGram.Plugin.BuyGifts.Confirm.Action" = "Отправить";
+"ReqGram.Plugin.BuyGifts.Confirm.Recipients" = "Получателей: %d";
+"ReqGram.Plugin.BuyGifts.Confirm.Quantity" = "Количество на получателя: %d";
+"ReqGram.Plugin.BuyGifts.Confirm.Total" = "Всего подарков к отправке: %d";
+"ReqGram.Plugin.BuyGifts.Confirm.Charge" = "Звёзды списываются по одной отправке за раз, по мере отправки каждого подарка.";
+"ReqGram.Plugin.BuyGifts.Progress" = "Отправлено %d/%d · нажмите, чтобы остановить";
+"ReqGram.Plugin.BuyGifts.Done.Success" = "Отправлено %d подарков · списано %lld ⭐";
+"ReqGram.Plugin.BuyGifts.Done.Stopped" = "Остановлено: отправлено %d из %d";
+"ReqGram.Plugin.BuyGifts.Done.Partial" = "Отправлено %d из %d";
+"ReqGram.Plugin.BuyGifts.Done.Error" = "Отправка остановлена из-за ошибки. Проверьте историю подарков перед повторной попыткой.";
+
+"ReqGram.Plugin.NowPlaying" = "Сейчас играет";
+"ReqGram.Plugin.NowPlaying.Description" = "Показывает прослушиваемый трек в профиле: в строке «О себе», в локации бизнеса или как трек в плейлисте профиля. Опрашивает Spotify (через stats.fm), VK Музыку, Last.fm, SoundCloud, Яндекс Музыку и YouTube Music.";
+"ReqGram.Plugin.NowPlaying.StreamPlace" = "Где показывать";
+"ReqGram.Plugin.NowPlaying.Place.Bio" = "О себе";
+"ReqGram.Plugin.NowPlaying.Place.Playlist" = "Плейлист профиля";
+"ReqGram.Plugin.NowPlaying.Place.Location" = "Локация бизнеса (Premium)";
+"ReqGram.Plugin.NowPlaying.Source" = "Источник";
+"ReqGram.Plugin.NowPlaying.Source.Auto" = "Авто";
+"ReqGram.Plugin.NowPlaying.Platform.spotify" = "Spotify (stats.fm)";
+"ReqGram.Plugin.NowPlaying.Platform.vk_music" = "VK Музыка";
+"ReqGram.Plugin.NowPlaying.Platform.last_fm" = "Last.fm";
+"ReqGram.Plugin.NowPlaying.Platform.soundcloud" = "SoundCloud";
+"ReqGram.Plugin.NowPlaying.Platform.yandex_music" = "Яндекс Музыка";
+"ReqGram.Plugin.NowPlaying.Platform.youtube_music" = "YouTube Music";
+"ReqGram.Plugin.NowPlaying.Token.Placeholder" = "Токен";
+"ReqGram.Plugin.NowPlaying.Token.Hint.spotify" = "Введите имя пользователя stats.fm. Заранее включите показ прослушиваемых треков в stats.fm.";
+"ReqGram.Plugin.NowPlaying.Token.Hint.vk_music" = "Введите access token VK API (право status). Трек читается из аудио в вашем статусе VK.";
+"ReqGram.Plugin.NowPlaying.Token.Hint.last_fm" = "Введите имя пользователя Last.fm.";
+"ReqGram.Plugin.NowPlaying.Token.Hint.soundcloud" = "Введите OAuth-токен SoundCloud.";
+"ReqGram.Plugin.NowPlaying.Token.Hint.yandex_music" = "Введите ya-token Яндекс Музыки.";
+"ReqGram.Plugin.NowPlaying.Token.Hint.youtube_music" = "Вставьте заголовок Cookie с music.youtube.com. SAPISID извлекается автоматически.";
+"ReqGram.Plugin.NowPlaying.Token.Clear" = "Очистить";
+"ReqGram.Plugin.NowPlaying.DefaultText" = "Текст при простое";
+"ReqGram.Plugin.NowPlaying.DefaultText.Placeholder" = "Показывается, когда ничего не играет";
+"ReqGram.Plugin.NowPlaying.Check" = "Проверить сейчас";
+"ReqGram.Plugin.NowPlaying.Check.InProgress" = "Проверка…";
+"ReqGram.Plugin.NowPlaying.Status" = "Статус";
+"ReqGram.Plugin.NowPlaying.Status.Idle" = "Ожидание";
+"ReqGram.Plugin.NowPlaying.Menu.Button" = "Музыка";
+"ReqGram.Plugin.NowPlaying.Menu.Card" = "Карточка";
+"ReqGram.Plugin.NowPlaying.Menu.AudioFile" = "Аудиофайл";
+"ReqGram.Plugin.NowPlaying.Menu.Text" = "Текст";
+"ReqGram.Plugin.NowPlaying.Menu.Share" = "Поделиться…";
+"ReqGram.Plugin.NowPlaying.Menu.NothingPlaying" = "Сейчас ничего не играет";
+"ReqGram.Plugin.NowPlaying.Section.Platforms" = "Платформы";
+"ReqGram.Plugin.NowPlaying.Section.Sending" = "Отправка и карточка";
+"ReqGram.Plugin.NowPlaying.Section.Diagnostics" = "Диагностика";
+"ReqGram.Plugin.NowPlaying.Card.Type" = "Вид карточки";
+"ReqGram.Plugin.NowPlaying.Card.Type.Horizontal" = "Горизонтальная";
+"ReqGram.Plugin.NowPlaying.Card.Type.Vertical" = "Вертикальная";
+"ReqGram.Plugin.NowPlaying.Card.Background" = "Фон карточки";
+"ReqGram.Plugin.NowPlaying.Card.Background.TrackCover" = "Обложка трека";
+"ReqGram.Plugin.NowPlaying.Card.Background.AccentColor" = "Акцентный цвет обложки";
+"ReqGram.Plugin.NowPlaying.Card.Font" = "Шрифт карточки";
+"ReqGram.Plugin.NowPlaying.Card.Font.YSMusic" = "YS Music";
+"ReqGram.Plugin.NowPlaying.Card.Font.Onest" = "Onest";
+"ReqGram.Plugin.NowPlaying.Card.LinkStyle" = "Ссылка на трек";
+"ReqGram.Plugin.NowPlaying.Card.LinkStyle.Text" = "Текст";
+"ReqGram.Plugin.NowPlaying.Card.LinkStyle.QR" = "QR-код";
+"ReqGram.Plugin.NowPlaying.Card.SongLink" = "Ссылка на другие платформы";
+"ReqGram.Plugin.NowPlaying.Card.SongLink.Hint" = "С помощью song.link";
+

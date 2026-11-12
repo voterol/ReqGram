@@ -19,6 +19,7 @@ swift_library(
     ],
     deps = sgdeps + [
         "//submodules/AsyncDisplayKit",
+        "//submodules/LottieSettings:LottieSettings",
         "//submodules/Display",
     	"//submodules/SSignalKit/SwiftSignalKit",
         "//submodules/AnimatedStickerNode",
@@ -27,6 +28,7 @@ swift_library(
         "//submodules/ComponentFlow",
         "//submodules/Components/ComponentDisplayAdapters",
         "//submodules/TelegramUI/Components/TabBarComponent",
+        "//submodules/TelegramUI/Components/TabBarLayout",
         "//submodules/TelegramUI/Components/GlassControls",
     ],
     visibility = [

@@ -22,6 +22,53 @@ import AppBundle
 import WebKit
 import PeerNameColorScreen
 
+/// The system style Swiftgram settings rows are built with.
+///
+/// Swiftgram rows opt into the iOS 26 glass look. Routing every row through this one
+/// value keeps all SG rows consistent with each other and with the `.blocks` list
+/// container they are rendered in.
+public var sgResolvedSystemStyle: ItemListSystemStyle {
+    return .glass
+}
+
+/// Emits once immediately, then again whenever any `SGSimpleSettings` value is written.
+///
+/// `UserDefault` posts a single notification name shared by every wrapped type, so this
+/// covers the compact-descriptions toggle no matter which screen flipped it. The observer
+/// is delivered on `.main` (never re-entrant with the setter) and is torn down with the
+/// subscription, so screens can simply `combineLatest` it into their list signal.
+public var sgSimpleSettingsChangedSignal: Signal<Void, NoError> {
+    let changes = Signal<Void, NoError> { subscriber in
+        let observer = NotificationCenter.default.addObserver(forName: UserDefault<Bool>.didChangeNotification, object: nil, queue: .main) { _ in
+            subscriber.putNext(())
+        }
+        return ActionDisposable { NotificationCenter.default.removeObserver(observer) }
+    }
+    return Signal<Void, NoError>.single(()) |> then(changes)
+}
+
+/// Appends a descriptive footer, honouring the "compact settings descriptions" preference.
+///
+/// The row id is allocated unconditionally, *before* the visibility branch: `SGItemListCounter.count`
+/// is a mutating getter, and burning the id for a hidden notice keeps the `stableId` of every
+/// surviving row unchanged when compact mode is toggled.
+///
+/// `.warning` notices are never suppressed — see `ReqGramPresentationPolicy.showsNotice`.
+public func sgAppendNotice<Section: SGItemListSection, BoolSetting: Hashable, SliderSetting: Hashable, OneFromManySetting: Hashable, DisclosureLink: Hashable, ActionType: Hashable>(
+    to entries: inout [SGItemListUIEntry<Section, BoolSetting, SliderSetting, OneFromManySetting, DisclosureLink, ActionType>],
+    counter: SGItemListCounter,
+    section: Section,
+    text: String,
+    kind: ReqGramPresentationPolicy.NoticeKind = .explanation,
+    compact: Bool = SGSimpleSettings.shared.reqGramCompactDescriptions
+) {
+    // Allocate even hidden notices so toggling compact mode keeps row identities stable.
+    let id = counter.count
+    if ReqGramPresentationPolicy.showsNotice(kind, compact: compact) {
+        entries.append(.notice(id: id, section: section, text: text))
+    }
+}
+
 public class SGItemListCounter {
     private var _count = 0
     
@@ -202,13 +249,13 @@ public enum SGItemListUIEntry<Section: SGItemListSection, BoolSetting: Hashable,
             return ItemListSectionHeaderItem(presentationData: presentationData, text: string, badge: badge, sectionId: self.section)
             
         case let .toggle(_, _, setting, value, text, enabled):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: text, value: value, enabled: enabled, maximumNumberOfLines: 0, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: sgResolvedSystemStyle, title: text, value: value, enabled: enabled, maximumNumberOfLines: 0, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.setBoolValue(setting, value)
             })
         case let .notice(_, _, string):
             return ItemListTextItem(presentationData: presentationData, text: .markdown(string), sectionId: self.section)
         case let .disclosure(_, _, link, text):
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: text, label: "", sectionId: self.section, style: .blocks) {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: sgResolvedSystemStyle, title: text, label: "", sectionId: self.section, style: .blocks) {
                 arguments.openDisclosureLink(link)
             }
         case let .percentageSlider(_, _, setting, value, title, unit, minimum, maximum):
@@ -221,28 +268,28 @@ public enum SGItemListUIEntry<Section: SGItemListSection, BoolSetting: Hashable,
                 minimum: minimum,
                 maximum: maximum,
                 sectionId: self.section,
-                systemStyle: .glass,
+                systemStyle: sgResolvedSystemStyle,
                 updated: { value in
                     arguments.updateSliderValue(setting, value)
                 }
             )
         
         case let .peerColorDisclosurePreview(_, _, name, color):
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: " ", enabled: false, label: name, labelStyle: .semitransparentBadge(color), centerLabelAlignment: true, sectionId: self.section, style: .blocks, disclosureStyle: .none, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: sgResolvedSystemStyle, title: " ", enabled: false, label: name, labelStyle: .semitransparentBadge(color), centerLabelAlignment: true, sectionId: self.section, style: .blocks, disclosureStyle: .none, action: {
             })
         
         case let .oneFromManySelector(_, _, settingName, text, value, enabled):
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: text, enabled: enabled, label: value, sgLabelMaximumNumberOfLines: 2, sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: sgResolvedSystemStyle, title: text, enabled: enabled, label: value, sgLabelMaximumNumberOfLines: 2, sectionId: self.section, style: .blocks, action: {
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) // Closing search keyboard if active
                 arguments.setOneFromManyValue(settingName)
             })
         case let .action(_, _, actionType, text, kind):
-            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: text, kind: kind, alignment: .natural, sectionId: self.section, style: .blocks, action: {
+            return ItemListActionItem(presentationData: presentationData, systemStyle: sgResolvedSystemStyle, title: text, kind: kind, alignment: .natural, sectionId: self.section, style: .blocks, action: {
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) // Closing search keyboard if active
                     arguments.action(actionType)
             })
         case let .searchInput(_, _, title, text, placeholder):
-            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: title, text: text, placeholder: placeholder, returnKeyType: .done, spacing: 3.0, clearType: .always, selectAllOnFocus: true, secondaryStyle: true, sectionId: self.section, textUpdated: { input in arguments.searchInput(input) }, action: {}, dismissKeyboardOnEnter: true)
+            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: sgResolvedSystemStyle, title: title, text: text, placeholder: placeholder, returnKeyType: .done, spacing: 3.0, clearType: .always, selectAllOnFocus: true, secondaryStyle: true, sectionId: self.section, textUpdated: { input in arguments.searchInput(input) }, action: {}, dismissKeyboardOnEnter: true)
         }
     }
 }

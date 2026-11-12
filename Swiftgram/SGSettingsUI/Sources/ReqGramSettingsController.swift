@@ -17,20 +17,31 @@ import SGSimpleSettings
 import ZipArchive
 import AyuGram
 import SGScamRegistry
-import TelegramApi
+import SGNowPlaying
+import ReqGramGiftScheduler
+import ReqGramBuyGifts
 
 private enum ReqGramSection: Int32, SGItemListSection {
+    case presentation
+    case messages
+    case chatList
+    case profiles
+    case media
     case plugins
     case support
 }
 
 private enum ReqGramBoolSetting: Hashable {
-    case telegram1211LegacyDesign
-    case giftIdEnabled
-    case deletedGiftSenderEnabled
-    case zwyLibEnabled
-    case localEdictorEnabled
-    case textAnimationPrivateLetEnabled
+    case fullChannelViewCounts
+    case channelForwardCounts
+    case compactDescriptions
+    case stopAfterVoiceMessage
+    case characterCounter
+    case secondsInMessages
+    case wideChannelPosts
+    case compactChatList
+    case showProfileId
+    case showDC
 }
 private enum ReqGramSliderSetting: Hashable {
     case duration, blurDuration, blurRadius, blurTextDelay, slideDist, scaleStart, rotateAngle
@@ -48,19 +59,26 @@ private enum ReqGramDisclosure: Hashable {
 }
 
 private enum ReqGramPlugin: Hashable {
-    case giftId
-    case sendGiftById
-    case deletedGiftSender
     case localEdictorAndZwyLib
     case textAnimationPrivateLet
     case scamBaseWriter
+    case nowPlaying
+}
+
+/// Link type of the "Built-in plugins" screen. Gifts lives inside that screen
+/// (not as a third standalone button on the main Plugins section), so the
+/// main screen keeps exactly two entries: built-in and installed plugins.
+private enum ReqGramBuiltInPluginLink: Hashable {
+    case gifts
+    case plugin(ReqGramPlugin)
 }
 
 private enum ReqGramUnused: Hashable {
     case value
 }
+private enum ReqGramTransferAction: Hashable { case export, `import`, reset }
 
-private typealias ReqGramEntry = SGItemListUIEntry<ReqGramSection, ReqGramBoolSetting, ReqGramSliderSetting, ReqGramUnused, ReqGramDisclosure, ReqGramUnused>
+private typealias ReqGramEntry = SGItemListUIEntry<ReqGramSection, ReqGramBoolSetting, ReqGramSliderSetting, ReqGramUnused, ReqGramDisclosure, ReqGramTransferAction>
 
 private enum ReqGramPluginSection: Int32, SGItemListSection {
     case settings
@@ -70,51 +88,371 @@ private enum ReqGramPluginSection: Int32, SGItemListSection {
 private enum ReqGramPluginBoolSetting: Hashable {
     case enabled
     case blur, slide, scale, rotate, deleteAnimation, cursor, liquidCursor, ignoreSpaces, animateAllLines
+    case nowPlayingUseSongLink
 }
-private enum ReqGramPluginSelector: Hashable { case scamInterval }
+private enum ReqGramPluginSelector: Hashable { case scamInterval, nowPlayingPlace, nowPlayingSource, nowPlayingCardType, nowPlayingCardBackground, nowPlayingCardFont, nowPlayingCardLinkStyle }
+
+/// Disclosure links of a plugin screen (token sub-screens).
+private enum ReqGramPluginDisclosure: Hashable {
+    case nowPlayingToken(SGNowPlayingPlatformId)
+}
 
 private enum ReqGramPluginUnused: Hashable {
     case value
 }
 
-private enum ReqGramPluginAction: Hashable {
+// MARK: - Gifts screen (Task: consolidated "Gifts" tab)
+//
+// All gift-related settings/plugins (Gift ID, Send Gift by ID, Gift
+// Scheduler, Buy Gifts) live together on one scrollable screen instead of
+// being scattered across the flat "Built-in Plugins" list. Each plugin keeps
+// its OWN section (header + rows), so this reads as "one Gifts screen with
+// four grouped plugin blocks", not a single merged settings blob.
+private enum ReqGramGiftsSection: Int32, SGItemListSection {
+    case giftId
     case sendGiftById
-    case scamRefresh
+    case giftScheduler
+    case buyGifts
 }
 
-private typealias ReqGramPluginEntry = SGItemListUIEntry<ReqGramPluginSection, ReqGramPluginBoolSetting, ReqGramSliderSetting, ReqGramPluginSelector, ReqGramPluginUnused, ReqGramPluginAction>
+private enum ReqGramGiftsBoolSetting: Hashable {
+    case giftIdEnabled
+    case sendGiftByIdEnabled
+    case giftSchedulerEnabled
+    case buyGiftsEnabled
+    case buyGiftsRememberQuantity
+    case buyGiftsHaptic
+}
+
+private enum ReqGramGiftsSelector: Hashable {
+    case giftSchedulerMaxLate
+    case buyGiftsDelay
+    case buyGiftsMaxRecipients
+}
+
+private enum ReqGramGiftsAction: Hashable {
+    case sendGiftById
+    case giftSchedulerShowTasks
+    case giftSchedulerCancelPending
+    case giftSchedulerClearFinished
+}
+
+private typealias ReqGramGiftsEntry = SGItemListUIEntry<ReqGramGiftsSection, ReqGramGiftsBoolSetting, ReqGramUnused, ReqGramGiftsSelector, ReqGramUnused, ReqGramGiftsAction>
+
+/// Human label for a Buy Gifts send-delay value.
+private func reqGramBuyGiftsDelayTitle(ms: Int, lang: String) -> String {
+    if ms <= 0 {
+        return i18n("ReqGram.Plugin.BuyGifts.Delay.Off", lang)
+    }
+    return String(format: i18n("ReqGram.Plugin.BuyGifts.Delay.Value", lang), ms)
+}
+
+private func reqGramGiftsController(context: AccountContext) -> ViewController {
+    var presentControllerImpl: ((ViewController, ViewControllerPresentationArguments?) -> Void)?
+    var pushControllerImpl: ((ViewController) -> Void)?
+
+    let arguments = SGItemListArguments<ReqGramGiftsBoolSetting, ReqGramUnused, ReqGramGiftsSelector, ReqGramUnused, ReqGramGiftsAction>(
+        context: context,
+        setBoolValue: { setting, value in
+            let settings = SGSimpleSettings.shared
+            switch setting {
+            case .giftIdEnabled:
+                settings.reqGramGiftIdEnabled = value
+            case .sendGiftByIdEnabled:
+                settings.reqGramSendGiftByIdEnabled = value
+            case .giftSchedulerEnabled:
+                settings.reqGramGiftSchedulerEnabled = value
+                // Start or stop the foreground tick immediately so the toggle
+                // has an observable effect without waiting for a relaunch.
+                ReqGramGiftScheduler.shared.refreshRunState()
+            case .buyGiftsEnabled:
+                settings.reqGramBuyGiftsEnabled = value
+            case .buyGiftsRememberQuantity:
+                settings.reqGramBuyGiftsRememberQuantity = value
+            case .buyGiftsHaptic:
+                settings.reqGramBuyGiftsHapticFeedback = value
+            }
+        },
+        setOneFromManyValue: { setting in
+            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+            let lang = presentationData.strings.baseLanguageCode
+            switch setting {
+            case .giftSchedulerMaxLate:
+                // Grace window. Offered as a bounded list rather than the
+                // original's free-text minutes field, so the value is always
+                // parseable and the "missed" behavior stays predictable.
+                let sheet = ActionSheetController(presentationData: presentationData)
+                let options: [Int] = [30, 60, 180, 360, 720, 1440]
+                let items = options.map { minutes in
+                    ActionSheetButtonItem(title: reqGramGiftSchedulerMaxLateTitle(minutes: minutes, lang: lang), color: .accent, action: { [weak sheet] in
+                        SGSimpleSettings.shared.reqGramGiftSchedulerMaxLateMinutes = minutes
+                        sheet?.dismissAnimated()
+                    })
+                }
+                sheet.setItemGroups([ActionSheetItemGroup(items: items)])
+                presentControllerImpl?(sheet, nil)
+            case .buyGiftsDelay:
+                let sheet = ActionSheetController(presentationData: presentationData)
+                let items = ReqGramBuyGiftsLimits.delayStepsMs.map { ms in
+                    ActionSheetButtonItem(title: reqGramBuyGiftsDelayTitle(ms: ms, lang: lang), color: .accent, action: { [weak sheet] in
+                        SGSimpleSettings.shared.reqGramBuyGiftsSendDelayMs = ReqGramBuyGiftsLimits.normalizedDelayMs(ms)
+                        sheet?.dismissAnimated()
+                    })
+                }
+                sheet.setItemGroups([ActionSheetItemGroup(items: items)])
+                presentControllerImpl?(sheet, nil)
+            case .buyGiftsMaxRecipients:
+                let sheet = ActionSheetController(presentationData: presentationData)
+                let items = ReqGramBuyGiftsLimits.maxRecipientsSteps.map { count in
+                    ActionSheetButtonItem(title: "\(count)", color: .accent, action: { [weak sheet] in
+                        SGSimpleSettings.shared.reqGramBuyGiftsMaxRecipients = ReqGramBuyGiftsLimits.normalizedMaxRecipients(count)
+                        sheet?.dismissAnimated()
+                    })
+                }
+                sheet.setItemGroups([ActionSheetItemGroup(items: items)])
+                presentControllerImpl?(sheet, nil)
+            }
+        },
+        action: { action in
+            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+            let lang = presentationData.strings.baseLanguageCode
+            switch action {
+            case .sendGiftById:
+                guard SGSimpleSettings.shared.reqGramSendGiftByIdEnabled else { return }
+                presentControllerImpl?(promptController(context: context, updatedPresentationData: nil,
+                    text: i18n("ReqGram.Plugin.SendGiftById.IdTitle", lang), value: nil,
+                    placeholder: i18n("ReqGram.Plugin.SendGiftById.IdPlaceholder", lang), apply: { value in
+                        guard let value else { return }
+                        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard let id = Int64(trimmed), id > 0 else {
+                            presentControllerImpl?(textAlertController(context: context, title: nil,
+                                text: i18n("ReqGram.Plugin.SendGiftById.InvalidId", lang),
+                                actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]), nil)
+                            return
+                        }
+                        guard let giftController = context.sharedContext.makeStarGiftByIdController(context: context, giftId: id, onError: {
+                            presentControllerImpl?(textAlertController(context: context, title: nil,
+                                text: i18n("ReqGram.Plugin.SendGiftById.NotFound", lang),
+                                actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]), nil)
+                        }) else {
+                            presentControllerImpl?(textAlertController(context: context, title: nil,
+                                text: i18n("ReqGram.Plugin.SendGiftById.NotFound", lang),
+                                actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]), nil)
+                            return
+                        }
+                        // ContactSelectionController owns the recipient flow's navigation stack.
+                        // Push it from the plugin screen instead of presenting it through the
+                        // root window; the latter leaves the controller without the navigation
+                        // ownership required when it pushes GiftSetupScreen after selection.
+                        pushControllerImpl?(giftController)
+                    }), nil)
+            case .giftSchedulerShowTasks, .giftSchedulerCancelPending, .giftSchedulerClearFinished:
+                let uiAction: ReqGramGiftSchedulerUIAction
+                switch action {
+                case .giftSchedulerShowTasks: uiAction = .showTasks
+                case .giftSchedulerCancelPending: uiAction = .cancelPending
+                case .giftSchedulerClearFinished: uiAction = .clearFinished
+                case .sendGiftById: fatalError("unreachable")
+                }
+                reqGramGiftSchedulerHandleAction(
+                    uiAction,
+                    context: context,
+                    lang: lang,
+                    present: { controller in presentControllerImpl?(controller, nil) }
+                )
+            }
+        }
+    )
+
+    // Reactive: the toggles, the Gift Scheduler task counts, and the grace
+    // window/delay/recipient labels all need to refresh live, exactly like
+    // the previous per-plugin screens did.
+    let giftsState = Signal<Void, NoError> { subscriber in
+        subscriber.putNext(())
+        let observers = [
+            NotificationCenter.default.addObserver(forName: UserDefault<Bool>.didChangeNotification, object: nil, queue: .main) { _ in subscriber.putNext(()) },
+            NotificationCenter.default.addObserver(forName: ReqGramGiftTaskStore.didChangeNotification, object: nil, queue: .main) { _ in subscriber.putNext(()) }
+        ]
+        return ActionDisposable { observers.forEach { NotificationCenter.default.removeObserver($0) } }
+    }
+
+    let signal = combineLatest(context.sharedContext.presentationData, giftsState)
+    |> map { presentationData, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        let lang = presentationData.strings.baseLanguageCode
+        let settings = SGSimpleSettings.shared
+        let counter = SGItemListCounter()
+        var entries: [ReqGramGiftsEntry] = []
+        func appendNotice(_ key: String, section: ReqGramGiftsSection, kind: ReqGramPresentationPolicy.NoticeKind = .explanation) {
+            sgAppendNotice(to: &entries, counter: counter, section: section, text: i18n(key, lang), kind: kind)
+        }
+
+        // MARK: Gift ID
+        entries.append(.header(id: counter.count, section: .giftId, text: i18n("ReqGram.Plugin.GiftId", lang), badge: nil))
+        entries.append(.toggle(id: counter.count, section: .giftId, settingName: .giftIdEnabled, value: settings.reqGramGiftIdEnabled, text: i18n("ReqGram.Plugin.Enable", lang), enabled: true))
+        appendNotice("ReqGram.Plugin.GiftId.Description", section: .giftId)
+
+        // MARK: Send Gift by ID
+        entries.append(.header(id: counter.count, section: .sendGiftById, text: i18n("ReqGram.Plugin.SendGiftById", lang), badge: nil))
+        entries.append(.toggle(id: counter.count, section: .sendGiftById, settingName: .sendGiftByIdEnabled, value: settings.reqGramSendGiftByIdEnabled, text: i18n("ReqGram.Plugin.Enable", lang), enabled: true))
+        appendNotice("ReqGram.Plugin.SendGiftById.Description", section: .sendGiftById)
+        entries.append(.action(id: counter.count, section: .sendGiftById, actionType: .sendGiftById, text: i18n("ReqGram.Plugin.SendGiftById.Action", lang), kind: settings.reqGramSendGiftByIdEnabled ? .generic : .disabled))
+
+        // MARK: Gift Scheduler
+        entries.append(.header(id: counter.count, section: .giftScheduler, text: i18n("ReqGram.Plugin.GiftScheduler", lang), badge: nil))
+        entries.append(.toggle(id: counter.count, section: .giftScheduler, settingName: .giftSchedulerEnabled, value: settings.reqGramGiftSchedulerEnabled, text: i18n("ReqGram.Plugin.Enable", lang), enabled: true))
+        appendNotice("ReqGram.Plugin.GiftScheduler.Description", section: .giftScheduler)
+        // The grace window and the "missed" state are the central UX of this
+        // plugin on iOS, not an edge case, so they are surfaced directly
+        // under the enable switch, exactly as on the previous dedicated screen.
+        entries.append(.oneFromManySelector(
+            id: counter.count,
+            section: .giftScheduler,
+            settingName: .giftSchedulerMaxLate,
+            text: i18n("ReqGram.Plugin.GiftScheduler.MaxLate", lang),
+            value: reqGramGiftSchedulerMaxLateTitle(minutes: settings.reqGramGiftSchedulerMaxLateMinutes, lang: lang),
+            enabled: settings.reqGramGiftSchedulerEnabled
+        ))
+        appendNotice("ReqGram.Plugin.GiftScheduler.MaxLate.Notice", section: .giftScheduler)
+
+        let accountId = context.account.id.int64
+        let tasks = ReqGramGiftTaskStore.shared.tasks(accountId: accountId)
+        let pendingCount = tasks.filter { $0.status == .pending || $0.status == .sending }.count
+        let finishedCount = tasks.count - pendingCount
+        entries.append(.action(
+            id: counter.count,
+            section: .giftScheduler,
+            actionType: .giftSchedulerShowTasks,
+            text: i18n("ReqGram.Plugin.GiftScheduler.Tasks", lang) + " (\(tasks.count))",
+            kind: .generic
+        ))
+        // Reserve these ids unconditionally, *before* the visibility checks,
+        // same technique as `sgAppendNotice` and the previous dedicated
+        // screen: these rows disappear the moment their count drops to zero,
+        // and the counter is a plain running count, not a stable/content id.
+        // See the detailed crash explanation this pattern was introduced for
+        // (mid-list stableId collision → ItemListTextItemNode cast failure).
+        let cancelPendingId = counter.count
+        if pendingCount > 0 {
+            entries.append(.action(
+                id: cancelPendingId,
+                section: .giftScheduler,
+                actionType: .giftSchedulerCancelPending,
+                text: i18n("ReqGram.Plugin.GiftScheduler.CancelAll", lang),
+                kind: .destructive
+            ))
+        }
+        let clearFinishedId = counter.count
+        if finishedCount > 0 {
+            entries.append(.action(
+                id: clearFinishedId,
+                section: .giftScheduler,
+                actionType: .giftSchedulerClearFinished,
+                text: i18n("ReqGram.Plugin.GiftScheduler.ClearFinished", lang),
+                kind: .generic
+            ))
+        }
+        appendNotice("ReqGram.Plugin.GiftScheduler.Delivery.Notice", section: .giftScheduler)
+
+        // MARK: Buy Gifts
+        entries.append(.header(id: counter.count, section: .buyGifts, text: i18n("ReqGram.Plugin.BuyGifts", lang), badge: nil))
+        entries.append(.toggle(id: counter.count, section: .buyGifts, settingName: .buyGiftsEnabled, value: settings.reqGramBuyGiftsEnabled, text: i18n("ReqGram.Plugin.Enable", lang), enabled: true))
+        appendNotice("ReqGram.Plugin.BuyGifts.Description", section: .buyGifts)
+        entries.append(.toggle(id: counter.count, section: .buyGifts, settingName: .buyGiftsRememberQuantity, value: settings.reqGramBuyGiftsRememberQuantity, text: i18n("ReqGram.Plugin.BuyGifts.RememberQuantity", lang), enabled: settings.reqGramBuyGiftsEnabled))
+        entries.append(.toggle(id: counter.count, section: .buyGifts, settingName: .buyGiftsHaptic, value: settings.reqGramBuyGiftsHapticFeedback, text: i18n("ReqGram.Plugin.BuyGifts.Haptic", lang), enabled: settings.reqGramBuyGiftsEnabled))
+        entries.append(.oneFromManySelector(
+            id: counter.count,
+            section: .buyGifts,
+            settingName: .buyGiftsDelay,
+            text: i18n("ReqGram.Plugin.BuyGifts.Delay", lang),
+            value: reqGramBuyGiftsDelayTitle(ms: settings.reqGramBuyGiftsSendDelayMs, lang: lang),
+            enabled: settings.reqGramBuyGiftsEnabled
+        ))
+        appendNotice("ReqGram.Plugin.BuyGifts.Delay.Notice", section: .buyGifts)
+        entries.append(.oneFromManySelector(
+            id: counter.count,
+            section: .buyGifts,
+            settingName: .buyGiftsMaxRecipients,
+            text: i18n("ReqGram.Plugin.BuyGifts.MaxRecipients", lang),
+            value: "\(ReqGramBuyGiftsLimits.normalizedMaxRecipients(settings.reqGramBuyGiftsMaxRecipients))",
+            enabled: settings.reqGramBuyGiftsEnabled
+        ))
+        appendNotice("ReqGram.Plugin.BuyGifts.Send.Info", section: .buyGifts)
+
+        return (
+            ItemListControllerState(
+                presentationData: ItemListPresentationData(presentationData),
+                title: .text(i18n("ReqGram.Gifts.Title", lang)),
+                leftNavigationButton: nil,
+                rightNavigationButton: nil,
+                backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)
+            ),
+            (ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, ensureVisibleItemTag: nil, initialScrollToItem: nil), arguments as Any)
+        )
+    }
+
+    let controller = ItemListController(context: context, state: signal)
+    presentControllerImpl = { [weak controller] c, a in
+        controller?.present(c, in: .window(.root), with: a)
+    }
+    pushControllerImpl = { [weak controller] c in
+        (controller?.navigationController as? NavigationController)?.pushViewController(c)
+    }
+    return controller
+}
+
+
+private enum ReqGramPluginAction: Hashable {
+    case scamRefresh
+    case nowPlayingCheck
+    case textAnimationRestoreDefaults
+}
+
+private typealias ReqGramPluginEntry = SGItemListUIEntry<ReqGramPluginSection, ReqGramPluginBoolSetting, ReqGramSliderSetting, ReqGramPluginSelector, ReqGramPluginDisclosure, ReqGramPluginAction>
 
 public func reqGramSettingsController(context: AccountContext) -> ViewController {
     var presentSupport: (() -> Void)?
     var presentInstalledPlugins: (() -> Void)?
     var pushBuiltInPlugins: (() -> Void)?
     var askForRestart: (() -> Void)?
-    let arguments = SGItemListArguments<ReqGramBoolSetting, ReqGramSliderSetting, ReqGramUnused, ReqGramDisclosure, ReqGramUnused>(
+    var transferAction: ((ReqGramTransferAction) -> Void)?
+    let arguments = SGItemListArguments<ReqGramBoolSetting, ReqGramSliderSetting, ReqGramUnused, ReqGramDisclosure, ReqGramTransferAction>(
         context: context,
         setBoolValue: { setting, value in
             let settings = SGSimpleSettings.shared
             switch setting {
-            case .telegram1211LegacyDesign:
-                settings.telegram1211LegacyDesign = value
-                // The ReqGram list signal observes UserDefault changes and
-                // refreshes its own presentation immediately. Other legacy
-                // surfaces are rebuilt on the explicit restart action.
+            case .fullChannelViewCounts:
+                settings.fullChannelViewCounts = value
+            case .channelForwardCounts:
+                settings.reqGramShowForwardCounts = value
+            case .compactDescriptions:
+                settings.reqGramCompactDescriptions = value
+            case .stopAfterVoiceMessage:
+                settings.stopAfterVoiceMessage = value
+            case .characterCounter:
+                settings.reqGramCharacterCounter = value
+            case .secondsInMessages:
+                settings.secondsInMessages = value
+            case .wideChannelPosts:
+                settings.wideChannelPosts = value
+            case .compactChatList:
+                settings.compactChatList = value
+                // `compactChatList` is read directly inside `ChatListItemNode`'s
+                // layout computation (ChatListItem.swift), not observed through
+                // any reactive signal, so already-laid-out chat list rows do not
+                // pick up the change until the list is rebuilt from scratch.
+                // The sibling screen (SGSettingsController) already treats this
+                // setting as restart-required in both directions; match that
+                // here instead of only prompting on enable.
                 askForRestart?()
-            case .giftIdEnabled:
-                settings.reqGramGiftIdEnabled = value
-            case .deletedGiftSenderEnabled:
-                settings.reqGramDeletedGiftSenderEnabled = value
-            case .zwyLibEnabled:
-                settings.reqGramZwyLibEnabled = value
-            case .localEdictorEnabled:
-                settings.reqGramLocalEdictorEnabled = value
-            case .textAnimationPrivateLetEnabled:
-                settings.reqGramTextAnimationPrivateLetEnabled = value
-            }
-        },
+            case .showProfileId:
+                settings.showProfileId = value
+            case .showDC:
+                settings.showDC = value
+             }
+         },
          updateSliderValue: { setting, value in
              let s = SGSimpleSettings.shared
-             switch setting {
+              switch setting {
              case .duration: s.reqGramTextAnimationPrivateLetDuration = Int(value)
              case .blurDuration: s.reqGramTextAnimationPrivateLetBlurDuration = Int(value)
              case .blurRadius: s.reqGramTextAnimationPrivateLetBlurRadius = Int(value)
@@ -132,38 +470,58 @@ public func reqGramSettingsController(context: AccountContext) -> ViewController
               case .selectionEffect: s.reqGramTextAnimationPrivateLetSelectionCursorEffect = Int(value)
               case .selectionStretch: s.reqGramTextAnimationPrivateLetSelectionLiquidStretch = Int(value)
               case .selectionSide: s.reqGramTextAnimationPrivateLetSelectionLiquidSide = Int(value)
-             }
-         },
+              }
+          },
          openDisclosureLink: { link in
              switch link {
-            case .installedPlugins:
-                presentInstalledPlugins?()
-            case .builtInPlugins:
-                pushBuiltInPlugins?()
-            case .other:
-                presentSupport?()
-            }
-        }
-    )
-    let settingsChanges = Signal<Void, NoError> { subscriber in
-        let observer = NotificationCenter.default.addObserver(forName: UserDefault<Bool>.didChangeNotification, object: nil, queue: .main) { _ in
-            subscriber.putNext(())
-        }
-        return ActionDisposable { NotificationCenter.default.removeObserver(observer) }
-    }
-    let settingsState = Signal<Void, NoError>.single(()) |> then(settingsChanges)
-    let signal = combineLatest(context.sharedContext.presentationData, settingsState)
-    |> map { presentationData, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
+              case .installedPlugins:
+                  presentInstalledPlugins?()
+              case .builtInPlugins:
+                  pushBuiltInPlugins?()
+              case .other:
+                  presentSupport?()
+              }
+          }
+      )
+    let signal = combineLatest(context.sharedContext.presentationData, sgSimpleSettingsChangedSignal)
+     |> map { presentationData, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let lang = presentationData.strings.baseLanguageCode
         let counter = SGItemListCounter()
-        let entries: [ReqGramEntry] = [
+        let settings = SGSimpleSettings.shared
+        var entries: [ReqGramEntry] = []
+        // Thin wrapper over the shared helper so this screen can keep passing localization keys.
+        func appendNotice(_ key: String, section: ReqGramSection, kind: ReqGramPresentationPolicy.NoticeKind) {
+            sgAppendNotice(to: &entries, counter: counter, section: section, text: i18n(key, lang), kind: kind)
+        }
+        entries.append(.header(id: counter.count, section: .presentation, text: i18n("ReqGram.Presentation.Title", lang), badge: nil))
+        entries.append(.toggle(id: counter.count, section: .presentation, settingName: .compactDescriptions, value: settings.reqGramCompactDescriptions, text: i18n("ReqGram.CompactDescriptions", lang), enabled: true))
+        appendNotice("ReqGram.CompactDescriptions.Notice", section: .presentation, kind: .explanation)
+        entries.append(.header(id: counter.count, section: .messages, text: i18n("ReqGram.Presentation.Messages", lang), badge: nil))
+        entries.append(.toggle(id: counter.count, section: .messages, settingName: .fullChannelViewCounts, value: settings.fullChannelViewCounts, text: i18n("Settings.FullChannelViewCounts", lang), enabled: true))
+        appendNotice("Settings.FullChannelViewCounts.Notice", section: .messages, kind: .explanation)
+        entries.append(.toggle(id: counter.count, section: .messages, settingName: .channelForwardCounts, value: settings.reqGramShowForwardCounts, text: i18n("Settings.ChannelForwardCounts", lang), enabled: true))
+         entries.append(.toggle(id: counter.count, section: .messages, settingName: .secondsInMessages, value: settings.secondsInMessages, text: i18n("Settings.secondsInMessages", lang), enabled: true))
+        entries.append(.toggle(id: counter.count, section: .messages, settingName: .characterCounter, value: settings.reqGramCharacterCounter, text: i18n("ReqGram.CharacterCounter", lang), enabled: true))
+        entries.append(.toggle(id: counter.count, section: .messages, settingName: .wideChannelPosts, value: settings.wideChannelPosts, text: i18n("Settings.wideChannelPosts", lang), enabled: true))
+        entries.append(.header(id: counter.count, section: .chatList, text: i18n("ReqGram.Presentation.ChatList", lang), badge: nil))
+        entries.append(.toggle(id: counter.count, section: .chatList, settingName: .compactChatList, value: settings.compactChatList, text: i18n("Settings.CompactChatList", lang), enabled: true))
+        entries.append(.header(id: counter.count, section: .profiles, text: i18n("ReqGram.Presentation.Profiles", lang), badge: nil))
+        entries.append(.toggle(id: counter.count, section: .profiles, settingName: .showProfileId, value: settings.showProfileId, text: i18n("Settings.ShowProfileID", lang), enabled: true))
+        entries.append(.toggle(id: counter.count, section: .profiles, settingName: .showDC, value: settings.showDC, text: i18n("Settings.ShowDC", lang), enabled: true))
+        entries += [
+            .header(id: counter.count, section: .media, text: i18n("ReqGram.Media.Title", lang), badge: nil),
+            .toggle(id: counter.count, section: .media, settingName: .stopAfterVoiceMessage, value: settings.stopAfterVoiceMessage, text: i18n("ReqGram.StopAfterVoiceMessage", lang), enabled: true)
+        ]
+        appendNotice("ReqGram.StopAfterVoiceMessage.Notice", section: .media, kind: .explanation)
+        entries += [
             .header(id: counter.count, section: .plugins, text: i18n("ReqGram.Plugins.Title", lang), badge: nil),
-            .toggle(id: counter.count, section: .plugins, settingName: .telegram1211LegacyDesign, value: SGSimpleSettings.shared.telegram1211LegacyDesign, text: i18n("Settings.Telegram1211LegacyDesign", lang), enabled: true),
-            .notice(id: counter.count, section: .plugins, text: i18n("Settings.Telegram1211LegacyDesign.Notice", lang)),
             .disclosure(id: counter.count, section: .plugins, link: .builtInPlugins, text: i18n("ReqGram.BuiltIn.Title", lang)),
-            .disclosure(id: counter.count, section: .plugins, link: .installedPlugins, text: i18n("ReqGram.Installed.Title", lang)),
-            .header(id: counter.count, section: .support, text: i18n("ReqGram.Support.Section", lang), badge: nil),
-            .disclosure(id: counter.count, section: .support, link: .other, text: i18n("ReqGram.Support.MenuTitle", lang))
+             .disclosure(id: counter.count, section: .plugins, link: .installedPlugins, text: i18n("ReqGram.Installed.Title", lang)),
+             .header(id: counter.count, section: .support, text: i18n("ReqGram.Support.Section", lang), badge: nil),
+             .disclosure(id: counter.count, section: .support, link: .other, text: i18n("ReqGram.Support.MenuTitle", lang)),
+             .action(id: counter.count, section: .support, actionType: .export, text: "Export presentation settings", kind: .generic),
+             .action(id: counter.count, section: .support, actionType: .import, text: "Import presentation settings", kind: .generic),
+             .action(id: counter.count, section: .support, actionType: .reset, text: "Reset presentation settings", kind: .destructive)
         ]
         return (
             ItemListControllerState(
@@ -173,10 +531,18 @@ public func reqGramSettingsController(context: AccountContext) -> ViewController
                 rightNavigationButton: nil,
                 backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)
             ),
-            (ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: SGSimpleSettings.shared.isTelegram1211LegacyDesignEnabled ? .plain : .blocks, ensureVisibleItemTag: nil, initialScrollToItem: nil), arguments)
+              // The list container style must match the style the individual rows
+              // are built with. Every row produced by SGItemListUI is hardcoded to
+              // `style: .blocks` (and `systemStyle: .glass`), so forcing the
+              // container to `.plain` made rows paint grouped block backgrounds with
+              // rounded corner masks on top of a plain background, and kept grouped
+              // insets while the container hid its side overlay nodes. Keep `.blocks`
+              // here; the legacy design preference is applied by its real consumers
+              // (bubble geometry and chat list tab placement), not by this screen.
+              (ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, ensureVisibleItemTag: nil, initialScrollToItem: nil), arguments as Any)
         )
     }
-    let controller = ItemListController(context: context, state: signal)
+    let controller = ReqGramSettingsController(context: context, state: signal)
     presentInstalledPlugins = { [weak controller] in
         let plugins = ReqGramInstalledPluginsViewController(context: context)
         controller?.present(UINavigationController(rootViewController: plugins), animated: true)
@@ -213,29 +579,112 @@ public func reqGramSettingsController(context: AccountContext) -> ViewController
             with: nil
         )
     }
+    transferAction = { [weak controller] action in
+        guard let controller = controller else { return }
+        switch action {
+        case .export:
+            do {
+                let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+                let url = directory.appendingPathComponent(ReqGramSettingsTransfer.fileName)
+                try ReqGramSettingsTransfer.exportData().write(to: url, options: .atomic)
+                let share = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+                share.completionWithItemsHandler = { _, _, _, _ in try? FileManager.default.removeItem(at: directory) }
+                share.popoverPresentationController?.sourceView = controller.view
+                controller.present(share, animated: true)
+            } catch { reqGramShowTransferError(error, on: controller) }
+        case .import:
+            let picker = UIDocumentPickerViewController(documentTypes: ["public.json"], in: .import)
+            picker.allowsMultipleSelection = false
+            controller.importPicker = picker
+            controller.present(picker, animated: true)
+        case .reset:
+            let alert = UIAlertController(title: "Reset presentation settings?", message: "Only ReqGram presentation settings will be reset.", preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "Reset", style: .destructive) { _ in ReqGramSettingsTransfer.reset(); reqGramShowTransferDone(on: controller) })
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+            controller.present(alert, animated: true)
+        }
+    }
     return controller
 }
 
+private final class ReqGramSettingsController: ItemListController, UIDocumentPickerDelegate {
+    fileprivate weak var importPicker: UIDocumentPickerViewController? {
+        didSet { importPicker?.delegate = self }
+    }
+
+    fileprivate init(context: AccountContext, state: Signal<(ItemListControllerState, (ItemListNodeState, Any)), NoError>) {
+        let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        super.init(
+            presentationData: ItemListPresentationData(presentationData),
+            updatedPresentationData: context.sharedContext.presentationData |> map(ItemListPresentationData.init(_:)),
+            state: state,
+            tabBarItem: nil
+        )
+    }
+
+    required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        importPicker = nil
+        guard urls.count == 1, let url = urls.first else {
+            reqGramShowTransferError(ReqGramSettingsTransfer.Error.invalidFormat, on: self)
+            return
+        }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let values = try url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
+            guard values.isRegularFile == true, let size = values.fileSize, size <= 128 * 1024 else {
+                throw ReqGramSettingsTransfer.Error.tooLarge
+            }
+            let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+            guard data.count <= 128 * 1024 else { throw ReqGramSettingsTransfer.Error.tooLarge }
+            do { try ReqGramSettingsTransfer.importData(data); reqGramShowTransferDone(on: self) }
+            catch { reqGramShowTransferError(error, on: self) }
+        }
+        catch { reqGramShowTransferError(error, on: controller) }
+    }
+
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        importPicker = nil
+    }
+}
+
+private func reqGramShowTransferError(_ error: Error, on controller: UIViewController) {
+    let alert = UIAlertController(title: "Settings transfer failed", message: error.localizedDescription, preferredStyle: .alert)
+    alert.addAction(UIAlertAction(title: "OK", style: .default)); controller.present(alert, animated: true)
+}
+private func reqGramShowTransferDone(on controller: UIViewController) {
+    let alert = UIAlertController(title: "Presentation settings updated", message: nil, preferredStyle: .alert)
+    alert.addAction(UIAlertAction(title: "OK", style: .default)); controller.present(alert, animated: true)
+}
+
 private func reqGramBuiltInPluginsController(context: AccountContext) -> ViewController {
-    typealias Entry = SGItemListUIEntry<ReqGramSection, ReqGramUnused, ReqGramUnused, ReqGramUnused, ReqGramPlugin, ReqGramUnused>
+    typealias Entry = SGItemListUIEntry<ReqGramSection, ReqGramUnused, ReqGramUnused, ReqGramUnused, ReqGramBuiltInPluginLink, ReqGramUnused>
     var pushPluginController: ((ReqGramPlugin) -> Void)?
-    let arguments = SGItemListArguments<ReqGramUnused, ReqGramUnused, ReqGramUnused, ReqGramPlugin, ReqGramUnused>(
+    var pushGifts: (() -> Void)?
+    let arguments = SGItemListArguments<ReqGramUnused, ReqGramUnused, ReqGramUnused, ReqGramBuiltInPluginLink, ReqGramUnused>(
         context: context,
-        openDisclosureLink: { plugin in
-            pushPluginController?(plugin)
+        openDisclosureLink: { link in
+            switch link {
+            case .gifts:
+                pushGifts?()
+            case let .plugin(plugin):
+                pushPluginController?(plugin)
+            }
         }
     )
-    let signal = context.sharedContext.presentationData
-    |> map { presentationData -> (ItemListControllerState, (ItemListNodeState, Any)) in
+     let signal = context.sharedContext.presentationData
+     |> map { presentationData -> (ItemListControllerState, (ItemListNodeState, SGItemListArguments<ReqGramUnused, ReqGramUnused, ReqGramUnused, ReqGramBuiltInPluginLink, ReqGramUnused>)) in
         let lang = presentationData.strings.baseLanguageCode
         let counter = SGItemListCounter()
         let entries: [Entry] = [
-            .disclosure(id: counter.count, section: .plugins, link: .giftId, text: i18n("ReqGram.Plugin.GiftId", lang)),
-            .disclosure(id: counter.count, section: .plugins, link: .sendGiftById, text: i18n("ReqGram.Plugin.SendGiftById", lang)),
-            .disclosure(id: counter.count, section: .plugins, link: .deletedGiftSender, text: i18n("ReqGram.Plugin.DeletedGiftSender", lang)),
-            .disclosure(id: counter.count, section: .plugins, link: .localEdictorAndZwyLib, text: i18n("ReqGram.Plugin.LocalEdictorZwyLib", lang)),
-            .disclosure(id: counter.count, section: .plugins, link: .textAnimationPrivateLet, text: i18n("ReqGram.Plugin.TextAnimationPrivateLet", lang)),
-            .disclosure(id: counter.count, section: .plugins, link: .scamBaseWriter, text: i18n("ReqGram.Plugin.ScamBaseWriter", lang))
+            .disclosure(id: counter.count, section: .plugins, link: .gifts, text: i18n("ReqGram.Gifts.Title", lang)),
+            .disclosure(id: counter.count, section: .plugins, link: .plugin(.localEdictorAndZwyLib), text: i18n("ReqGram.Plugin.LocalEdictorZwyLib", lang)),
+            .disclosure(id: counter.count, section: .plugins, link: .plugin(.textAnimationPrivateLet), text: i18n("ReqGram.Plugin.TextAnimationPrivateLet", lang)),
+            .disclosure(id: counter.count, section: .plugins, link: .plugin(.scamBaseWriter), text: i18n("ReqGram.Plugin.ScamBaseWriter", lang)),
+            .disclosure(id: counter.count, section: .plugins, link: .plugin(.nowPlaying), text: i18n("ReqGram.Plugin.NowPlaying", lang))
         ]
         return (
             ItemListControllerState(
@@ -245,7 +694,7 @@ private func reqGramBuiltInPluginsController(context: AccountContext) -> ViewCon
                 rightNavigationButton: nil,
                 backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)
             ),
-            (ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, ensureVisibleItemTag: nil, initialScrollToItem: nil), arguments)
+              (ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, ensureVisibleItemTag: nil, initialScrollToItem: nil), arguments)
         )
     }
     let controller = ItemListController(context: context, state: signal)
@@ -254,6 +703,9 @@ private func reqGramBuiltInPluginsController(context: AccountContext) -> ViewCon
             return
         }
         (controller?.navigationController as? NavigationController)?.pushViewController(pluginController)
+    }
+    pushGifts = { [weak controller] in
+        (controller?.navigationController as? NavigationController)?.pushViewController(reqGramGiftsController(context: context))
     }
     return controller
 }
@@ -649,15 +1101,6 @@ private func reqGramPluginController(context: AccountContext, plugin: ReqGramPlu
     let title: String
     let description: String
     switch plugin {
-    case .giftId:
-        title = i18n("ReqGram.Plugin.GiftId", lang)
-        description = i18n("ReqGram.Plugin.GiftId.Description", lang)
-    case .sendGiftById:
-        title = i18n("ReqGram.Plugin.SendGiftById", lang)
-        description = i18n("ReqGram.Plugin.SendGiftById.Description", lang)
-    case .deletedGiftSender:
-        title = i18n("ReqGram.Plugin.DeletedGiftSender", lang)
-        description = i18n("ReqGram.Plugin.DeletedGiftSender.Description", lang)
     case .localEdictorAndZwyLib:
         title = i18n("ReqGram.Plugin.LocalEdictorZwyLib", lang)
         description = i18n("ReqGram.Plugin.LocalEdictorZwyLib.Description", lang)
@@ -667,25 +1110,25 @@ private func reqGramPluginController(context: AccountContext, plugin: ReqGramPlu
     case .scamBaseWriter:
         title = i18n("ReqGram.Plugin.ScamBaseWriter", lang)
         description = i18n("ReqGram.Plugin.ScamBaseWriter.Description", lang)
+    case .nowPlaying:
+        title = i18n("ReqGram.Plugin.NowPlaying", lang)
+        description = i18n("ReqGram.Plugin.NowPlaying.Description", lang)
     }
 
     var presentControllerImpl: ((ViewController, ViewControllerPresentationArguments?) -> Void)?
     var pushControllerImpl: ((ViewController) -> Void)?
-    let arguments = SGItemListArguments<ReqGramPluginBoolSetting, ReqGramSliderSetting, ReqGramPluginSelector, ReqGramPluginUnused, ReqGramPluginAction>(
+    let arguments = SGItemListArguments<ReqGramPluginBoolSetting, ReqGramSliderSetting, ReqGramPluginSelector, ReqGramPluginDisclosure, ReqGramPluginAction>(
         context: context,
         setBoolValue: { setting, value in
              let settings = SGSimpleSettings.shared
              switch plugin {
-            case .giftId:
-                settings.reqGramGiftIdEnabled = value
-            case .sendGiftById:
-                settings.reqGramSendGiftByIdEnabled = value
-            case .deletedGiftSender:
-                settings.reqGramDeletedGiftSenderEnabled = value
             case .localEdictorAndZwyLib:
-                // These two gates are deliberately one plugin switch.
+                // `reqGramLocalEdictorEnabled` is the only gate with real runtime
+                // consumers (ChatInterfaceStateContextMenus / ChatHistoryEntriesForView).
+                // `reqGramZwyLibEnabled` has no consumer anywhere, so it is not written
+                // here: keeping it in the AND below made the switch read back OFF while
+                // local editing was actually active.
                 settings.reqGramLocalEdictorEnabled = value
-                settings.reqGramZwyLibEnabled = value
              case .textAnimationPrivateLet:
                  switch setting {
                  case .enabled: settings.reqGramTextAnimationPrivateLetEnabled = value
@@ -696,14 +1139,28 @@ private func reqGramPluginController(context: AccountContext, plugin: ReqGramPlu
                   case .deleteAnimation: settings.reqGramTextAnimationPrivateLetDeleteAnimEnabled = value
                   case .cursor: settings.reqGramTextAnimationPrivateLetCursorEnabled = value
                   case .liquidCursor: settings.reqGramTextAnimationPrivateLetLiquidCursorEnabled = value
-                 case .ignoreSpaces: settings.reqGramTextAnimationPrivateLetIgnoreSpaces = value
-                  case .animateAllLines: settings.reqGramTextAnimationPrivateLetAnimateAllLines = value
-                  }
+                  case .ignoreSpaces: settings.reqGramTextAnimationPrivateLetIgnoreSpaces = value
+                   case .animateAllLines: settings.reqGramTextAnimationPrivateLetAnimateAllLines = value
+                  default: break
+                   }
              case .scamBaseWriter:
                  var settings = SGScamRegistryService.shared.currentSettings()
                  settings.enabled = value
                  SGScamRegistryService.shared.updateSettings(settings)
-             }
+              case .nowPlaying:
+                  switch setting {
+                  case .enabled:
+                      SGNowPlayingService.shared.updateSettings { settings in
+                          settings.isEnabled = value
+                      }
+                  case .nowPlayingUseSongLink:
+                      SGNowPlayingService.shared.updateSettings { settings in
+                          settings.useSongLink = value
+                      }
+                  default:
+                      break
+                  }
+              }
         },
           updateSliderValue: { setting, value in
              let s = SGSimpleSettings.shared
@@ -727,137 +1184,313 @@ private func reqGramPluginController(context: AccountContext, plugin: ReqGramPlu
               case .selectionSide: s.reqGramTextAnimationPrivateLetSelectionLiquidSide = Int(value)
              }
          },
-          setOneFromManyValue: { setting in
-              guard setting == .scamInterval else { return }
-              let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-              let sheet = ActionSheetController(presentationData: presentationData)
-              let items = SGScamRegistryRefreshInterval.allCases.map { interval in
-                  ActionSheetButtonItem(title: interval.title, color: .accent, action: { [weak sheet] in
-                      var settings = SGScamRegistryService.shared.currentSettings()
-                      settings.interval = interval
-                      SGScamRegistryService.shared.updateSettings(settings)
-                      sheet?.dismissAnimated()
-                  })
-              }
-              sheet.setItemGroups([ActionSheetItemGroup(items: items)])
-              presentControllerImpl?(sheet, nil)
-          },
-         action: { action in
-              if case .scamRefresh = action, plugin == .scamBaseWriter {
-                  SGScamRegistryService.shared.refresh { result in
-                      DispatchQueue.main.async {
-                          let message: String
-                          switch result {
-                          case let .updated(count, _):
-                              message = "\(i18n("ReqGram.Plugin.ScamBaseWriter.Refresh.Done", lang)) (\(count))"
-                          case .failed:
-                              message = i18n("ReqGram.Plugin.ScamBaseWriter.Refresh.Failed", lang)
-                          }
-                          presentControllerImpl?(textAlertController(
-                              context: context,
-                              title: nil,
-                              text: message,
-                              actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})
-                              ]), nil)
-                      }
+           setOneFromManyValue: { setting in
+               let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+               let lang = presentationData.strings.baseLanguageCode
+               switch setting {
+               case .scamInterval:
+                   let sheet = ActionSheetController(presentationData: presentationData)
+                   let items = SGScamRegistryRefreshInterval.allCases.map { interval in
+                       ActionSheetButtonItem(title: interval.title, color: .accent, action: { [weak sheet] in
+                           var settings = SGScamRegistryService.shared.currentSettings()
+                           settings.interval = interval
+                           SGScamRegistryService.shared.updateSettings(settings)
+                           sheet?.dismissAnimated()
+                       })
+                   }
+                   sheet.setItemGroups([ActionSheetItemGroup(items: items)])
+                   presentControllerImpl?(sheet, nil)
+               case .nowPlayingPlace:
+                   let sheet = ActionSheetController(presentationData: presentationData)
+                   let items = SGNowPlayingPlace.allCases.map { place in
+                       let title: String
+                       switch place {
+                       case .bio: title = i18n("ReqGram.Plugin.NowPlaying.Place.Bio", lang)
+                       case .playlist: title = i18n("ReqGram.Plugin.NowPlaying.Place.Playlist", lang)
+                       case .location: title = i18n("ReqGram.Plugin.NowPlaying.Place.Location", lang)
+                       }
+                       return ActionSheetButtonItem(title: title, color: .accent, action: { [weak sheet] in
+                           SGNowPlayingService.shared.updateSettings { settings in
+                               settings.place = place
+                           }
+                           sheet?.dismissAnimated()
+                       })
+                   }
+                   sheet.setItemGroups([ActionSheetItemGroup(items: items)])
+                   presentControllerImpl?(sheet, nil)
+               case .nowPlayingSource:
+                   let sheet = ActionSheetController(presentationData: presentationData)
+                   var items: [ActionSheetButtonItem] = [
+                       ActionSheetButtonItem(title: i18n("ReqGram.Plugin.NowPlaying.Source.Auto", lang), color: .accent, action: { [weak sheet] in
+                           SGNowPlayingService.shared.updateSettings { settings in
+                               settings.source = .auto
+                           }
+                           sheet?.dismissAnimated()
+                       })
+                   ]
+                    items += SGNowPlayingPlatformId.allCases.map { platform in
+                        ActionSheetButtonItem(title: i18n(platform.displayKey, lang), color: .accent, action: { [weak sheet] in
+                            SGNowPlayingService.shared.updateSettings { settings in
+                                settings.source = .platform(platform)
+                            }
+                            sheet?.dismissAnimated()
+                        })
+                    }
+                    sheet.setItemGroups([ActionSheetItemGroup(items: items)])
+                    presentControllerImpl?(sheet, nil)
+                case .nowPlayingCardType:
+                    let sheet = ActionSheetController(presentationData: presentationData)
+                    let items = SGNowPlayingCardType.allCases.map { cardType in
+                        ActionSheetButtonItem(title: i18n(cardType.displayKey, lang), color: .accent, action: { [weak sheet] in
+                            SGNowPlayingService.shared.updateSettings { settings in
+                                settings.cardType = cardType
+                            }
+                            sheet?.dismissAnimated()
+                        })
+                    }
+                    sheet.setItemGroups([ActionSheetItemGroup(items: items)])
+                    presentControllerImpl?(sheet, nil)
+                case .nowPlayingCardBackground:
+                    let sheet = ActionSheetController(presentationData: presentationData)
+                    let items = SGNowPlayingCardBackground.allCases.map { background in
+                        ActionSheetButtonItem(title: i18n(background.displayKey, lang), color: .accent, action: { [weak sheet] in
+                            SGNowPlayingService.shared.updateSettings { settings in
+                                settings.cardBackground = background
+                            }
+                            sheet?.dismissAnimated()
+                        })
+                    }
+                    sheet.setItemGroups([ActionSheetItemGroup(items: items)])
+                    presentControllerImpl?(sheet, nil)
+                case .nowPlayingCardFont:
+                    let sheet = ActionSheetController(presentationData: presentationData)
+                    let items = SGNowPlayingCardFont.allCases.map { font in
+                        ActionSheetButtonItem(title: i18n(font.displayKey, lang), color: .accent, action: { [weak sheet] in
+                            SGNowPlayingService.shared.updateSettings { settings in
+                                settings.cardFont = font
+                            }
+                            sheet?.dismissAnimated()
+                        })
+                    }
+                    sheet.setItemGroups([ActionSheetItemGroup(items: items)])
+                    presentControllerImpl?(sheet, nil)
+                case .nowPlayingCardLinkStyle:
+                    let sheet = ActionSheetController(presentationData: presentationData)
+                    let items = SGNowPlayingCardLinkStyle.allCases.map { style in
+                        ActionSheetButtonItem(title: i18n(style.displayKey, lang), color: .accent, action: { [weak sheet] in
+                            SGNowPlayingService.shared.updateSettings { settings in
+                                settings.cardLinkStyle = style
+                            }
+                            sheet?.dismissAnimated()
+                        })
+                    }
+                    sheet.setItemGroups([ActionSheetItemGroup(items: items)])
+                    presentControllerImpl?(sheet, nil)
+                 }
+             },
+           openDisclosureLink: { link in
+               if case let .nowPlayingToken(platform) = link {
+                   pushControllerImpl?(reqGramNowPlayingTokenController(context: context, platform: platform))
+               }
+           },
+           action: { action in
+               if case .scamRefresh = action, plugin == .scamBaseWriter {
+                  // The service's own `refreshing` flag is the source of truth for
+                  // re-entrancy; this check only turns a silently swallowed
+                  // duplicate tap into a visible message instead of changing the
+                  // actual guarding behavior (which happens again, safely, inside
+                  // `refresh` regardless of this check).
+                  if SGScamRegistryService.shared.isRefreshing() {
+                      presentControllerImpl?(textAlertController(
+                          context: context,
+                          title: nil,
+                          text: i18n("ReqGram.Plugin.ScamBaseWriter.Refresh.AlreadyInProgress", lang),
+                          actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})
+                          ]), nil)
+                      return
                   }
-                  return
-              }
-              if case .sendGiftById = action, plugin == .sendGiftById {
-                guard SGSimpleSettings.shared.reqGramSendGiftByIdEnabled else { return }
-                presentControllerImpl?(promptController(context: context, updatedPresentationData: nil,
-                    text: i18n("ReqGram.Plugin.SendGiftById.IdTitle", lang), value: nil,
-                    placeholder: i18n("ReqGram.Plugin.SendGiftById.IdPlaceholder", lang), apply: { value in
-                        guard let value else { return }
-                        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard let id = Int64(trimmed), id > 0 else {
-                            presentControllerImpl?(textAlertController(context: context, title: nil,
-                                text: i18n("ReqGram.Plugin.SendGiftById.InvalidId", lang),
-                                actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]), nil)
-                            return
-                        }
-                        guard let giftController = context.sharedContext.makeStarGiftByIdController(context: context, giftId: id, onError: {
-                            presentControllerImpl?(textAlertController(context: context, title: nil,
-                                text: i18n("ReqGram.Plugin.SendGiftById.NotFound", lang),
-                                actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]), nil)
-                        }) else {
-                            presentControllerImpl?(textAlertController(context: context, title: nil,
-                                text: i18n("ReqGram.Plugin.SendGiftById.NotFound", lang),
-                                actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]), nil)
-                            return
-                        }
-                         // ContactSelectionController owns the recipient flow's navigation stack.
-                         // Push it from the plugin screen instead of presenting it through the
-                         // root window; the latter leaves the controller without the navigation
-                         // ownership required when it pushes GiftSetupScreen after selection.
-                         pushControllerImpl?(giftController)
-                    }), nil)
-                return
-            }
-        }
-    )
-     let pluginSettingsState = Signal<Void, NoError> { subscriber in
-         subscriber.putNext(())
-         let observers = [
-             NotificationCenter.default.addObserver(forName: UserDefault<Bool>.didChangeNotification, object: nil, queue: .main) { _ in subscriber.putNext(()) },
-             NotificationCenter.default.addObserver(forName: .sgScamRegistryDidChange, object: nil, queue: .main) { _ in subscriber.putNext(()) },
-             NotificationCenter.default.addObserver(forName: .sgScamRegistrySettingsDidChange, object: nil, queue: .main) { _ in subscriber.putNext(()) },
-             NotificationCenter.default.addObserver(forName: .sgScamRegistryRefreshDidFinish, object: nil, queue: .main) { _ in subscriber.putNext(()) }
-         ]
-         return ActionDisposable { observers.forEach { NotificationCenter.default.removeObserver($0) } }
-     }
-    let signal = combineLatest(context.sharedContext.presentationData, pluginSettingsState)
-    |> map { presentationData, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
-        let lang = presentationData.strings.baseLanguageCode
-        let currentSettings = SGSimpleSettings.shared
-        let currentEnabled: Bool
-        switch plugin {
-        case .giftId:
-            currentEnabled = currentSettings.reqGramGiftIdEnabled
-        case .sendGiftById:
-            currentEnabled = currentSettings.reqGramSendGiftByIdEnabled
-        case .deletedGiftSender:
-            currentEnabled = currentSettings.reqGramDeletedGiftSenderEnabled
-        case .localEdictorAndZwyLib:
-            currentEnabled = currentSettings.reqGramLocalEdictorEnabled && currentSettings.reqGramZwyLibEnabled
-        case .textAnimationPrivateLet:
-            currentEnabled = currentSettings.reqGramTextAnimationPrivateLetEnabled
-        case .scamBaseWriter:
-            currentEnabled = SGScamRegistryService.shared.currentSettings().enabled
-        }
-        let counter = SGItemListCounter()
-         var entries: [ReqGramPluginEntry] = []
-         if case .textAnimationPrivateLet = plugin {
-             entries.append(.textAnimationPreview(
-                 id: counter.count,
-                 section: .settings,
-                 configuration: SGTextAnimationPreviewConfiguration(
-                     enabled: currentEnabled,
-                     duration: Double(currentSettings.reqGramTextAnimationPrivateLetDuration) / 1000.0,
-                     slideDistance: currentSettings.reqGramTextAnimationPrivateLetSlideEnabled ? CGFloat(currentSettings.reqGramTextAnimationPrivateLetSlideDist) : 0.0,
-                     blurEnabled: currentSettings.reqGramTextAnimationPrivateLetBlurEnabled,
-                      blurDuration: Double(currentSettings.reqGramTextAnimationPrivateLetBlurDuration) / 1000.0,
-                     blurRadius: CGFloat(currentSettings.reqGramTextAnimationPrivateLetBlurRadius),
-                      blurTextDelay: Double(currentSettings.reqGramTextAnimationPrivateLetBlurTextDelay) / 100.0 * (Double(currentSettings.reqGramTextAnimationPrivateLetBlurDuration) / 1000.0),
-                     scaleEnabled: currentSettings.reqGramTextAnimationPrivateLetScaleEnabled,
-                     scaleStart: CGFloat(currentSettings.reqGramTextAnimationPrivateLetScaleStart),
-                     rotateEnabled: currentSettings.reqGramTextAnimationPrivateLetRotateEnabled,
-                     rotateAngle: CGFloat(currentSettings.reqGramTextAnimationPrivateLetRotateAngle),
-                     ignoreSpaces: currentSettings.reqGramTextAnimationPrivateLetIgnoreSpaces
-                 ),
-                 title: i18n("ReqGram.Animation.Preview.Title", lang),
-                 sampleText: i18n("ReqGram.Animation.Preview.Sample", lang),
-                 accessibilityHint: i18n("ReqGram.Animation.Preview.AccessibilityHint", lang)
-             ))
-         }
-          entries.append(.toggle(id: counter.count, section: .settings, settingName: .enabled, value: currentEnabled, text: i18n("ReqGram.Plugin.Enable", lang), enabled: true))
-          if plugin == .scamBaseWriter {
-              let scamSettings = SGScamRegistryService.shared.currentSettings()
-              entries.append(.oneFromManySelector(id: counter.count, section: .settings, settingName: .scamInterval, text: i18n("ReqGram.Plugin.ScamBaseWriter.Interval", lang), value: scamSettings.interval.title, enabled: true))
-              entries.append(.action(id: counter.count, section: .settings, actionType: .scamRefresh, text: i18n("ReqGram.Plugin.ScamBaseWriter.Refresh", lang), kind: .generic))
-              entries.append(.notice(id: counter.count, section: .settings, text: i18n("ReqGram.Plugin.ScamBaseWriter.Status", lang) + ": " + String(SGScamRegistryService.shared.snapshot().count)))
+                  // `SGScamRegistryService.refresh` hops onto its own private
+                  // serial queue immediately (see `refresh(completion:)` in
+                  // SGScamRegistryService.swift) and performs the entire fetch —
+                  // including the paginated network requests and the regex
+                  // parsing pass — off the main thread. This call returns
+                  // immediately; the row's "Scanning…" label (driven by
+                  // `pluginSettingsState` observing `.sgScamRegistryRefreshDidStart`)
+                  // is the only synchronous-looking feedback, and the rest of the
+                  // app remains fully interactive while this runs.
+                   SGScamRegistryService.shared.refresh { result in
+                       DispatchQueue.main.async {
+                           let message: String
+                            switch result {
+                            case let .updated(count, _):
+                                message = "\(i18n("ReqGram.Plugin.ScamBaseWriter.Refresh.Done", lang)) (\(count))"
+                            case .alreadyInProgress:
+                                message = i18n("ReqGram.Plugin.ScamBaseWriter.Refresh.AlreadyInProgress", lang)
+                            case .failed:
+                                message = i18n("ReqGram.Plugin.ScamBaseWriter.Refresh.Failed", lang)
+                            }
+                           presentControllerImpl?(textAlertController(
+                               context: context,
+                               title: nil,
+                               text: message,
+                               actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})
+                               ]), nil)
+                       }
+                   }
+                   return
+               }
+               if case .nowPlayingCheck = action, plugin == .nowPlaying {
+                   // `checkNow` hops onto the service's private serial queue and
+                   // polls every configured platform concurrently; the row's
+                   // "Checking…" label (driven by `pluginSettingsState` observing
+                   // the poll notifications) is the immediate feedback.
+                   SGNowPlayingService.shared.checkNow { status in
+                       DispatchQueue.main.async {
+                           let text = status.isEmpty ? i18n("ReqGram.Plugin.NowPlaying.Status.Idle", lang) : status
+                           presentControllerImpl?(textAlertController(
+                               context: context,
+                               title: nil,
+                               text: text,
+                               actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})
+                               ]), nil)
+                       }
+                   }
+                    return
+                }
+                if case .textAnimationRestoreDefaults = action, plugin == .textAnimationPrivateLet {
+                    // Assignments post the shared didChange notification, so
+                    // the list rebuilds itself with restored values instantly.
+                    SGSimpleSettings.shared.resetReqGramTextAnimationPrivateLet()
+                    return
+                }
+           },
+           searchInput: { text in
+               if plugin == .nowPlaying {
+                   SGNowPlayingService.shared.setDefaultText(text)
+               }
+           }
+      )
+       let pluginSettingsState = Signal<Void, NoError> { subscriber in
+          subscriber.putNext(())
+          let observers = [
+              NotificationCenter.default.addObserver(forName: UserDefault<Bool>.didChangeNotification, object: nil, queue: .main) { _ in subscriber.putNext(()) },
+              NotificationCenter.default.addObserver(forName: .sgScamRegistryDidChange, object: nil, queue: .main) { _ in subscriber.putNext(()) },
+              NotificationCenter.default.addObserver(forName: .sgScamRegistrySettingsDidChange, object: nil, queue: .main) { _ in subscriber.putNext(()) },
+               NotificationCenter.default.addObserver(forName: .sgScamRegistryRefreshDidStart, object: nil, queue: .main) { _ in subscriber.putNext(()) },
+               NotificationCenter.default.addObserver(forName: .sgScamRegistryRefreshDidFinish, object: nil, queue: .main) { _ in subscriber.putNext(()) },
+               NotificationCenter.default.addObserver(forName: .sgNowPlayingSettingsDidChange, object: nil, queue: .main) { _ in subscriber.putNext(()) },
+               NotificationCenter.default.addObserver(forName: .sgNowPlayingPollDidStart, object: nil, queue: .main) { _ in subscriber.putNext(()) },
+               NotificationCenter.default.addObserver(forName: .sgNowPlayingPollDidFinish, object: nil, queue: .main) { _ in subscriber.putNext(()) }
+           ]
+          return ActionDisposable { observers.forEach { NotificationCenter.default.removeObserver($0) } }
+      }
+     let signal = combineLatest(context.sharedContext.presentationData, pluginSettingsState)
+     |> map { presentationData, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
+         let lang = presentationData.strings.baseLanguageCode
+         let currentSettings = SGSimpleSettings.shared
+         let currentEnabled: Bool
+         switch plugin {
+         case .localEdictorAndZwyLib:
+             currentEnabled = currentSettings.reqGramLocalEdictorEnabled
+         case .textAnimationPrivateLet:
+             currentEnabled = currentSettings.reqGramTextAnimationPrivateLetEnabled
+          case .scamBaseWriter:
+               currentEnabled = SGScamRegistryService.shared.currentSettings().enabled
+          case .nowPlaying:
+              currentEnabled = SGNowPlayingService.shared.currentSettings().isEnabled
+           }
+         let counter = SGItemListCounter()
+          var entries: [ReqGramPluginEntry] = []
+          if case .textAnimationPrivateLet = plugin {
+              entries.append(.textAnimationPreview(
+                  id: counter.count,
+                  section: .settings,
+                  configuration: SGTextAnimationPreviewConfiguration(
+                      enabled: currentEnabled,
+                      duration: Double(currentSettings.reqGramTextAnimationPrivateLetDuration) / 1000.0,
+                      slideDistance: currentSettings.reqGramTextAnimationPrivateLetSlideEnabled ? CGFloat(currentSettings.reqGramTextAnimationPrivateLetSlideDist) : 0.0,
+                      blurEnabled: currentSettings.reqGramTextAnimationPrivateLetBlurEnabled,
+                       blurDuration: Double(currentSettings.reqGramTextAnimationPrivateLetBlurDuration) / 1000.0,
+                      blurRadius: CGFloat(currentSettings.reqGramTextAnimationPrivateLetBlurRadius),
+                       blurTextDelay: Double(currentSettings.reqGramTextAnimationPrivateLetBlurTextDelay) / 100.0 * (Double(currentSettings.reqGramTextAnimationPrivateLetBlurDuration) / 1000.0),
+                      scaleEnabled: currentSettings.reqGramTextAnimationPrivateLetScaleEnabled,
+                      scaleStart: CGFloat(currentSettings.reqGramTextAnimationPrivateLetScaleStart),
+                      rotateEnabled: currentSettings.reqGramTextAnimationPrivateLetRotateEnabled,
+                      rotateAngle: CGFloat(currentSettings.reqGramTextAnimationPrivateLetRotateAngle),
+                      ignoreSpaces: currentSettings.reqGramTextAnimationPrivateLetIgnoreSpaces
+                  ),
+                  title: i18n("ReqGram.Animation.Preview.Title", lang),
+                  sampleText: i18n("ReqGram.Animation.Preview.Sample", lang),
+                  accessibilityHint: i18n("ReqGram.Animation.Preview.AccessibilityHint", lang)
+               ))
           }
-         if case .textAnimationPrivateLet = plugin {
+            entries.append(.toggle(id: counter.count, section: .settings, settingName: .enabled, value: currentEnabled, text: i18n("ReqGram.Plugin.Enable", lang), enabled: true))
+           if plugin == .scamBaseWriter {
+               let scamSettings = SGScamRegistryService.shared.currentSettings()
+               let isScanning = SGScamRegistryService.shared.isRefreshing()
+               entries.append(.oneFromManySelector(id: counter.count, section: .settings, settingName: .scamInterval, text: i18n("ReqGram.Plugin.ScamBaseWriter.Interval", lang), value: scamSettings.interval.title, enabled: true))
+               // While a scan is in flight the row is relabeled and disabled
+               // (not removed) so the user gets immediate, visible, non-blocking
+               // feedback instead of being able to fire overlapping scans that
+               // the `refreshing` guard would otherwise silently swallow.
+               entries.append(.action(
+                   id: counter.count,
+                   section: .settings,
+                   actionType: .scamRefresh,
+                   text: isScanning ? i18n("ReqGram.Plugin.ScamBaseWriter.Refresh.InProgress", lang) : i18n("ReqGram.Plugin.ScamBaseWriter.Refresh", lang),
+                   kind: isScanning ? .disabled : .generic
+               ))
+                entries.append(.notice(id: counter.count, section: .settings, text: i18n("ReqGram.Plugin.ScamBaseWriter.Status", lang) + ": " + String(SGScamRegistryService.shared.snapshot().count)))
+            }
+             if plugin == .nowPlaying {
+                 let nowPlayingSettings = SGNowPlayingService.shared.currentSettings()
+                 let placeTitle: String
+                 switch nowPlayingSettings.place {
+                 case .bio: placeTitle = i18n("ReqGram.Plugin.NowPlaying.Place.Bio", lang)
+                 case .playlist: placeTitle = i18n("ReqGram.Plugin.NowPlaying.Place.Playlist", lang)
+                 case .location: placeTitle = i18n("ReqGram.Plugin.NowPlaying.Place.Location", lang)
+                 }
+                 entries.append(.oneFromManySelector(id: counter.count, section: .settings, settingName: .nowPlayingPlace, text: i18n("ReqGram.Plugin.NowPlaying.StreamPlace", lang), value: placeTitle, enabled: true))
+                 entries.append(.searchInput(
+                     id: counter.count,
+                     section: .settings,
+                     title: NSAttributedString(string: i18n("ReqGram.Plugin.NowPlaying.DefaultText", lang)),
+                     text: nowPlayingSettings.defaultText,
+                     placeholder: i18n("ReqGram.Plugin.NowPlaying.DefaultText.Placeholder", lang)
+                 ))
+                 entries.append(.header(id: counter.count, section: .settings, text: i18n("ReqGram.Plugin.NowPlaying.Section.Platforms", lang), badge: nil))
+                 let sourceTitle: String
+                 switch nowPlayingSettings.source {
+                 case .auto:
+                     sourceTitle = i18n("ReqGram.Plugin.NowPlaying.Source.Auto", lang)
+                 case let .platform(platform):
+                     sourceTitle = i18n(platform.displayKey, lang)
+                 }
+                 entries.append(.oneFromManySelector(id: counter.count, section: .settings, settingName: .nowPlayingSource, text: i18n("ReqGram.Plugin.NowPlaying.Source", lang), value: sourceTitle, enabled: true))
+                 for platform in SGNowPlayingPlatformId.allCases {
+                     entries.append(.disclosure(id: counter.count, section: .settings, link: .nowPlayingToken(platform), text: i18n(platform.displayKey, lang)))
+                 }
+                 entries.append(.header(id: counter.count, section: .settings, text: i18n("ReqGram.Plugin.NowPlaying.Section.Sending", lang), badge: nil))
+                 entries.append(.oneFromManySelector(id: counter.count, section: .settings, settingName: .nowPlayingCardType, text: i18n("ReqGram.Plugin.NowPlaying.Card.Type", lang), value: i18n(nowPlayingSettings.cardType.displayKey, lang), enabled: true))
+                 entries.append(.oneFromManySelector(id: counter.count, section: .settings, settingName: .nowPlayingCardBackground, text: i18n("ReqGram.Plugin.NowPlaying.Card.Background", lang), value: i18n(nowPlayingSettings.cardBackground.displayKey, lang), enabled: true))
+                  entries.append(.oneFromManySelector(id: counter.count, section: .settings, settingName: .nowPlayingCardFont, text: i18n("ReqGram.Plugin.NowPlaying.Card.Font", lang), value: i18n(nowPlayingSettings.cardFont.displayKey, lang), enabled: true))
+                  entries.append(.oneFromManySelector(id: counter.count, section: .settings, settingName: .nowPlayingCardLinkStyle, text: i18n("ReqGram.Plugin.NowPlaying.Card.LinkStyle", lang), value: i18n(nowPlayingSettings.cardLinkStyle.displayKey, lang), enabled: true))
+                  entries.append(.toggle(id: counter.count, section: .settings, settingName: .nowPlayingUseSongLink, value: nowPlayingSettings.useSongLink, text: i18n("ReqGram.Plugin.NowPlaying.Card.SongLink", lang), enabled: true))
+                 entries.append(.notice(id: counter.count, section: .settings, text: i18n("ReqGram.Plugin.NowPlaying.Card.SongLink.Hint", lang)))
+                 entries.append(.header(id: counter.count, section: .settings, text: i18n("ReqGram.Plugin.NowPlaying.Section.Diagnostics", lang), badge: nil))
+                 let isChecking = SGNowPlayingService.shared.isPollingNow
+                 entries.append(.action(
+                     id: counter.count,
+                     section: .settings,
+                     actionType: .nowPlayingCheck,
+                     text: isChecking ? i18n("ReqGram.Plugin.NowPlaying.Check.InProgress", lang) : i18n("ReqGram.Plugin.NowPlaying.Check", lang),
+                     kind: isChecking ? .disabled : .generic
+                 ))
+                 let status = SGNowPlayingService.shared.lastStatus
+                 entries.append(.notice(id: counter.count, section: .settings, text: i18n("ReqGram.Plugin.NowPlaying.Status", lang) + ": " + (status.isEmpty ? i18n("ReqGram.Plugin.NowPlaying.Status.Idle", lang) : status)))
+             }
+          if case .textAnimationPrivateLet = plugin {
+
              let animationEntries: [ReqGramPluginEntry] = [
                  .toggle(id: counter.count, section: .settings, settingName: .blur, value: currentSettings.reqGramTextAnimationPrivateLetBlurEnabled, text: i18n("ReqGram.Animation.Blur", lang), enabled: true),
                  .toggle(id: counter.count, section: .settings, settingName: .slide, value: currentSettings.reqGramTextAnimationPrivateLetSlideEnabled, text: i18n("ReqGram.Animation.Slide", lang), enabled: true),
@@ -891,26 +1524,21 @@ private func reqGramPluginController(context: AccountContext, plugin: ReqGramPlu
                   .percentageSlider(id: counter.count, section: .settings, settingName: .selectionEffect, value: reqGramAnimationValue(currentSettings.reqGramTextAnimationPrivateLetSelectionCursorEffect, minimum: 0, maximum: 2), title: i18n("ReqGram.Animation.SelectionEffect", lang), unit: "", minimum: 0, maximum: 2),
                   .percentageSlider(id: counter.count, section: .settings, settingName: .selectionStretch, value: reqGramAnimationValue(currentSettings.reqGramTextAnimationPrivateLetSelectionLiquidStretch, minimum: 0, maximum: 100), title: i18n("ReqGram.Animation.SelectionStretch", lang), unit: "%", minimum: 0, maximum: 100),
                   .percentageSlider(id: counter.count, section: .settings, settingName: .selectionSide, value: reqGramAnimationValue(currentSettings.reqGramTextAnimationPrivateLetSelectionLiquidSide, minimum: 0, maximum: 100), title: i18n("ReqGram.Animation.SelectionSide", lang), unit: "%", minimum: 0, maximum: 100)
-              ]
-             for entry in animationSliderEntries {
-                 entries.append(entry)
-             }
-         }
-        if plugin == .deletedGiftSender {
-            entries.append(.notice(id: counter.count, section: .settings, text: i18n("ReqGram.Plugin.DeletedGiftSending.Notice", lang)))
-        }
-        if case .deletedGiftSender = plugin {
-            entries.append(.notice(
-                id: counter.count,
-                section: .settings,
-                text: i18n("ReqGram.Plugin.DeletedGiftSender.DisplayNotice", lang)
-            ))
-        }
-        if case .sendGiftById = plugin {
-            entries.append(.action(id: counter.count, section: .information, actionType: .sendGiftById, text: i18n("ReqGram.Plugin.SendGiftById.Action", lang), kind: .generic))
-        }
+               ]
+              for entry in animationSliderEntries {
+                  entries.append(entry)
+              }
+
+              entries.append(.action(
+                  id: counter.count,
+                  section: .settings,
+                  actionType: .textAnimationRestoreDefaults,
+                  text: i18n("ReqGram.Animation.RestoreDefaults", lang),
+                  kind: .generic
+              ))
+          }
          entries.append(.header(id: counter.count, section: .information, text: i18n("ReqGram.Plugin.Information", lang), badge: nil))
-          entries.append(.notice(id: counter.count, section: .information, text: description))
+          sgAppendNotice(to: &entries, counter: counter, section: .information, text: description)
          return (
             ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),
@@ -920,7 +1548,7 @@ private func reqGramPluginController(context: AccountContext, plugin: ReqGramPlu
                 backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)
             ),
             (ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, ensureVisibleItemTag: nil, initialScrollToItem: nil), arguments)
-        )
+         )
     }
     let controller = ItemListController(context: context, state: signal)
     presentControllerImpl = { [weak controller] c, a in
@@ -930,6 +1558,65 @@ private func reqGramPluginController(context: AccountContext, plugin: ReqGramPlu
         (controller?.navigationController as? NavigationController)?.pushViewController(c)
     }
     return controller
+}
+
+// MARK: - Now Playing token screen
+
+private enum ReqGramTokenAction: Hashable {
+    case clear
+}
+
+/// One platform's token / username / cookie input of the Now Playing plugin.
+/// Saves per keystroke (the service debounces the poll restart).
+private func reqGramNowPlayingTokenController(context: AccountContext, platform: SGNowPlayingPlatformId) -> ViewController {
+    typealias Entry = SGItemListUIEntry<ReqGramPluginSection, ReqGramPluginUnused, ReqGramPluginUnused, ReqGramPluginUnused, ReqGramPluginUnused, ReqGramTokenAction>
+    let arguments = SGItemListArguments<ReqGramPluginUnused, ReqGramPluginUnused, ReqGramPluginUnused, ReqGramPluginUnused, ReqGramTokenAction>(
+        context: context,
+        action: { action in
+            if case .clear = action {
+                SGNowPlayingService.shared.setToken(platform: platform, value: nil)
+            }
+        },
+        searchInput: { text in
+            SGNowPlayingService.shared.setToken(platform: platform, value: text)
+        }
+    )
+    let tokenState = Signal<Void, NoError> { subscriber in
+        subscriber.putNext(())
+        let observers = [
+            NotificationCenter.default.addObserver(forName: .sgNowPlayingSettingsDidChange, object: nil, queue: .main) { _ in subscriber.putNext(()) }
+        ]
+        return ActionDisposable { observers.forEach { NotificationCenter.default.removeObserver($0) } }
+    }
+    let signal = combineLatest(context.sharedContext.presentationData, tokenState)
+    |> map { presentationData, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        let lang = presentationData.strings.baseLanguageCode
+        let counter = SGItemListCounter()
+        let token = SGNowPlayingService.shared.currentSettings().token(for: platform) ?? ""
+        let entries: [Entry] = [
+            .searchInput(
+                id: counter.count,
+                section: .settings,
+                title: NSAttributedString(string: i18n(platform.displayKey, lang)),
+                text: token,
+                placeholder: i18n("ReqGram.Plugin.NowPlaying.Token.Placeholder", lang)
+            ),
+            .action(id: counter.count, section: .settings, actionType: .clear, text: i18n("ReqGram.Plugin.NowPlaying.Token.Clear", lang), kind: token.isEmpty ? .disabled : .destructive),
+            .header(id: counter.count, section: .information, text: i18n("ReqGram.Plugin.Information", lang), badge: nil),
+            .notice(id: counter.count, section: .information, text: i18n("ReqGram.Plugin.NowPlaying.Token.Hint.\(platform.rawValue)", lang))
+        ]
+        return (
+            ItemListControllerState(
+                presentationData: ItemListPresentationData(presentationData),
+                title: .text(i18n(platform.displayKey, lang)),
+                leftNavigationButton: nil,
+                rightNavigationButton: nil,
+                backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)
+            ),
+            (ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, ensureVisibleItemTag: nil, initialScrollToItem: nil), arguments as Any)
+        )
+    }
+    return ItemListController(context: context, state: signal)
 }
 
 public func supportDevelopmentController(context: AccountContext, navigationController: NavigationController? = nil) -> ViewController {

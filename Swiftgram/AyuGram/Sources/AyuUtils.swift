@@ -75,9 +75,13 @@ public enum AyuUtils {
     }
 
     /// The single deleted-message opacity policy used by every presentation.
-    /// The setting intentionally has only the Android parity states: 70% or 100%.
+    /// The original switch remains authoritative; its off state is fully opaque.
     public static var deletedMessageAlpha: Double {
-        return SGSimpleSettings.shared.ayuSemiTransparentDeleted ? 0.7 : 1.0
+        let settings = SGSimpleSettings.shared
+        return ReqGramPresentationPolicy.deletedMessageAlpha(
+            semiTransparent: settings.ayuSemiTransparentDeleted,
+            percent: settings.reqGramDeletedOpacityPercent
+        )
     }
 
     // MARK: Formatting
